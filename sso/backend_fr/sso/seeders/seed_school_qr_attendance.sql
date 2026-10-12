@@ -76,5 +76,15 @@ INSERT INTO accounts (
     'role-admin',
     'ADMIN-001',
     ''
+),
+(
+    'user-kepsek-1',
+    'kepsek.prambon',
+    '$2a$10$GetAXrF5zu8wwz7UFprSKuZY6tFG.gbzF4IDSQI213Z5PXLVglh/C',
+    'kepsek@smpn1prambon.sch.id',
+    'Kepala Sekolah SMP Negeri 1 Prambon',
+    'role-kepala-sekolah',
+    'KEPSEK-001',
+    ''
 )
 ON CONFLICT (id) DO NOTHING;

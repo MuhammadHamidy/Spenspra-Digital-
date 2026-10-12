@@ -8,6 +8,8 @@ import { gradeApi } from '@/lib/gradeApi';
 import { deadlineApiAdapter } from '@/lib/features/deadlines/infrastructure/deadlineApiAdapter';
 import { exportToExcelXml } from '@/lib/excelExport';
 import { tokenStorage } from '@/lib/common/tokenStorage';
+import { attendanceApi } from '@/lib/attendanceApi';
+import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
 
 function AdminMonitoringContent() {
   const searchParams = useSearchParams();
@@ -36,10 +38,12 @@ function AdminMonitoringContent() {
 
   // Pengesahan Rapor States
   const [endorsements, setEndorsements] = useState([]);
+  const [availableClasses, setAvailableClasses] = useState([]);
+  const [availableCourses, setAvailableCourses] = useState([]);
   const [selectedClassForEndorsement, setSelectedClassForEndorsement] = useState('');
   const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
-  const [academicYear, setAcademicYear] = useState('2025/2026');
-  const [semester, setSemester] = useState('GENAP');
+  const [academicYear, setAcademicYear] = useState(() => getSchoolAcademicPeriod().year);
+  const [semester, setSemester] = useState(() => getSchoolAcademicPeriod().semester);
   const [savedSignatureData, setSavedSignatureData] = useState('');
 
   // Modal Deadline State
@@ -56,10 +60,12 @@ function AdminMonitoringContent() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [resSummary, resDeadlines, resEndorsements] = await Promise.all([
+      const [resSummary, resDeadlines, resEndorsements, resClasses, resCourses] = await Promise.all([
         gradeApi.getMonitoringSummary(),
         deadlineApiAdapter.getDeadlines(),
         gradeApi.getEndorsements({ academicYear, semester }).catch(() => ({ data: [] })),
+        attendanceApi.getClasses().catch(() => ({ data: [] })),
+        attendanceApi.getCourses().catch(() => ({ data: [] })),
       ]);
 
       if (resSummary?.success && resSummary?.data) {
@@ -67,6 +73,24 @@ function AdminMonitoringContent() {
       }
       setDeadlines(Array.isArray(resDeadlines) ? resDeadlines : []);
       setEndorsements(Array.isArray(resEndorsements?.data) ? resEndorsements.data : []);
+
+      // Ekstraksi kelas dinamis langsung dari database
+      let clsList = [];
+      if (resClasses?.success && Array.isArray(resClasses.data) && resClasses.data.length > 0) {
+        clsList = [...new Set(resClasses.data.map((c) => c.class_code || c.name || c.id).filter(Boolean))].sort();
+      }
+      if (clsList.length === 0 && resSummary?.data?.classes && Array.isArray(resSummary.data.classes)) {
+        clsList = [...new Set(resSummary.data.classes.map((c) => c.class_name).filter(Boolean))].sort();
+      }
+      if (clsList.length === 0) {
+        clsList = ['7A', '7B', '8A', '8B', '9A', '9B'];
+      }
+      setAvailableClasses(clsList);
+
+      // Ekstraksi mapel dinamis langsung dari database
+      if (resCourses?.success && Array.isArray(resCourses.data) && resCourses.data.length > 0) {
+        setAvailableCourses(resCourses.data.map((c) => ({ code: c.code, name: c.name })));
+      }
     } catch (err) {
       console.warn('Gagal memuat monitoring summary / deadlines / endorsements:', err);
     } finally {
@@ -89,8 +113,9 @@ function AdminMonitoringContent() {
       const finalPrincipalName = principalName?.trim() || user?.fullName || user?.full_name || 'Kepala Sekolah SMPN 1 Prambon';
       const finalPrincipalNip = principalNip?.trim() || user?.nimNip || user?.nip || '';
 
+      const allTargetClasses = availableClasses.length > 0 ? availableClasses : ['7A', '7B', '8A', '8B', '9A', '9B'];
       const targetClasses = selectedClassForEndorsement === 'ALL'
-        ? ['7A', '7B', '8A', '8B', '9A', '9B']
+        ? allTargetClasses
         : [selectedClassForEndorsement];
 
       const savePromises = targetClasses.map((cls) => {
@@ -117,7 +142,7 @@ function AdminMonitoringContent() {
         setSavedSignatureData(signatureData);
         setIsSignatureModalOpen(false);
         const successText = selectedClassForEndorsement === 'ALL'
-          ? `Seluruh rapor rombel (7A - 9B) berhasil disahkan sekaligus oleh ${finalPrincipalName}!`
+          ? `Seluruh rapor rombel (${allTargetClasses.join(', ')}) berhasil disahkan sekaligus oleh ${finalPrincipalName}!`
           : `Rapor Kelas ${selectedClassForEndorsement} berhasil disahkan oleh ${finalPrincipalName}!`;
         setDeadlineSuccessMsg(successText);
         setTimeout(() => setDeadlineSuccessMsg(''), 5000);
@@ -227,9 +252,10 @@ function AdminMonitoringContent() {
   const totalNilaiMasuk = academicSummary?.total_grades ?? 0;
   const rataRataSekolah = academicSummary?.average_score ? Number(academicSummary.average_score.toFixed(1)) : 0;
 
-  // Daftar Mapel Resmi untuk Matriks Kurikulum
-  const OFFICIAL_MATRIX_SUBJECTS = useMemo(
-    () => [
+  // Daftar Mapel Resmi untuk Matriks Kurikulum (Dinamis dari Backend)
+  const OFFICIAL_MATRIX_SUBJECTS = useMemo(() => {
+    if (availableCourses.length > 0) return availableCourses;
+    return [
       { code: 'PAI', name: 'Pend. Agama Islam' },
       { code: 'PP', name: 'Pendidikan Pancasila' },
       { code: 'BI', name: 'Bahasa Indonesia' },
@@ -242,11 +268,13 @@ function AdminMonitoringContent() {
       { code: 'SBP', name: 'Seni Budaya & Prakarya' },
       { code: 'BJ', name: 'Bahasa Jawa' },
       { code: 'BTQ', name: 'Baca Tulis Al Qur’an' },
-    ],
-    []
-  );
+    ];
+  }, [availableCourses]);
 
-  const ALL_CLASS_ROSTER = useMemo(() => ['7A', '7B', '8A', '8B', '9A', '9B'], []);
+  const ALL_CLASS_ROSTER = useMemo(() => {
+    if (availableClasses.length > 0) return availableClasses;
+    return ['7A', '7B', '8A', '8B', '9A', '9B'];
+  }, [availableClasses]);
 
   // Kalkulasi Matriks Kelengkapan Rombel x Mapel (Waka Kurikulum)
   const matrixData = useMemo(() => {
@@ -593,7 +621,7 @@ function AdminMonitoringContent() {
           )}
           {activeTab === 'ENDORSEMENTS' && (
             <span className="px-2.5 py-1 rounded-full text-xs bg-blue-100 text-blue-800 font-bold border border-blue-200">
-              {endorsements.length}/6 Disahkan
+              {endorsements.length}/{ALL_CLASS_ROSTER.length} Disahkan
             </span>
           )}
         </div>
@@ -632,13 +660,13 @@ function AdminMonitoringContent() {
               <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
               </svg>
-              <span>Sahkan Sekaligus Semua Rombel (7A - 9B)</span>
+              <span>Sahkan Sekaligus Semua Rombel ({ALL_CLASS_ROSTER[0]} - {ALL_CLASS_ROSTER[ALL_CLASS_ROSTER.length - 1]})</span>
             </button>
           </div>
 
           {/* Kartu Status Rombel Pengesahan */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {['7A', '7B', '8A', '8B', '9A', '9B'].map((cls) => {
+            {ALL_CLASS_ROSTER.map((cls) => {
               const itemEndorsement = endorsements.find((e) => e.class_name === cls || e.class_name === `Kelas ${cls}`);
               const isApproved = itemEndorsement && itemEndorsement.status === 'APPROVED';
 

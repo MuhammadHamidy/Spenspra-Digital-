@@ -37,7 +37,8 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO accounts (
     id, username, password_hash, email, full_name, role_id, nim_nip, phone, class_name, is_active
 ) VALUES 
-('user-admin-1', 'admin', '$2a$10$LOQmzILymmWdzSSrUyQdZ.6Hc/xlqkDRzQ6DaiyuCYH1Y1qMidb8i', 'admin@smpn1prambon.sch.id', 'Administrator Sekolah', 'role-admin', 'ADMIN-001', '', '', true)
+('user-admin-1', 'admin', '$2a$10$LOQmzILymmWdzSSrUyQdZ.6Hc/xlqkDRzQ6DaiyuCYH1Y1qMidb8i', 'admin@smpn1prambon.sch.id', 'Administrator Sekolah', 'role-admin', 'ADMIN-001', '', '', true),
+('user-kepsek-1', 'kepsek.prambon', '$2a$10$GetAXrF5zu8wwz7UFprSKuZY6tFG.gbzF4IDSQI213Z5PXLVglh/C', 'kepsek@smpn1prambon.sch.id', 'Kepala Sekolah SMP Negeri 1 Prambon', 'role-kepala-sekolah', 'KEPSEK-001', '', '', true)
 ON CONFLICT (id) DO UPDATE SET
     full_name = EXCLUDED.full_name,
     nim_nip = EXCLUDED.nim_nip,

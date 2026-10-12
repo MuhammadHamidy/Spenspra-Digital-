@@ -99,14 +99,18 @@ export default function Navbar({ onToggleMobileSidebar = () => {} }) {
   };
 
   const breadcrumb = getBreadcrumb();
-  const displayName = user?.fullName || user?.full_name || user?.username || 'Guru Pengampu';
-  const displayNip = user?.nimNip || user?.nim_nip || user?.nip || 'Akses SSO Sekolah';
-  const roleName = user?.roleName || user?.role_name || 'Guru';
+  const roleStr = String(user?.roleName || user?.role || user?.role_id || '').toUpperCase();
+  const isKepalaSekolah = roleStr.includes('KEPALA');
+  const isAdmin = roleStr.includes('ADMIN') || roleStr === 'SUPER_ADMIN';
+
+  const displayName = user?.fullName || user?.full_name || (isKepalaSekolah ? 'Kepala Sekolah' : isAdmin ? 'Administrator Sekolah' : user?.username || 'Guru Pengampu');
+  const displayNip = user?.nimNip || user?.nim_nip || user?.nip || (isKepalaSekolah ? 'Kepala Sekolah SMPN 1 Prambon' : isAdmin ? 'Akses Administrator' : 'Akses SSO Sekolah');
+  const roleName = isKepalaSekolah ? 'Kepala Sekolah' : isAdmin ? 'Admin e-Rapor' : (user?.roleName || user?.role_name || 'Guru Pengampu');
   const initials = displayName
     .split(' ')
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() || '')
-    .join('') || 'GR';
+    .join('') || (isKepalaSekolah ? 'KS' : 'GR');
 
   const handleOpenModal = (tab) => {
     setModalTab(tab);
