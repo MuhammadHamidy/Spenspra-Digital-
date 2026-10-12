@@ -69,7 +69,29 @@ function LoginForm() {
 
       // Default redirect berdasarkan role user
       const user = res?.user || {};
-      const roleName = (user.role || user.role_name || '').toUpperCase();
+      const roleName = (user.role || user.role_name || user.roleName || '').toUpperCase();
+
+      if (roleName === 'ADMIN_RAPOR' || roleName === 'ADMIN-RAPOR') {
+        const raporBaseUrl = process.env.NEXT_PUBLIC_RAPOR_URL || 'https://rapor.spenspra.com';
+        const userPayload = {
+          id: user?.id || user?.person_id || 'user-admin-rapor',
+          username: user?.username || '',
+          fullName: user?.fullName || user?.full_name || 'Administrator e-Rapor',
+          roleName: 'ADMIN_RAPOR',
+          nimNip: user?.nimNip || user?.nip || user?.nisn || 'ADMIN-RAPOR-001',
+        };
+        const encodedUser = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(userPayload)))) : '';
+        const token = res.token || '';
+        window.location.href = `${raporBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent('/admin/teachers')}`;
+        return;
+      }
+
+      if (roleName === 'ADMIN_PERPUS' || roleName === 'ADMIN-PERPUS' || roleName === 'PUSTAKAWAN') {
+        const perpusBaseUrl = process.env.NEXT_PUBLIC_PERPUS_URL || 'https://perpus.spenspra.com';
+        window.location.href = `${perpusBaseUrl}/pustakawan`;
+        return;
+      }
+
       if (
         roleName === 'ADMIN' ||
         roleName === 'SUPERADMIN' ||

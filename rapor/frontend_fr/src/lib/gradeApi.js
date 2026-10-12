@@ -110,4 +110,19 @@ export const gradeApi = {
       body: JSON.stringify(payload),
     });
   },
+
+  deleteGrades: async (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.className) query.set('class_name', params.className);
+    if (params.subjectCode) query.set('subject_code', params.subjectCode);
+    if (params.teacherId) query.set('teacher_id', params.teacherId);
+    if (params.assessmentType) query.set('assessment_type', params.assessmentType);
+    if (params.academicYear) query.set('academic_year', params.academicYear);
+    if (params.semester) query.set('semester', params.semester);
+    if (params.all) query.set('all', 'true');
+    const qs = query.toString();
+    return fetchJson(`/grades${qs ? `?${qs}` : ''}`, {
+      method: 'DELETE',
+    });
+  },
 };

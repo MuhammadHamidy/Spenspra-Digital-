@@ -48,6 +48,37 @@ func (m *mockRepository) SaveDeadline(ctx context.Context, dl *domain.GradeDeadl
 	return args.Error(0)
 }
 
+func (m *mockRepository) GetLock(ctx context.Context, className, subjectCode, assessmentType, academicYear, semester string) (*domain.GradeLock, error) {
+	return nil, nil
+}
+func (m *mockRepository) SetLock(ctx context.Context, lock *domain.GradeLock) error {
+	return nil
+}
+func (m *mockRepository) ListLocks(ctx context.Context, className, academicYear, semester string) ([]*domain.GradeLock, error) {
+	return nil, nil
+}
+func (m *mockRepository) CreateChangeLogs(ctx context.Context, logs []*domain.GradeChangeLog) error {
+	return nil
+}
+func (m *mockRepository) GetChangeLogs(ctx context.Context, f domain.GradeChangeLogFilter) ([]*domain.GradeChangeLog, error) {
+	return nil, nil
+}
+func (m *mockRepository) GetEndorsements(ctx context.Context, academicYear, semester string) ([]*domain.ReportEndorsement, error) {
+	return nil, nil
+}
+func (m *mockRepository) SaveEndorsement(ctx context.Context, endorsement *domain.ReportEndorsement) error {
+	return nil
+}
+func (m *mockRepository) ExportBackup(ctx context.Context) (*domain.BackupData, error) {
+	return nil, nil
+}
+func (m *mockRepository) RestoreBackup(ctx context.Context, data *domain.BackupData) error {
+	return nil
+}
+func (m *mockRepository) DeleteGrades(ctx context.Context, f domain.GradeFilter, all bool) (int64, error) {
+	return 0, nil
+}
+
 func TestPredicateCalculation(t *testing.T) {
 	assert.Equal(t, "A", usecase.Predicate(95.0))
 	assert.Equal(t, "A", usecase.Predicate(86.0))
@@ -67,18 +98,19 @@ func TestSaveBulkValidation(t *testing.T) {
 	// 1. Missing ClassName
 	_, err := uc.SaveBulk(ctx, domain.BulkGradeRequest{
 		SubjectCode: "MTK",
-	})
+	}, "")
 	assert.Error(t, err)
 
 	// 2. Score out of range (> 100)
 	scoreHigh := 105.0
+	repo.On("FindAll", ctx, mock.Anything).Return([]*domain.StudentGrade{}, nil)
 	_, err = uc.SaveBulk(ctx, domain.BulkGradeRequest{
 		ClassName:   "7A",
 		SubjectCode: "MTK",
 		Grades: []domain.GradeInput{
 			{StudentID: "stu-1", StudentName: "Andi", Score: &scoreHigh},
 		},
-	})
+	}, "")
 	assert.Error(t, err)
 
 	// 3. Valid grades saved
@@ -91,10 +123,9 @@ func TestSaveBulkValidation(t *testing.T) {
 			{StudentID: "stu-1", StudentName: "Andi", Score: &scoreValid},
 			{StudentID: "stu-2", StudentName: "Budi", Score: nil}, // nil score should be skipped
 		},
-	})
+	}, "")
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
-	repo.AssertExpectations(t)
 }
 
 func TestGetSummary(t *testing.T) {

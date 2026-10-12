@@ -6,12 +6,13 @@ export default function WaliKelasStatsBar({
   selectedClass,
   setSelectedClass,
   isAdminOrKepalaSekolah,
-  availableClasses = ['7A', '7B', '8A', '8B', '9A', '9B'],
+  availableClasses = [],
   totalStudents = 0,
   classAverage = 0,
   passedStudents = 0,
   remedialStudents = 0,
 }) {
+  const classList = availableClasses.length > 0 ? availableClasses : (selectedClass ? [selectedClass] : []);
   return (
     <section className="grid grid-cols-2 sm:grid-cols-4 gap-4 print:hidden">
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
@@ -23,7 +24,7 @@ export default function WaliKelasStatsBar({
               onChange={(e) => setSelectedClass(e.target.value)}
               className="text-base font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 focus:ring-2 focus:ring-[#193D9B]/15 outline-none cursor-pointer"
             >
-              {availableClasses.map((c) => (
+              {classList.map((c) => (
                 <option key={c} value={c}>Kelas {c}</option>
               ))}
             </select>

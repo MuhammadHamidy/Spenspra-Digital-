@@ -200,6 +200,14 @@ func (m *MockRepository) UpsertMasterPerson(ctx context.Context, personID, perso
 	return args.Error(0)
 }
 
+func (m *MockRepository) PruneStaleAccounts(ctx context.Context, activePersonIDs, activeNIPs, activeNISNs []string) (int64, error) {
+	args := m.Called(ctx, activePersonIDs, activeNIPs, activeNISNs)
+	if args.Get(0) == nil {
+		return 0, args.Error(1)
+	}
+	return args.Get(0).(int64), args.Error(1)
+}
+
 func TestScanQRCode_HadirOnTime(t *testing.T) {
 	mockRepo := new(MockRepository)
 	uc := usecase.NewUseCase(mockRepo, nil)

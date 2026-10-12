@@ -4,6 +4,7 @@ import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Modal from '@/components/Modal';
 import DigitalSignatureModal from '@/components/DigitalSignatureModal';
+import ConfirmModal from '@/components/ConfirmModal';
 import { gradeApi } from '@/lib/gradeApi';
 import { deadlineApiAdapter } from '@/lib/features/deadlines/infrastructure/deadlineApiAdapter';
 import { exportToExcelXml } from '@/lib/excelExport';
@@ -96,6 +97,47 @@ function AdminMonitoringContent() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const [deleteConfirmConfig, setDeleteConfirmConfig] = useState(null);
+
+  const handleDeleteTeacherGrades = (teacher) => {
+    setDeleteConfirmConfig({
+      title: 'Hapus Progres Nilai',
+      message: `Apakah Anda yakin ingin menghapus seluruh data nilai yang diinput oleh Guru ${teacher.name} (${teacher.subjectName})? Tindakan ini akan menghapus data nilai tersebut dari database.`,
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          await gradeApi.deleteGrades({
+            teacherId: teacher.id,
+            subjectCode: teacher.subjectCode !== '-' ? teacher.subjectCode : undefined,
+          });
+          await loadData();
+        } catch (err) {
+          alert('Gagal menghapus nilai: ' + err.message);
+        } finally {
+          setDeleteConfirmConfig(null);
+        }
+      },
+    });
+  };
+
+  const handleResetAllDummyGrades = () => {
+    setDeleteConfirmConfig({
+      title: 'Bersihkan Seluruh Nilai Uji Coba',
+      message: 'Apakah Anda yakin ingin membersihkan SELURUH data nilai di e-Rapor? Seluruh nilai siswa di database akan di-reset menjadi kosong.',
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          await gradeApi.deleteGrades({ all: true });
+          await loadData();
+        } catch (err) {
+          alert('Gagal membersihkan nilai: ' + err.message);
+        } finally {
+          setDeleteConfirmConfig(null);
+        }
+      },
+    });
   };
 
   useEffect(() => {
@@ -962,20 +1004,33 @@ function AdminMonitoringContent() {
           </button>
         </div>
 
-        <div className="w-full sm:w-80">
-          <div className="relative">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </span>
-            <input
-              type="text"
-              placeholder="Cari guru atau mata pelajaran..."
-              value={searchTeacher}
-              onChange={(e) => setSearchTeacher(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#193D9B]/15 focus:border-[#193D9B] transition-colors"
-            />
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleResetAllDummyGrades}
+            className="px-3 py-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+            title="Bersihkan seluruh data nilai dummy / uji coba dari database"
+          >
+            <svg className="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            <span>Bersihkan Nilai Uji Coba</span>
+          </button>
+          <div className="w-full sm:w-80">
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </span>
+              <input
+                type="text"
+                placeholder="Cari guru atau mata pelajaran..."
+                value={searchTeacher}
+                onChange={(e) => setSearchTeacher(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#193D9B]/15 focus:border-[#193D9B] transition-colors"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -983,22 +1038,23 @@ function AdminMonitoringContent() {
       {/* Tabel Pemantauan Progres Guru */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-xs">
+          <table className="w-full min-w-[840px] text-left text-xs">
             <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-700">
               <tr>
                 <th className="py-3 px-4 font-semibold w-12 text-center">No</th>
                 <th className="py-3 px-4 font-semibold">Guru Pengampu</th>
                 <th className="py-3 px-4 font-semibold">Mata Pelajaran</th>
                 <th className="py-3 px-4 font-semibold">Rombel Ajar</th>
-                <th className="py-3 px-4 font-semibold w-52">Progres Pengisian Nilai</th>
-                <th className="py-3 px-4 font-semibold text-center w-32">Status</th>
+                <th className="py-3 px-4 font-semibold w-48">Progres Pengisian Nilai</th>
+                <th className="py-3 px-4 font-semibold text-center w-28">Status</th>
                 <th className="py-3 px-4 font-semibold text-right">Terakhir Update</th>
+                <th className="py-3 px-4 font-semibold text-right w-24">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan="7" className="py-12 text-center text-slate-500">
+                  <td colSpan="8" className="py-12 text-center text-slate-500">
                     <div className="inline-flex items-center gap-2">
                       <span className="w-4 h-4 border-2 border-[#193D9B] border-t-transparent rounded-full animate-spin" />
                       <span>Memuat data monitoring progres...</span>
@@ -1007,7 +1063,7 @@ function AdminMonitoringContent() {
                 </tr>
               ) : filteredTeachers.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="py-12 text-center text-slate-500">
+                  <td colSpan="8" className="py-12 text-center text-slate-500">
                     <p className="font-semibold text-slate-700">Tidak ada guru ditemukan</p>
                     <p className="text-[11px] text-slate-400 mt-1">
                       Coba ganti filter status atau kata kunci pencarian.
@@ -1078,6 +1134,16 @@ function AdminMonitoringContent() {
                     </td>
                     <td className="py-3.5 px-4 text-right tabular-nums text-slate-500 text-[11px]">
                       {teacher.lastUpdated}
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTeacherGrades(teacher)}
+                        className="px-2.5 py-1 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold text-[11px] transition-colors cursor-pointer"
+                        title="Hapus data nilai pengampu ini dari database"
+                      >
+                        Hapus Nilai
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -1544,6 +1610,17 @@ function AdminMonitoringContent() {
           ''
         }
       />
+
+      {deleteConfirmConfig && (
+        <ConfirmModal
+          isOpen={true}
+          title={deleteConfirmConfig.title}
+          message={deleteConfirmConfig.message}
+          type={deleteConfirmConfig.type || 'danger'}
+          onConfirm={deleteConfirmConfig.onConfirm}
+          onClose={() => setDeleteConfirmConfig(null)}
+        />
+      )}
     </div>
   );
 }

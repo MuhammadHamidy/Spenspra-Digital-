@@ -326,10 +326,7 @@ func (r *repository) CreateClass(ctx context.Context, class *domain.Class) error
 	if class.TeacherID != "" {
 		data["dosen_id"] = class.TeacherID
 	} else {
-		var firstAccount struct{ ID string }
-		if err := r.db.WithContext(ctx).Table("accounts").Select("id").Order("created_at ASC").First(&firstAccount).Error; err == nil && firstAccount.ID != "" {
-			data["dosen_id"] = firstAccount.ID
-		}
+		data["dosen_id"] = nil
 	}
 	return r.db.WithContext(ctx).Table("classes").Create(data).Error
 }
@@ -341,6 +338,8 @@ func (r *repository) UpdateClass(ctx context.Context, class *domain.Class) error
 	}
 	if class.TeacherID != "" {
 		data["dosen_id"] = class.TeacherID
+	} else {
+		data["dosen_id"] = nil
 	}
 	if class.CourseID != "" {
 		data["course_id"] = class.CourseID

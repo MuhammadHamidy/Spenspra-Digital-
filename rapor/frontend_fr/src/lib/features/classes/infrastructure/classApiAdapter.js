@@ -23,16 +23,21 @@ export const classApiAdapter = {
 
       // Client-side strict filter: If logged-in user is a GURU, ensure they only see their assigned classes!
       if (currentUser && (currentUser.roleName === 'GURU' || currentUser.roleName === 'DOSEN') && !dosenId) {
+        const myId = currentUser.id || '';
+        const myPersonId = currentUser.person_id || '';
+        const myNip = currentUser.nimNip || currentUser.nip || '';
+        const myName = (currentUser.fullName || currentUser.full_name || '').toLowerCase();
         const allowedCodes = currentUser.class_codes || currentUser.classCodes || [];
         const allowedIds = currentUser.class_ids || currentUser.classIds || [];
-        if (allowedCodes.length > 0 || allowedIds.length > 0) {
-          list = list.filter((c) => {
-            if (c.dosen_id === currentUser.id) return true;
-            if (allowedCodes.includes(c.class_code)) return true;
-            if (allowedIds.includes(c.id)) return true;
-            return false;
-          });
-        }
+
+        list = list.filter((c) => {
+          if (c.dosen_id && (c.dosen_id === myId || c.dosen_id === myPersonId || (myNip && c.dosen_id === myNip))) return true;
+          if (c.teacher_id && (c.teacher_id === myId || c.teacher_id === myPersonId || (myNip && c.teacher_id === myNip))) return true;
+          if (myName && c.teacher_name && c.teacher_name.toLowerCase() === myName) return true;
+          if (allowedCodes.includes(c.class_code)) return true;
+          if (allowedIds.includes(c.id)) return true;
+          return false;
+        });
       }
 
       return list;

@@ -282,3 +282,7 @@ func (u *useCase) RestoreBackup(ctx context.Context, data *domain.BackupData) er
 	return u.repo.RestoreBackup(ctx, data)
 }
 
+func (u *useCase) DeleteGrades(ctx context.Context, f domain.GradeFilter, all bool) (int64, error) {
+	return u.repo.DeleteGrades(ctx, f, all)
+}
+

@@ -331,9 +331,9 @@ func (r *repository) DeleteCourse(ctx context.Context, courseID string) error {
 func (r *repository) FindAllClasses(ctx context.Context) ([]*domain.Class, error) {
 	var list []*domain.Class
 	err := r.db.WithContext(ctx).Table("classes").
-		Select("classes.*, classes.dosen_id AS teacher_id, courses.code AS course_code, courses.name AS course_name, accounts.full_name AS teacher_name").
-		Joins("JOIN courses ON courses.id = classes.course_id").
-		Joins("JOIN accounts ON accounts.id = classes.dosen_id").
+		Select("classes.*, classes.dosen_id AS teacher_id, COALESCE(courses.code, '') AS course_code, COALESCE(courses.name, '') AS course_name, COALESCE(accounts.full_name, '') AS teacher_name").
+		Joins("LEFT JOIN courses ON courses.id = classes.course_id").
+		Joins("LEFT JOIN accounts ON (accounts.id = classes.dosen_id OR accounts.person_id = classes.dosen_id)").
 		Order("classes.class_code ASC, courses.code ASC").
 		Find(&list).Error
 	return list, err
@@ -346,21 +346,42 @@ func (r *repository) CreateClass(ctx context.Context, class *domain.Class) error
 	if class.AcademicYear == "" {
 		class.AcademicYear = "2025/2026"
 	}
-	return r.db.WithContext(ctx).Table("classes").Create(map[string]interface{}{
-		"id": class.ID, "course_id": class.CourseID, "class_code": class.ClassCode,
-		"dosen_id": class.TeacherID, "academic_year": class.AcademicYear,
-		"room": class.Room, "schedule_day": class.ScheduleDay, "schedule_time": class.ScheduleTime,
-		"schedule_start_time": class.ScheduleStartTime, "schedule_end_time": class.ScheduleEndTime,
-	}).Error
+	data := map[string]interface{}{
+		"id":                  class.ID,
+		"course_id":           class.CourseID,
+		"class_code":          class.ClassCode,
+		"academic_year":       class.AcademicYear,
+		"room":                class.Room,
+		"schedule_day":        class.ScheduleDay,
+		"schedule_time":       class.ScheduleTime,
+		"schedule_start_time": class.ScheduleStartTime,
+		"schedule_end_time":   class.ScheduleEndTime,
+	}
+	if class.TeacherID != "" {
+		data["dosen_id"] = class.TeacherID
+	} else {
+		data["dosen_id"] = nil
+	}
+	return r.db.WithContext(ctx).Table("classes").Create(data).Error
 }
 
 func (r *repository) UpdateClass(ctx context.Context, class *domain.Class) error {
-	return r.db.WithContext(ctx).Table("classes").Where("id = ?", class.ID).Updates(map[string]interface{}{
-		"course_id": class.CourseID, "class_code": class.ClassCode, "dosen_id": class.TeacherID,
-		"academic_year": class.AcademicYear, "room": class.Room,
-		"schedule_day": class.ScheduleDay, "schedule_time": class.ScheduleTime,
-		"schedule_start_time": class.ScheduleStartTime, "schedule_end_time": class.ScheduleEndTime,
-	}).Error
+	data := map[string]interface{}{
+		"course_id":           class.CourseID,
+		"class_code":          class.ClassCode,
+		"academic_year":       class.AcademicYear,
+		"room":                class.Room,
+		"schedule_day":        class.ScheduleDay,
+		"schedule_time":       class.ScheduleTime,
+		"schedule_start_time": class.ScheduleStartTime,
+		"schedule_end_time":   class.ScheduleEndTime,
+	}
+	if class.TeacherID != "" {
+		data["dosen_id"] = class.TeacherID
+	} else {
+		data["dosen_id"] = nil
+	}
+	return r.db.WithContext(ctx).Table("classes").Where("id = ?", class.ID).Updates(data).Error
 }
 
 func (r *repository) DeleteClass(ctx context.Context, classID string) error {
@@ -596,6 +617,79 @@ func (r *repository) UpsertMasterPerson(ctx context.Context, personID, personTyp
 	}
 
 	return nil
+}
+
+func (r *repository) PruneStaleAccounts(ctx context.Context, activePersonIDs, activeNIPs, activeNISNs []string) (int64, error) {
+	// Ambil semua akun guru dan siswa di e-rapor
+	var accounts []struct {
+		ID       string `gorm:"column:id"`
+		PersonID string `gorm:"column:person_id"`
+		NimNip   string `gorm:"column:nim_nip"`
+		Nisn     string `gorm:"column:nisn"`
+	}
+
+	err := r.db.WithContext(ctx).Table("accounts").
+		Select("id, person_id, nim_nip, nisn").
+		Where("role_id IN ('role-guru', 'GURU', 'role-siswa', 'SISWA')").
+		Find(&accounts).Error
+	if err != nil {
+		return 0, err
+	}
+
+	// Bentuk set pencarian cepat
+	pSet := make(map[string]bool)
+	for _, id := range activePersonIDs {
+		if id != "" {
+			pSet[id] = true
+		}
+	}
+	nipSet := make(map[string]bool)
+	for _, nip := range activeNIPs {
+		if nip != "" {
+			nipSet[nip] = true
+		}
+	}
+	nisnSet := make(map[string]bool)
+	for _, nisn := range activeNISNs {
+		if nisn != "" {
+			nisnSet[nisn] = true
+		}
+	}
+
+	var staleIDs []string
+	for _, a := range accounts {
+		// Jika akun ada di activePersonIDs, atau cocok NIP-nya, atau cocok NISN-nya, akun ini VALID.
+		isValid := false
+		if a.PersonID != "" && pSet[a.PersonID] {
+			isValid = true
+		} else if a.ID != "" && pSet[a.ID] {
+			isValid = true
+		} else if a.NimNip != "" && nipSet[a.NimNip] {
+			isValid = true
+		} else if a.Nisn != "" && nisnSet[a.Nisn] {
+			isValid = true
+		}
+
+		if !isValid {
+			staleIDs = append(staleIDs, a.ID)
+		}
+	}
+
+	if len(staleIDs) == 0 {
+		return 0, nil
+	}
+
+	// 1. Lepas relasi di classes jika guru terhapus
+	_ = r.db.WithContext(ctx).Table("classes").Where("dosen_id IN (?)", staleIDs).Update("dosen_id", nil).Error
+
+	// 2. Bersihkan foreign key relasi siswa terhapus
+	_ = r.db.WithContext(ctx).Table("class_enrollments").Where("student_id IN (?)", staleIDs).Delete(nil).Error
+	_ = r.db.WithContext(ctx).Table("student_grades").Where("student_id IN (?)", staleIDs).Delete(nil).Error
+	_ = r.db.WithContext(ctx).Table("attendances").Where("student_id IN (?)", staleIDs).Delete(nil).Error
+
+	// 3. Hapus akun usang
+	res := r.db.WithContext(ctx).Table("accounts").Where("id IN (?)", staleIDs).Delete(nil)
+	return res.RowsAffected, res.Error
 }
 
 

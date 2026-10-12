@@ -421,10 +421,24 @@ func (u *useCase) SyncFromSSO(ctx context.Context) (map[string]int, error) {
 
 	guruCount := 0
 	siswaCount := 0
+	var activeIDs []string
+	var activeNIPs []string
+	var activeNISNs []string
+
 	for _, p := range people {
 		if p == nil || !p.IsActive {
 			continue
 		}
+		if p.ID != "" {
+			activeIDs = append(activeIDs, p.ID)
+		}
+		if p.NIP != "" {
+			activeNIPs = append(activeNIPs, p.NIP)
+		}
+		if p.NISN != "" {
+			activeNISNs = append(activeNISNs, p.NISN)
+		}
+
 		err := u.repo.UpsertMasterPerson(ctx, p.ID, p.PersonType, p.FullName, p.NIP, p.NISN, p.Email, p.Phone, p.ClassName, p.IsActive)
 		if err == nil {
 			if p.PersonType == "GURU" {
@@ -435,15 +449,22 @@ func (u *useCase) SyncFromSSO(ctx context.Context) (map[string]int, error) {
 		}
 	}
 
+	// Hapus akun lama/terhapus yang tidak lagi terdaftar di SSO
+	prunedCount := int64(0)
+	if len(activeIDs) > 0 || len(activeNIPs) > 0 {
+		prunedCount, _ = u.repo.PruneStaleAccounts(ctx, activeIDs, activeNIPs, activeNISNs)
+	}
+
 	// Bersihkan cache siswa di Redis setelah sinkronisasi berhasil
 	if u.redisClient != nil {
 		_ = u.redisClient.Del(ctx, "school:students:", "school:students:7a", "school:students:7b", "school:students:8a", "school:students:8b", "school:students:9a", "school:students:9b").Err()
 	}
 
 	return map[string]int{
-		"guru_count":  guruCount,
-		"siswa_count": siswaCount,
-		"total_count": guruCount + siswaCount,
+		"guru_count":   guruCount,
+		"siswa_count":  siswaCount,
+		"total_count":  guruCount + siswaCount,
+		"pruned_count": int(prunedCount),
 	}, nil
 }
 

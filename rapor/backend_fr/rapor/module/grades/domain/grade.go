@@ -34,6 +34,7 @@ type GradeFilter struct {
 	AssessmentType string
 	AcademicYear   string
 	Semester       string
+	TeacherID      string
 }
 
 type GradeInput struct {
@@ -266,6 +267,9 @@ type Repository interface {
 	// Backup & Restore
 	ExportBackup(ctx context.Context) (*BackupData, error)
 	RestoreBackup(ctx context.Context, data *BackupData) error
+
+	// Hapus / Reset Nilai
+	DeleteGrades(ctx context.Context, f GradeFilter, all bool) (int64, error)
 }
 
 type UseCase interface {
@@ -288,5 +292,8 @@ type UseCase interface {
 	// Backup & Restore
 	ExportBackup(ctx context.Context) (*BackupData, error)
 	RestoreBackup(ctx context.Context, data *BackupData) error
+
+	// Hapus / Reset Nilai
+	DeleteGrades(ctx context.Context, f GradeFilter, all bool) (int64, error)
 }
 

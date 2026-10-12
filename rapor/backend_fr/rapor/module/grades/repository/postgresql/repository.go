@@ -619,3 +619,29 @@ func (r *repository) RestoreBackup(ctx context.Context, data *domain.BackupData)
 		return nil
 	})
 }
+
+func (r *repository) DeleteGrades(ctx context.Context, f domain.GradeFilter, all bool) (int64, error) {
+	q := r.db.WithContext(ctx).Table("student_grades")
+	if !all {
+		if f.ClassName != "" {
+			q = q.Where("class_name = ?", f.ClassName)
+		}
+		if f.SubjectCode != "" {
+			q = q.Where("subject_code = ?", f.SubjectCode)
+		}
+		if f.AssessmentType != "" {
+			q = q.Where("assessment_type = ?", f.AssessmentType)
+		}
+		if f.AcademicYear != "" {
+			q = q.Where("academic_year = ?", f.AcademicYear)
+		}
+		if f.Semester != "" {
+			q = q.Where("semester = ?", f.Semester)
+		}
+		if f.TeacherID != "" {
+			q = q.Where("teacher_id = ?", f.TeacherID)
+		}
+	}
+	res := q.Delete(nil)
+	return res.RowsAffected, res.Error
+}

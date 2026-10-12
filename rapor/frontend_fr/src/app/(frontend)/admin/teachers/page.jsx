@@ -3,12 +3,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Modal from '@/components/Modal';
 import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApiAdapter';
+import { classApiAdapter } from '@/lib/features/classes/infrastructure/classApiAdapter';
 import Pagination from '@/components/Pagination';
 
 const KELAS_OPTIONS = ['7A', '7B', '7C', '8A', '8B', '8C', '9A', '9B', '9C'];
 
 export default function MasterTeachersPage() {
   const [teachers, setTeachers] = useState([]);
+  const [availableClasses, setAvailableClasses] = useState([]);
   const [search, setSearch] = useState('');
   const [filterWalas, setFilterWalas] = useState('ALL');
   const [isLoading, setIsLoading] = useState(true);
@@ -39,8 +41,15 @@ export default function MasterTeachersPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const teacherList = await accountApiAdapter.getTeachers();
+      const [teacherList, classList] = await Promise.all([
+        accountApiAdapter.getTeachers(),
+        classApiAdapter.getAll().catch(() => []),
+      ]);
       setTeachers(Array.isArray(teacherList) ? teacherList : []);
+      if (Array.isArray(classList) && classList.length > 0) {
+        const unique = [...new Set(classList.map((c) => (c.class_code || c.name || '').replace(/^Kelas\s*/i, '').trim()).filter(Boolean))].sort();
+        if (unique.length > 0) setAvailableClasses(unique);
+      }
     } catch (err) {
       console.warn('Gagal memuat data guru:', err);
     } finally {
@@ -462,7 +471,7 @@ export default function MasterTeachersPage() {
               className="w-full px-3 py-2 bg-white border border-amber-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-600"
             >
               <option value="">- Bukan Wali Kelas -</option>
-              {KELAS_OPTIONS.map((cls) => (
+              {(availableClasses.length > 0 ? availableClasses : KELAS_OPTIONS).map((cls) => (
                 <option key={cls} value={cls}>
                   Wali Kelas {cls}
                 </option>

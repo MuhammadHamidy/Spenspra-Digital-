@@ -53,5 +53,6 @@ type Repository interface {
 
 	// Master SSO Synchronization
 	UpsertMasterPerson(ctx context.Context, personID, personType, fullName, nimNip, nisn, email, phone, className string, isActive bool) error
+	PruneStaleAccounts(ctx context.Context, activePersonIDs, activeNIPs, activeNISNs []string) (int64, error)
 }
 

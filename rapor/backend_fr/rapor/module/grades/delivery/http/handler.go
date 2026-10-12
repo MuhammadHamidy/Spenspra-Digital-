@@ -35,6 +35,9 @@ func (h *GradeHandler) RegisterRoutes(app *fiber.App) {
 	// Backup & Restore
 	app.Get("/api/backup", h.ExportBackup)
 	app.Post("/api/restore", h.RestoreBackup)
+
+	// Hapus / Reset Nilai
+	app.Delete("/api/grades", h.DeleteGrades)
 }
 
 func (h *GradeHandler) List(c *fiber.Ctx) error {
@@ -203,5 +206,32 @@ func (h *GradeHandler) RestoreBackup(c *fiber.Ctx) error {
 		"logs_restored":         len(backup.Logs),
 		"endorsements_restored": len(backup.Endorsements),
 	}, "Data e-Rapor berhasil dipulihkan (restore)"))
+}
+
+func (h *GradeHandler) DeleteGrades(c *fiber.Ctx) error {
+	all := c.Query("all") == "true"
+	className := c.Query("class_name")
+	subjectCode := c.Query("subject_code")
+	teacherID := c.Query("teacher_id")
+	assessmentType := c.Query("assessment_type")
+	academicYear := c.Query("academic_year")
+	semester := c.Query("semester")
+
+	f := domain.GradeFilter{
+		ClassName:      className,
+		SubjectCode:    subjectCode,
+		AssessmentType: assessmentType,
+		AcademicYear:   academicYear,
+		Semester:       semester,
+		TeacherID:      teacherID,
+	}
+
+	deleted, err := h.useCase.DeleteGrades(c.Context(), f, all)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("DELETE_ERROR", err.Error()))
+	}
+	return c.Status(http.StatusOK).JSON(responses.Success(fiber.Map{
+		"deleted_count": deleted,
+	}, "Data nilai berhasil dihapus"))
 }
 

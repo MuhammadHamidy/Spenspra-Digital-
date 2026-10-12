@@ -61,6 +61,15 @@ export default function MainPage() {
   };
 
   useEffect(() => {
+    if (role === 'ADMIN_RAPOR' || role === 'ADMIN-RAPOR') {
+      window.location.href = getRaporLaunchUrl('/admin/teachers');
+      return;
+    }
+    if (role === 'ADMIN_PERPUS' || role === 'ADMIN-PERPUS' || role === 'PUSTAKAWAN') {
+      window.location.href = getPerpusLaunchUrl();
+      return;
+    }
+
     try {
       const storedPeriod = localStorage.getItem('spenspra_academic_period');
       if (storedPeriod) {

@@ -7,6 +7,7 @@ import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApi
 import { gradeApi } from '@/lib/gradeApi';
 import { exportToExcelXml } from '@/lib/excelExport';
 import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
+import { classApiAdapter } from '@/lib/features/classes/infrastructure/classApiAdapter';
 import WaliKelasHeaderBanner from '@/features/wali-kelas/components/WaliKelasHeaderBanner';
 import WaliKelasStatsBar from '@/features/wali-kelas/components/WaliKelasStatsBar';
 import WaliKelasToolbar from '@/features/wali-kelas/components/WaliKelasToolbar';
@@ -28,10 +29,9 @@ const AttendanceModal = dynamic(() => import('@/features/wali-kelas/components/A
   loading: () => null,
 });
 
-const AVAILABLE_CLASSES = ['7A', '7B', '8A', '8B', '9A', '9B'];
-
 export default function WaliKelasRaporPage() {
   const [selectedClass, setSelectedClass] = useState('');
+  const [availableClasses, setAvailableClasses] = useState([]);
   const [isAdminOrKepalaSekolah, setIsAdminOrKepalaSekolah] = useState(false);
   const [isWalas, setIsWalas] = useState(false);
   const [isCheckingWalas, setIsCheckingWalas] = useState(true);
@@ -78,8 +78,19 @@ export default function WaliKelasRaporPage() {
 
       if (isPrivileged) {
         setIsWalas(true);
-        setSelectedClass('7A');
       }
+
+      classApiAdapter.getAll().then((classes) => {
+        if (Array.isArray(classes) && classes.length > 0) {
+          const unique = [...new Set(classes.map((c) => (c.class_code || c.name || '').replace(/^Kelas\s*/i, '').trim()).filter(Boolean))].sort();
+          if (unique.length > 0) {
+            setAvailableClasses(unique);
+            if (isPrivileged) {
+              setSelectedClass((prev) => (prev && unique.includes(prev) ? prev : unique[0]));
+            }
+          }
+        }
+      });
 
       const directClass = user.className || user.class_name;
 
@@ -507,7 +518,7 @@ export default function WaliKelasRaporPage() {
         selectedClass={selectedClass}
         setSelectedClass={setSelectedClass}
         isAdminOrKepalaSekolah={isAdminOrKepalaSekolah}
-        availableClasses={AVAILABLE_CLASSES}
+        availableClasses={availableClasses}
         totalStudents={totalStudents}
         classAverage={classAverage}
         passedStudents={passedStudents}

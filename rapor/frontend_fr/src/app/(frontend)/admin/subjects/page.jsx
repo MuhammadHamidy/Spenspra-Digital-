@@ -58,21 +58,10 @@ export default function SubjectsManagementPage() {
           (c) => (c.code || '').toUpperCase() === itemCode
         );
 
-        if (matchingDb) {
+        if (matchingDb && !usedCodes.has(itemCode)) {
           sorted.push({
             ...matchingDb,
-            isMulok: Boolean(item.isMulok),
-          });
-          usedCodes.add(itemCode);
-        } else {
-          // Tetap sertakan jika ada di konfigurasi urutan rapor resmi
-          sorted.push({
-            id: `crs-${itemCode.toLowerCase()}`,
-            code: itemCode,
-            name: item.name,
-            sks: item.sks || 2,
-            description: item.description || '',
-            isMulok: Boolean(item.isMulok),
+            isMulok: Boolean(item.isMulok || itemCode === 'BJ' || itemCode === 'BTQ'),
           });
           usedCodes.add(itemCode);
         }
@@ -84,8 +73,9 @@ export default function SubjectsManagementPage() {
         if (!usedCodes.has(cCode)) {
           sorted.push({
             ...c,
-            isMulok: false,
+            isMulok: cCode === 'BJ' || cCode === 'BTQ' || (c.name || '').toLowerCase().includes('muatan lokal'),
           });
+          usedCodes.add(cCode);
         }
       });
 
