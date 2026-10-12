@@ -12,6 +12,7 @@ COPY rapor/ ./rapor/
 
 WORKDIR /build/rapor
 
+RUN [ -f config/config.json ] || cp config/config.example.json config/config.json
 RUN go mod download
 
 RUN CGO_ENABLED=0 GOOS=linux go build \
