@@ -5,11 +5,13 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { tokenStorage } from '@/lib/common/tokenStorage';
+import ConfirmModal from '@/components/ConfirmModal';
 
 function SidebarContent({ mobileOpen = false, onCloseMobile = () => {} }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [user, setUser] = useState(null);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // State untuk mengontrol dropdown sub-menu yang terbuka
   const [openSubMenus, setOpenSubMenus] = useState({
@@ -34,6 +36,7 @@ function SidebarContent({ mobileOpen = false, onCloseMobile = () => {} }) {
   const isAdmin = role.includes('ADMIN') || role === 'SUPER_ADMIN';
   const isKepalaSekolah = role.includes('KEPALA');
   const isGuru = !isAdmin && !isKepalaSekolah;
+  const isWalas = isAdmin || isKepalaSekolah || Boolean(user?.className || user?.class_name);
 
   const currentTab = searchParams ? searchParams.get('tab') : null;
 
@@ -96,6 +99,7 @@ function SidebarContent({ mobileOpen = false, onCloseMobile = () => {} }) {
         {
           label: 'Wali Kelas',
           href: '/wali-kelas',
+          isWalasOnly: true,
           icon: (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
@@ -268,20 +272,25 @@ function SidebarContent({ mobileOpen = false, onCloseMobile = () => {} }) {
   }
 
   const handleLogout = () => {
-    if (window.confirm('Keluar dari sesi e-Rapor dan SSO?')) {
-      document.cookie = 'perpusdig_auth_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;';
-      document.cookie = 'perpusdig_auth_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=localhost;';
-      document.cookie = 'perpusdig_auth_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=.localhost;';
-      document.cookie = 'perpusdig_auth_user=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;';
-      document.cookie = 'perpusdig_auth_user=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=localhost;';
-      document.cookie = 'perpusdig_auth_user=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=.localhost;';
-      try {
-        tokenStorage.clear();
-        sessionStorage.clear();
-        localStorage.clear();
-      } catch (e) {}
-      window.location.href = 'http://sso.localhost/login';
-    }
+    setShowLogoutModal(true);
+  };
+
+  const executeLogout = () => {
+    document.cookie = 'perpusdig_auth_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;';
+    document.cookie = 'perpusdig_auth_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=localhost;';
+    document.cookie = 'perpusdig_auth_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=.localhost;';
+    document.cookie = 'perpusdig_auth_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=.spenspra.com;';
+    document.cookie = 'perpusdig_auth_user=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;';
+    document.cookie = 'perpusdig_auth_user=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=localhost;';
+    document.cookie = 'perpusdig_auth_user=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=.localhost;';
+    document.cookie = 'perpusdig_auth_user=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=.spenspra.com;';
+    try {
+      tokenStorage.clear();
+      sessionStorage.clear();
+      localStorage.clear();
+    } catch (e) {}
+    const isProd = typeof window !== 'undefined' && window.location.hostname.includes('spenspra.com');
+    window.location.href = isProd ? 'https://spenspra.com/login' : 'http://sso.localhost/login';
   };
 
   return (
@@ -432,6 +441,14 @@ function SidebarContent({ mobileOpen = false, onCloseMobile = () => {} }) {
                           </span>
                           <span className="truncate">{item.label}</span>
                         </div>
+                        {item.isWalasOnly && !isWalas && (
+                          <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200/80 flex items-center gap-1">
+                            <svg className="w-2.5 h-2.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                            Terkunci
+                          </span>
+                        )}
                       </Link>
                     );
                   })}
@@ -476,6 +493,18 @@ function SidebarContent({ mobileOpen = false, onCloseMobile = () => {} }) {
           </button>
         </div>
       </aside>
+
+      {/* Modal Konfirmasi Logout */}
+      <ConfirmModal
+        isOpen={showLogoutModal}
+        title="Keluar dari Aplikasi e-Rapor?"
+        message="Anda akan keluar dari sesi akun e-Rapor dan portal SSO SMP Negeri 1 Prambon."
+        confirmText="Ya, Keluar"
+        cancelText="Batal"
+        type="danger"
+        onConfirm={executeLogout}
+        onCancel={() => setShowLogoutModal(false)}
+      />
     </>
   );
 }

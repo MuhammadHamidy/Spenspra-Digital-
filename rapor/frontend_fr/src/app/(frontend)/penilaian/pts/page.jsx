@@ -9,6 +9,7 @@ import Pagination from '@/components/Pagination';
 import { exportToExcelXml } from '@/lib/excelExport';
 import Modal from '@/components/Modal';
 import ImportGradesModal from '@/components/ImportGradesModal';
+import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
 
 const PREDICATE_LABELS = {
   A: 'Sangat baik dalam',
@@ -34,23 +35,11 @@ const getPredicate = (score) => {
 };
 
 export default function PenilaianPTSPage() {
-  const [subjects, setSubjects] = useState([
-    { code: 'BIG', name: 'Bahasa Inggris' },
-    { code: 'MAT', name: 'Matematika' },
-    { code: 'PAI', name: 'Pendidikan Agama Islam dan Budi Pekerti' },
-    { code: 'PP', name: 'Pendidikan Pancasila' },
-    { code: 'BI', name: 'Bahasa Indonesia' },
-    { code: 'IPA', name: 'Ilmu Pengetahuan Alam' },
-    { code: 'IPS', name: 'Ilmu Pengetahuan Sosial' },
-    { code: 'PJOK', name: 'Pendidikan Jasmani, Olahraga, dan Kesehatan' },
-    { code: 'INF', name: 'Informatika' },
-    { code: 'SBP', name: 'Seni Budaya dan Prakarya' },
-    { code: 'BJ', name: 'Bahasa Jawa' },
-    { code: 'BTQ', name: 'Baca Tulis Al Qur’an' },
-  ]);
-  const [classes, setClasses] = useState(['7A']);
-  const [subject, setSubject] = useState('BIG');
-  const [className, setClassName] = useState('7A');
+  const [currentUser, setCurrentUser] = useState(null);
+  const [subjects, setSubjects] = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [subject, setSubject] = useState('');
+  const [className, setClassName] = useState('');
   const [rows, setRows] = useState([]);
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -61,9 +50,9 @@ export default function PenilaianPTSPage() {
   const [quickTopic, setQuickTopic] = useState('');
   const [ptsDeadline, setPtsDeadline] = useState(null);
 
-  // Filter Tahun Ajaran & Semester (Riwayat Semester Sebelumnya)
-  const [academicYear, setAcademicYear] = useState('2025/2026');
-  const [semester, setSemester] = useState('GENAP');
+  // Filter Tahun Ajaran & Semester sinkron otomatis dengan Super Admin
+  const [academicYear, setAcademicYear] = useState(() => getSchoolAcademicPeriod().year);
+  const [semester, setSemester] = useState(() => getSchoolAcademicPeriod().semester);
 
   // Kunci Nilai & Audit Log States
   const [isLocked, setIsLocked] = useState(false);
@@ -88,13 +77,20 @@ export default function PenilaianPTSPage() {
 
   // Load master courses & classes from backend filtered by logged-in teacher
   useEffect(() => {
+    const period = getSchoolAcademicPeriod();
+    if (period?.year) setAcademicYear(period.year);
+    if (period?.semester) setSemester(period.semester);
+
     deadlineApiAdapter.getDeadlines().then((list) => {
       const dl = list.find((d) => d.type === 'PTS');
       if (dl) setPtsDeadline(dl);
     }).catch(() => {});
+
     const fetchMasterData = async () => {
       try {
-        const currentUser = tokenStorage.getUser();
+        const user = tokenStorage.getUser();
+        setCurrentUser(user);
+
         const [clsRes, crsRes] = await Promise.all([
           attendanceApi.getClasses(),
           attendanceApi.getCourses(),
@@ -105,44 +101,49 @@ export default function PenilaianPTSPage() {
           availableSubjects = crsRes.data.map((c) => ({ code: c.code, name: c.name }));
         }
 
-        if (clsRes.success && Array.isArray(clsRes.data) && clsRes.data.length > 0) {
+        const isTeacherRole = user && (user.role === 'GURU' || user.roleName === 'GURU');
+
+        if (clsRes.success && Array.isArray(clsRes.data)) {
           let teacherClasses = clsRes.data;
-          // Filter jika pengguna adalah GURU
-          if (currentUser && (currentUser.role === 'GURU' || currentUser.roleName === 'GURU')) {
-            const myName = (currentUser.fullName || currentUser.full_name || '').toLowerCase();
+          // Filter ketat jika pengguna adalah GURU
+          if (isTeacherRole) {
+            const myName = (user.fullName || user.full_name || '').toLowerCase();
             const filtered = clsRes.data.filter((c) =>
-              c.dosen_id === currentUser.id ||
-              c.teacher_id === currentUser.id ||
+              c.dosen_id === user.id ||
+              c.teacher_id === user.id ||
               (myName && c.teacher_name && c.teacher_name.toLowerCase().includes(myName)) ||
-              (currentUser.nimNip && (c.dosen_id?.includes(currentUser.nimNip) || c.teacher_nip?.includes(currentUser.nimNip)))
+              (user.nimNip && (c.dosen_id?.includes(user.nimNip) || c.teacher_nip?.includes(user.nimNip)))
             );
-            if (filtered.length > 0) {
-              teacherClasses = filtered;
-            }
+            // Jangan fallback ke semua kelas jika guru belum ditugaskan!
+            teacherClasses = filtered;
           }
 
-          const classNames = [...new Set(teacherClasses.map((c) => c.class_code || c.name || c.id))];
+          const classNames = [...new Set(teacherClasses.map((c) => c.class_code || c.name || c.id).filter(Boolean))];
+          setClasses(classNames);
           if (classNames.length > 0) {
-            setClasses(classNames);
-            if (!classNames.includes(className)) {
-              setClassName(classNames[0]);
-            }
+            setClassName((prev) => (classNames.includes(prev) ? prev : classNames[0]));
+          } else {
+            setClassName('');
           }
 
           // Filter mapel yang diampu guru
-          if (currentUser && (currentUser.role === 'GURU' || currentUser.roleName === 'GURU')) {
-            const teacherCourseCodes = [...new Set(teacherClasses.map((c) => c.course_code || c.course_id))];
+          if (isTeacherRole) {
+            const teacherCourseCodes = [...new Set(teacherClasses.map((c) => c.course_code || c.course_id).filter(Boolean))];
             const filteredSubjects = availableSubjects.filter((s) =>
               teacherCourseCodes.some((tc) => tc === s.code || tc === `crs-${s.code.toLowerCase()}`)
             );
+            // Hanya mapel yang benar-benar ditugaskan admin!
+            setSubjects(filteredSubjects);
             if (filteredSubjects.length > 0) {
-              setSubjects(filteredSubjects);
-              setSubject(filteredSubjects[0].code);
-            } else if (availableSubjects.length > 0) {
-              setSubjects(availableSubjects);
+              setSubject((prev) => (filteredSubjects.some((s) => s.code === prev) ? prev : filteredSubjects[0].code));
+            } else {
+              setSubject('');
             }
-          } else if (availableSubjects.length > 0) {
+          } else {
             setSubjects(availableSubjects);
+            if (availableSubjects.length > 0) {
+              setSubject((prev) => (availableSubjects.some((s) => s.code === prev) ? prev : availableSubjects[0].code));
+            }
           }
         }
       } catch (err) {
@@ -671,14 +672,38 @@ export default function PenilaianPTSPage() {
         </div>
       )}
 
+      {/* Banner Peringatan Guru Belum Ada Penugasan Mengajar */}
+      {currentUser && (currentUser.role === 'GURU' || currentUser.roleName === 'GURU') && (classes.length === 0 || subjects.length === 0) && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-xs flex items-start gap-3">
+          <div className="w-9 h-9 rounded-lg bg-amber-100 border border-amber-300 flex items-center justify-center shrink-0 text-amber-800">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div>
+            <h4 className="font-bold text-xs text-slate-900">Belum Ada Penugasan Mata Pelajaran & Kelas</h4>
+            <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+              Akun Anda belum memiliki mata pelajaran atau rombel yang diatur pada jadwal e-Rapor untuk Tahun Ajaran <strong>{academicYear} ({semester})</strong>.
+              Sistem tidak akan memasukkan data kelas atau mapel secara sembarangan. Silakan hubungi Administrator e-Rapor sekolah untuk mengatur penugasan mengampu di menu <em>Pengampu Mata Pelajaran</em>.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Toolbar Filter & Aksi Tambahan */}
       <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-[0.9fr_0.9fr_1.2fr_0.8fr_1.2fr]">
         <label className="text-xs font-semibold text-slate-700">
-          Tahun Ajaran
+          <div className="flex items-center justify-between">
+            <span>Tahun Ajaran</span>
+            {currentUser && (currentUser.role === 'GURU' || currentUser.roleName === 'GURU') && (
+              <span className="text-[10px] text-blue-600 font-normal">Terkunci Super Admin</span>
+            )}
+          </div>
           <select
             value={academicYear}
+            disabled={Boolean(currentUser && (currentUser.role === 'GURU' || currentUser.roleName === 'GURU'))}
             onChange={(e) => setAcademicYear(e.target.value)}
-            className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+            className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-600"
           >
             <option value="2024/2025">2024/2025 (Arsip)</option>
             <option value="2025/2026">2025/2026 (Aktif)</option>
@@ -686,11 +711,17 @@ export default function PenilaianPTSPage() {
           </select>
         </label>
         <label className="text-xs font-semibold text-slate-700">
-          Semester
+          <div className="flex items-center justify-between">
+            <span>Semester</span>
+            {currentUser && (currentUser.role === 'GURU' || currentUser.roleName === 'GURU') && (
+              <span className="text-[10px] text-blue-600 font-normal">Terkunci Super Admin</span>
+            )}
+          </div>
           <select
             value={semester}
+            disabled={Boolean(currentUser && (currentUser.role === 'GURU' || currentUser.roleName === 'GURU'))}
             onChange={(e) => setSemester(e.target.value)}
-            className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+            className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-600"
           >
             <option value="GANJIL">Ganjil</option>
             <option value="GENAP">Genap</option>
@@ -699,13 +730,21 @@ export default function PenilaianPTSPage() {
         <label className="text-xs font-semibold text-slate-700">
           Mata Pelajaran
           <select value={subject} onChange={(event) => setSubject(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
-            {subjects.map((item) => <option key={item.code} value={item.code}>{item.code} — {item.name}</option>)}
+            {subjects.length === 0 ? (
+              <option value="">— Belum Ada Mapel Diampu —</option>
+            ) : (
+              subjects.map((item) => <option key={item.code} value={item.code}>{item.code} — {item.name}</option>)
+            )}
           </select>
         </label>
         <label className="text-xs font-semibold text-slate-700">
           Rombel
           <select value={className} onChange={(event) => setClassName(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
-            {classes.map((item) => <option key={item} value={item}>Kelas {item}</option>)}
+            {classes.length === 0 ? (
+              <option value="">— Belum Ada Kelas —</option>
+            ) : (
+              classes.map((item) => <option key={item} value={item}>Kelas {item}</option>)
+            )}
           </select>
         </label>
         <label className="text-xs font-semibold text-slate-700">

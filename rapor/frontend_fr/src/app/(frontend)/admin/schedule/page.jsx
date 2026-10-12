@@ -6,6 +6,7 @@ import { classApiAdapter } from '@/lib/features/classes/infrastructure/classApiA
 import { courseApiAdapter } from '@/lib/features/courses/infrastructure/courseApiAdapter';
 import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApiAdapter';
 import Pagination from '@/components/Pagination';
+import ConfirmModal from '@/components/ConfirmModal';
 
 const KELAS_OPTIONS = ['7A', '7B', '7C', '8A', '8B', '8C', '9A', '9B', '9C'];
 
@@ -28,6 +29,7 @@ export default function SubjectAssignmentPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [formClassCode, setFormClassCode] = useState('7A');
+  const [deleteConfirmItem, setDeleteConfirmItem] = useState(null);
   const [formCourseId, setFormCourseId] = useState('');
   const [formTeacherId, setFormTeacherId] = useState('');
   const [formError, setFormError] = useState('');
@@ -119,18 +121,19 @@ export default function SubjectAssignmentPage() {
     }
   };
 
-  const handleDelete = async (item) => {
-    const courseName = item.course_name || item.course_code || 'Mapel';
-    const teacherName = item.teacher_name || 'Guru';
-    if (!window.confirm(`Hapus penugasan pengampu ${courseName} di Kelas ${item.class_code} (${teacherName})?`)) {
-      return;
-    }
+  const handleDelete = (item) => {
+    setDeleteConfirmItem(item);
+  };
 
+  const executeDelete = async () => {
+    if (!deleteConfirmItem) return;
     try {
-      await classApiAdapter.delete(item.id);
+      await classApiAdapter.delete(deleteConfirmItem.id);
       await loadData();
     } catch (err) {
       alert(`Gagal menghapus penugasan: ${err.message}`);
+    } finally {
+      setDeleteConfirmItem(null);
     }
   };
 
@@ -501,6 +504,18 @@ export default function SubjectAssignmentPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Modal Konfirmasi Hapus */}
+      <ConfirmModal
+        isOpen={Boolean(deleteConfirmItem)}
+        title="Hapus Penugasan Guru Pengampu?"
+        message={`Apakah Anda yakin ingin menghapus penugasan ${deleteConfirmItem?.course_name || deleteConfirmItem?.course_code || 'Mapel'} di Kelas ${deleteConfirmItem?.class_code} (${deleteConfirmItem?.teacher_name || 'Guru'})?`}
+        confirmText="Ya, Hapus"
+        cancelText="Batal"
+        type="danger"
+        onConfirm={executeDelete}
+        onCancel={() => setDeleteConfirmItem(null)}
+      />
     </div>
   );
 }

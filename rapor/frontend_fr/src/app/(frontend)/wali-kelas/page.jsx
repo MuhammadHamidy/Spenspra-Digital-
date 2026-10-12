@@ -6,6 +6,7 @@ import { tokenStorage } from '@/lib/common/tokenStorage';
 import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApiAdapter';
 import { gradeApi } from '@/lib/gradeApi';
 import { exportToExcelXml } from '@/lib/excelExport';
+import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
 import WaliKelasHeaderBanner from '@/features/wali-kelas/components/WaliKelasHeaderBanner';
 import WaliKelasStatsBar from '@/features/wali-kelas/components/WaliKelasStatsBar';
 import WaliKelasToolbar from '@/features/wali-kelas/components/WaliKelasToolbar';
@@ -30,13 +31,15 @@ const AttendanceModal = dynamic(() => import('@/features/wali-kelas/components/A
 const AVAILABLE_CLASSES = ['7A', '7B', '8A', '8B', '9A', '9B'];
 
 export default function WaliKelasRaporPage() {
-  const [selectedClass, setSelectedClass] = useState('7A');
+  const [selectedClass, setSelectedClass] = useState('');
   const [isAdminOrKepalaSekolah, setIsAdminOrKepalaSekolah] = useState(false);
+  const [isWalas, setIsWalas] = useState(false);
+  const [isCheckingWalas, setIsCheckingWalas] = useState(true);
   const [gradesData, setGradesData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [academicYear, setAcademicYear] = useState('2025/2026');
-  const [semester, setSemester] = useState('Genap');
+  const [academicYear, setAcademicYear] = useState(() => getSchoolAcademicPeriod().year);
+  const [semester, setSemester] = useState(() => getSchoolAcademicPeriod().semester);
   const [endorsement, setEndorsement] = useState(null);
   const [selectedStudentForReport, setSelectedStudentForReport] = useState(null);
   const [isBulkPrintModalOpen, setIsBulkPrintModalOpen] = useState(false);
@@ -57,6 +60,10 @@ export default function WaliKelasRaporPage() {
   const [allTeachers, setAllTeachers] = useState([]);
 
   useEffect(() => {
+    const period = getSchoolAcademicPeriod();
+    if (period?.year) setAcademicYear(period.year);
+    if (period?.semester) setSemester(period.semester);
+
     const user = tokenStorage.getUser();
     if (user) {
       if (user.fullName || user.full_name) {
@@ -69,11 +76,12 @@ export default function WaliKelasRaporPage() {
       const isPrivileged = roleStr.includes('ADMIN') || roleStr.includes('KEPALA');
       setIsAdminOrKepalaSekolah(isPrivileged);
 
-      const directClass = user.className || user.class_name;
-      if (directClass) {
-        const clean = directClass.replace(/^Kelas\s*/i, '');
-        setSelectedClass(clean);
+      if (isPrivileged) {
+        setIsWalas(true);
+        setSelectedClass('7A');
       }
+
+      const directClass = user.className || user.class_name;
 
       accountApiAdapter.getTeachers().then((teachers) => {
         if (Array.isArray(teachers)) {
@@ -84,12 +92,50 @@ export default function WaliKelasRaporPage() {
               (user.nimNip && t.nim_nip === user.nimNip) ||
               (t.full_name && user.fullName && t.full_name.toLowerCase() === user.fullName.toLowerCase())
           );
-          if (me && me.class_name) {
-            const clean = me.class_name.replace(/^Kelas\s*/i, '');
+
+          if (isPrivileged) {
+            setIsWalas(true);
+            setIsCheckingWalas(false);
+            return;
+          }
+
+          const assignedClass = me?.class_name || directClass;
+          if (assignedClass) {
+            const clean = assignedClass.replace(/^Kelas\s*/i, '').trim();
             setSelectedClass(clean);
+            setIsWalas(true);
+          } else {
+            setIsWalas(false);
+            setSelectedClass('');
+          }
+        } else {
+          if (!isPrivileged) {
+            if (directClass) {
+              const clean = directClass.replace(/^Kelas\s*/i, '').trim();
+              setSelectedClass(clean);
+              setIsWalas(true);
+            } else {
+              setIsWalas(false);
+              setSelectedClass('');
+            }
           }
         }
-      }).catch(() => {});
+        setIsCheckingWalas(false);
+      }).catch(() => {
+        if (!isPrivileged) {
+          if (directClass) {
+            const clean = directClass.replace(/^Kelas\s*/i, '').trim();
+            setSelectedClass(clean);
+            setIsWalas(true);
+          } else {
+            setIsWalas(false);
+            setSelectedClass('');
+          }
+        }
+        setIsCheckingWalas(false);
+      });
+    } else {
+      setIsCheckingWalas(false);
     }
   }, []);
 
@@ -111,6 +157,11 @@ export default function WaliKelasRaporPage() {
   }, [selectedClass, isAdminOrKepalaSekolah, allTeachers]);
 
   const fetchClassGrades = useCallback(async (className, year, sem) => {
+    if (!className) {
+      setIsLoading(false);
+      setGradesData([]);
+      return;
+    }
     setIsLoading(true);
     const cleanClass = className.replace(/^Kelas\s*/i, '');
     const currentYear = year || academicYear;
@@ -376,6 +427,53 @@ export default function WaliKelasRaporPage() {
       },
     }));
   };
+
+  if (isCheckingWalas) {
+    return (
+      <div className="max-w-7xl mx-auto py-20 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-xs font-semibold text-slate-500">Memeriksa penugasan wali kelas...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isWalas && !isAdminOrKepalaSekolah) {
+    return (
+      <div className="max-w-4xl mx-auto py-12 px-4 space-y-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 md:p-12 shadow-sm text-center">
+          <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center mx-auto mb-5 shadow-xs">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-100 text-amber-800">
+            Akses Terkunci
+          </span>
+          <h2 className="text-xl font-bold text-slate-900 mt-3">
+            Anda Belum Ditugaskan Sebagai Wali Kelas
+          </h2>
+          <p className="text-sm text-slate-600 max-w-lg mx-auto mt-2 leading-relaxed">
+            Halaman Rekapitulasi dan Buku Nilai Wali Kelas hanya dapat diakses oleh Bapak/Ibu Guru yang telah ditugaskan secara resmi sebagai Wali Kelas untuk Tahun Ajaran <strong>{academicYear} ({semester})</strong>.
+          </p>
+          <div className="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200/80 max-w-md mx-auto text-left text-xs text-slate-600 space-y-2">
+            <div className="flex items-center gap-2 font-semibold text-slate-800">
+              <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+              <span>Nama Guru: {teacherName}</span>
+            </div>
+            <div className="flex items-center gap-2 text-slate-500">
+              <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+              <span>NIP: {teacherNip}</span>
+            </div>
+            <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-200">
+              Jika Anda merupakan wali kelas aktif pada tahun ajaran ini, silakan hubungi <strong>Administrator e-Rapor</strong> untuk memperbarui penugasan kelas Anda di menu <em>Data Guru & Walas</em>.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12">

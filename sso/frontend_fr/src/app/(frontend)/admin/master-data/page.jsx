@@ -7,6 +7,7 @@ import { classApiAdapter } from '@/lib/features/classes/infrastructure/classApiA
 import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApiAdapter';
 import Pagination from '@/components/Pagination';
 import { ToastContainer, useToast } from '@/components/Toast';
+import ConfirmModal from '@/components/ConfirmModal';
 
 function MasterDataContent() {
   const searchParams = useSearchParams();
@@ -34,6 +35,22 @@ function MasterDataContent() {
   const { toasts, addToast, removeToast } = useToast();
   // Alias agar tidak perlu ubah semua call setNotice secara manual
   const setNotice = (msg, type = 'success') => { if (msg) addToast(msg, type); };
+
+  // Dialog Konfirmasi Kustom (Menggantikan window.confirm default)
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Ya, Lanjutkan',
+    cancelText: 'Batal',
+    isDanger: true,
+    isLoading: false,
+    onConfirm: () => {},
+  });
+
+  const closeConfirm = () => {
+    setConfirmDialog((prev) => ({ ...prev, isOpen: false, isLoading: false }));
+  };
 
   // Search & Filter
   const [search, setSearch] = useState('');
@@ -281,10 +298,12 @@ function MasterDataContent() {
     setAcademicPeriod(updated);
     try {
       localStorage.setItem('spenspra_academic_period', JSON.stringify(updated));
-      document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/; domain=localhost; SameSite=Lax`;
-      document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/; domain=.localhost; SameSite=Lax`;
-      document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/; domain=localhost; SameSite=Lax`;
-      document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/; domain=.localhost; SameSite=Lax`;
+      const isProd = typeof window !== 'undefined' && window.location.hostname.includes('spenspra');
+      const domainPart = isProd ? '; domain=.spenspra.com' : '';
+      document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
+      document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
+      document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/; max-age=31536000; SameSite=Lax`;
+      document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/; max-age=31536000; SameSite=Lax`;
     } catch (err) {}
 
     setPeriodHistory((prev) => {
@@ -315,7 +334,6 @@ function MasterDataContent() {
         updated.semester === 'GENAP' ? 'Genap' : 'Ganjil'
       }. Seluruh sistem e-Rapor dan modul sekolah telah disinkronkan.`
     );
-
   };
 
   const handleQuickActivatePeriod = (p) => {
@@ -329,10 +347,12 @@ function MasterDataContent() {
     setPeriodForm((prev) => ({ ...prev, year: p.year, semester: p.semester }));
     try {
       localStorage.setItem('spenspra_academic_period', JSON.stringify(updated));
-      document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/; domain=localhost; SameSite=Lax`;
-      document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/; domain=.localhost; SameSite=Lax`;
-      document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/; domain=localhost; SameSite=Lax`;
-      document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/; domain=.localhost; SameSite=Lax`;
+      const isProd = typeof window !== 'undefined' && window.location.hostname.includes('spenspra');
+      const domainPart = isProd ? '; domain=.spenspra.com' : '';
+      document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
+      document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
+      document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/; max-age=31536000; SameSite=Lax`;
+      document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/; max-age=31536000; SameSite=Lax`;
     } catch (err) {}
 
     setPeriodHistory((prev) =>
@@ -371,23 +391,37 @@ function MasterDataContent() {
 
   const handleSaveClass = async (e) => {
     e.preventDefault();
-    if (!classForm.class_code.trim()) return;
+    const rawCode = classForm.class_code.trim();
+    if (!rawCode) return;
+
+    // Validasi penolakan duplikasi Rombel
+    const normInput = rawCode.toUpperCase().replace(/^KELAS\s*/, '').replace(/[-\s]/g, '');
+    const isDuplicate = classes.some((c) => {
+      if (editingClassId && c.id === editingClassId) return false;
+      const normExisting = (c.class_code || '').trim().toUpperCase().replace(/^KELAS\s*/, '').replace(/[-\s]/g, '');
+      return normExisting === normInput;
+    });
+
+    if (isDuplicate) {
+      setNotice(`Rombel "${rawCode}" sudah terdaftar di data master. Tidak dapat menambahkan rombel ganda.`, 'error');
+      return;
+    }
 
     try {
       if (editingClassId && !editingClassId.startsWith('c-init-')) {
         await classApiAdapter.update(editingClassId, {
-          class_code: classForm.class_code.trim(),
-          room: classForm.room.trim() || `Ruang ${classForm.class_code}`,
+          class_code: rawCode,
+          room: classForm.room.trim() || `Ruang ${rawCode}`,
           grade_level: classForm.grade_level,
         });
-        setNotice(`Rombel ${classForm.class_code} berhasil diperbarui.`);
+        setNotice(`Rombel ${rawCode} berhasil diperbarui.`);
       } else {
         await classApiAdapter.create({
-          class_code: classForm.class_code.trim(),
-          room: classForm.room.trim() || `Ruang ${classForm.class_code}`,
+          class_code: rawCode,
+          room: classForm.room.trim() || `Ruang ${rawCode}`,
           grade_level: classForm.grade_level,
         });
-        setNotice(`Rombel ${classForm.class_code} berhasil ditambahkan.`);
+        setNotice(`Rombel ${rawCode} berhasil ditambahkan.`);
       }
 
       setIsClassModalOpen(false);
@@ -399,19 +433,30 @@ function MasterDataContent() {
     }
   };
 
-  const handleDeleteClass = async (cls) => {
-    if (!window.confirm(`Hapus rombel ${cls.class_code}? Rombel ini akan dihapus dari data master.`)) return;
-
-    try {
-      if (cls.id && !cls.id.startsWith('c-init-')) {
-        await classApiAdapter.delete(cls.id);
-      }
-      setClasses((prev) => prev.filter((c) => (c.id ? c.id !== cls.id : c.class_code !== cls.class_code)));
-      setNotice(`Rombel ${cls.class_code} berhasil dihapus.`);
-
-    } catch (err) {
-      setError(err.message || 'Gagal menghapus rombel.');
-    }
+  const handleDeleteClass = (cls) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Hapus Rombel',
+      message: `Hapus rombel ${cls.class_code}?\nRombel ini akan dihapus dari data master.`,
+      confirmText: 'Ya, Hapus Rombel',
+      cancelText: 'Batal',
+      isDanger: true,
+      isLoading: false,
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isLoading: true }));
+        try {
+          if (cls.id && !cls.id.startsWith('c-init-')) {
+            await classApiAdapter.delete(cls.id);
+          }
+          setClasses((prev) => prev.filter((c) => (c.id ? c.id !== cls.id : c.class_code !== cls.class_code)));
+          setNotice(`Rombel ${cls.class_code} berhasil dihapus.`);
+          closeConfirm();
+        } catch (err) {
+          setError(err.message || 'Gagal menghapus rombel.');
+          closeConfirm();
+        }
+      },
+    });
   };
 
   // ────────────────────────────────────────────────────────
@@ -549,16 +594,43 @@ const generateUsernameFromName = (name) => {
 
   const handleSavePerson = async (e) => {
     e.preventDefault();
-    if (!personForm.full_name.trim()) return;
+    const rawFullName = personForm.full_name.trim();
+    if (!rawFullName) return;
+
+    const isSiswa = personForm.person_type === 'SISWA';
+    const cleanNip = personForm.nip?.trim() || '';
+    const cleanNisn = personForm.nisn?.trim() || '';
+
+    // Validasi penolakan data duplikat yang dimasukkan 2 kali
+    if (!editingPersonId) {
+      if (isSiswa && cleanNisn) {
+        const dupStudent = students.find((s) => s.nisn && s.nisn.trim() === cleanNisn);
+        if (dupStudent) {
+          setNotice(`Siswa dengan NISN "${cleanNisn}" (${dupStudent.full_name}) sudah terdaftar di database.`, 'error');
+          return;
+        }
+      }
+      if (!isSiswa) {
+        if (cleanNip) {
+          const dupNip = staff.find((p) => p.nip && p.nip.trim() === cleanNip);
+          if (dupNip) {
+            setNotice(`Pendidik/Staf dengan NIP "${cleanNip}" (${dupNip.full_name}) sudah terdaftar di database.`, 'error');
+            return;
+          }
+        }
+        const normName = rawFullName.toLowerCase();
+        const dupName = staff.find((p) => (p.full_name || '').trim().toLowerCase() === normName);
+        if (dupName) {
+          setNotice(`Pendidik/Staf dengan nama "${rawFullName}" sudah terdaftar di database.`, 'error');
+          return;
+        }
+      }
+    }
 
     try {
-      const isSiswa = personForm.person_type === 'SISWA';
-      const cleanNip = personForm.nip?.trim() || '';
-      const cleanNisn = personForm.nisn?.trim() || '';
-
       const identifier = isSiswa
         ? (cleanNisn || `user-${Date.now()}`)
-        : (cleanNip || generateUsernameFromName(personForm.full_name));
+        : (cleanNip || generateUsernameFromName(rawFullName));
 
       const defaultEmail = personForm.email?.trim() || `${identifier}@spenspra.sch.id`;
       const passToSave = personForm.password?.trim() || (isSiswa ? cleanNisn : (cleanNip || identifier));
@@ -566,7 +638,7 @@ const generateUsernameFromName = (name) => {
       if (editingPersonId) {
         // Mode Edit: Update identitas di school_people
         await schoolPeopleApi.update(editingPersonId, {
-          full_name: personForm.full_name.trim(),
+          full_name: rawFullName,
           nisn: isSiswa ? cleanNisn : '',
           nip: isSiswa ? '' : cleanNip,
           email: defaultEmail,
@@ -582,7 +654,7 @@ const generateUsernameFromName = (name) => {
         if (matchingAcc) {
           try {
             await accountApiAdapter.update(matchingAcc.id, {
-              full_name: personForm.full_name.trim(),
+              full_name: rawFullName,
               email: defaultEmail,
               phone: personForm.phone?.trim() || '',
               class_name: personForm.class_name?.trim() || '',
@@ -605,11 +677,12 @@ const generateUsernameFromName = (name) => {
           } catch (err) {}
         }
 
-        setNotice(`Data ${personForm.full_name} berhasil diperbarui.`);
+        setNotice(`Data ${rawFullName} berhasil diperbarui.`);
       } else {
         // Mode Tambah Baru: Buat di school_people & accounts
         const createdPerson = await schoolPeopleApi.create({
           ...personForm,
+          full_name: rawFullName,
           email: defaultEmail,
         });
 
@@ -617,11 +690,11 @@ const generateUsernameFromName = (name) => {
           await accountApiAdapter.create({
             username: identifier,
             email: defaultEmail,
-            full_name: personForm.full_name.trim(),
+            full_name: rawFullName,
             role_name: personForm.person_type,
             role_id: personForm.person_type,
-            nim_nip: personForm.nip?.trim() || personForm.nisn?.trim(),
-            nisn: personForm.nisn?.trim() || '',
+            nim_nip: cleanNip || cleanNisn,
+            nisn: cleanNisn,
             phone: personForm.phone?.trim() || '',
             class_name: personForm.class_name?.trim() || '',
             person_id: createdPerson?.id || '',
@@ -643,7 +716,7 @@ const generateUsernameFromName = (name) => {
           } catch (err) {}
         }
 
-        setNotice(`Data ${personForm.full_name} berhasil dibuat & akun SSO aktif (User: ${identifier}).`);
+        setNotice(`Data ${rawFullName} berhasil dibuat & akun SSO aktif (User: ${identifier}).`);
       }
 
       setIsPersonModalOpen(false);
@@ -654,57 +727,63 @@ const generateUsernameFromName = (name) => {
     }
   };
 
-  // Hapus Pengguna Terpadu (Cascading delete)
-  const handleDeletePerson = async (id, name) => {
-    if (
-      !window.confirm(
-        `Hapus ${name}?\nTindakan ini menghapus data civitas, kartu barcode, akun SSO, dan seluruh akses aplikasi secara permanen.`
-      )
-    )
-      return;
-
-    try {
-      // 1. Hapus identitas & barcode
-      await schoolPeopleApi.delete(id);
-
-      // 2. Hapus akun SSO login terkait
-      const targetPerson = [...students, ...staff].find((p) => p.id === id);
-      const identifier = targetPerson?.nisn || targetPerson?.nip;
-
-      const matchingAccounts = accounts.filter(
-        (acc) =>
-          acc.id === id ||
-          acc.person_id === id ||
-          (identifier && (acc.nim_nip === identifier || acc.username === identifier || acc.nisn === identifier))
-      );
-
-      for (const acc of matchingAccounts) {
+  // Hapus Pengguna Terpadu (Cascading delete dengan ConfirmModal)
+  const handleDeletePerson = (id, name) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Hapus Data Pengguna',
+      message: `Hapus ${name}?\nTindakan ini menghapus data civitas, kartu barcode, akun SSO, dan seluruh akses aplikasi secara permanen.`,
+      confirmText: 'Ya, Hapus Data',
+      cancelText: 'Batal',
+      isDanger: true,
+      isLoading: false,
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isLoading: true }));
         try {
-          await accountApiAdapter.delete(acc.id);
-        } catch (delErr) {
-          console.warn('Gagal menghapus akun terkait:', delErr?.message);
+          // 1. Hapus identitas & barcode
+          await schoolPeopleApi.delete(id);
+
+          // 2. Hapus akun SSO login terkait
+          const targetPerson = [...students, ...staff].find((p) => p.id === id);
+          const identifier = targetPerson?.nisn || targetPerson?.nip;
+
+          const matchingAccounts = accounts.filter(
+            (acc) =>
+              acc.id === id ||
+              acc.person_id === id ||
+              (identifier && (acc.nim_nip === identifier || acc.username === identifier || acc.nisn === identifier))
+          );
+
+          for (const acc of matchingAccounts) {
+            try {
+              await accountApiAdapter.delete(acc.id);
+            } catch (delErr) {
+              console.warn('Gagal menghapus akun terkait:', delErr?.message);
+            }
+          }
+
+          // 3. Bersihkan cache password & selection jika ada
+          setSavedPasswords((prev) => {
+            const next = { ...prev };
+            delete next[id];
+            if (identifier) delete next[identifier];
+            try {
+              localStorage.setItem('spenspra_staff_passwords', JSON.stringify(next));
+            } catch (e) {}
+            return next;
+          });
+          setSelectedStaffIds((prev) => prev.filter((item) => item !== id));
+          setSelectedStudentIds((prev) => prev.filter((item) => item !== id));
+
+          setNotice(`Seluruh data & akses ${name} berhasil dihapus dari sistem.`);
+          closeConfirm();
+          loadAll();
+        } catch (err) {
+          setError(err.message || 'Gagal menghapus data.');
+          closeConfirm();
         }
-      }
-
-      // 3. Bersihkan cache password & selection jika ada
-      setSavedPasswords((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        if (identifier) delete next[identifier];
-        try {
-          localStorage.setItem('spenspra_staff_passwords', JSON.stringify(next));
-        } catch (e) {}
-        return next;
-      });
-      setSelectedStaffIds((prev) => prev.filter((item) => item !== id));
-      setSelectedStudentIds((prev) => prev.filter((item) => item !== id));
-
-      setNotice(`Seluruh data & akses ${name} berhasil dihapus dari sistem.`);
-
-      loadAll();
-    } catch (err) {
-      setError(err.message || 'Gagal menghapus data.');
-    }
+      },
+    });
   };
 
   // ────────────────────────────────────────────────────────
@@ -734,144 +813,159 @@ const generateUsernameFromName = (name) => {
     setSelectedStaffIds([]);
   };
 
-  const handleDeleteSelectedStaff = async () => {
+  const handleDeleteSelectedStaff = () => {
     if (selectedStaffIds.length === 0) return;
     const count = selectedStaffIds.length;
-    if (
-      !window.confirm(
-        `Hapus ${count} data guru / staf terpilih?\n\nTindakan ini akan menghapus identitas civitas, kartu barcode, akun SSO, dan akses secara permanen.`
-      )
-    ) {
-      return;
-    }
 
-    setIsDeletingBulkStaff(true);
-    setNotice(`Sedang menghapus ${count} data guru & akun SSO terkait...`);
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Hapus Guru / Staf Terpilih',
+      message: `Hapus ${count} data guru / staf terpilih?\n\nTindakan ini akan menghapus identitas civitas, kartu barcode, akun SSO, dan akses secara permanen.`,
+      confirmText: `Ya, Hapus (${count}) Data`,
+      cancelText: 'Batal',
+      isDanger: true,
+      isLoading: false,
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isLoading: true }));
+        setIsDeletingBulkStaff(true);
+        setNotice(`Sedang menghapus ${count} data guru & akun SSO terkait...`);
 
-    try {
-      const selectedPeople = staff.filter((p) => selectedStaffIds.includes(p.id));
-      const chunkSize = 5;
-
-      for (let i = 0; i < selectedPeople.length; i += chunkSize) {
-        const chunk = selectedPeople.slice(i, i + chunkSize);
-        await Promise.all(
-          chunk.map(async (person) => {
-            try {
-              await schoolPeopleApi.delete(person.id);
-            } catch (delErr) {
-              console.warn('Gagal menghapus person:', person.id, delErr);
-            }
-
-            const identifier = person.nip || person.nisn;
-            const matching = accounts.filter(
-              (acc) =>
-                acc.id === person.id ||
-                acc.person_id === person.id ||
-                (identifier && (acc.nim_nip === identifier || acc.username === identifier || acc.nisn === identifier))
-            );
-
-            await Promise.all(
-              matching.map((acc) =>
-                accountApiAdapter.delete(acc.id).catch((accErr) => {
-                  console.warn('Gagal menghapus akun:', acc.id, accErr);
-                })
-              )
-            );
-          })
-        );
-      }
-
-      setSavedPasswords((prev) => {
-        const next = { ...prev };
-        selectedPeople.forEach((p) => {
-          delete next[p.id];
-          if (p.nip) delete next[p.nip];
-          const username = getStaffUsername(p);
-          if (username) delete next[username];
-        });
         try {
-          localStorage.setItem('spenspra_staff_passwords', JSON.stringify(next));
-        } catch (e) {}
-        return next;
-      });
+          const selectedPeople = staff.filter((p) => selectedStaffIds.includes(p.id));
+          const chunkSize = 5;
 
-      setSelectedStaffIds([]);
-      setNotice(`Berhasil menghapus ${count} data guru & staf dari sistem.`);
+          for (let i = 0; i < selectedPeople.length; i += chunkSize) {
+            const chunk = selectedPeople.slice(i, i + chunkSize);
+            await Promise.all(
+              chunk.map(async (person) => {
+                try {
+                  await schoolPeopleApi.delete(person.id);
+                } catch (delErr) {
+                  console.warn('Gagal menghapus person:', person.id, delErr);
+                }
 
-      await loadAll();
-    } catch (err) {
-      setError(err.message || 'Gagal menghapus data guru terpilih.');
-    } finally {
-      setIsDeletingBulkStaff(false);
-    }
+                const identifier = person.nip || person.nisn;
+                const matching = accounts.filter(
+                  (acc) =>
+                    acc.id === person.id ||
+                    acc.person_id === person.id ||
+                    (identifier && (acc.nim_nip === identifier || acc.username === identifier || acc.nisn === identifier))
+                );
+
+                await Promise.all(
+                  matching.map((acc) =>
+                    accountApiAdapter.delete(acc.id).catch((accErr) => {
+                      console.warn('Gagal menghapus akun:', acc.id, accErr);
+                    })
+                  )
+                );
+              })
+            );
+          }
+
+          setSavedPasswords((prev) => {
+            const next = { ...prev };
+            selectedPeople.forEach((p) => {
+              delete next[p.id];
+              if (p.nip) delete next[p.nip];
+              const username = getStaffUsername(p);
+              if (username) delete next[username];
+            });
+            try {
+              localStorage.setItem('spenspra_staff_passwords', JSON.stringify(next));
+            } catch (e) {}
+            return next;
+          });
+
+          setSelectedStaffIds([]);
+          setNotice(`Berhasil menghapus ${count} data guru & staf dari sistem.`);
+          closeConfirm();
+          await loadAll();
+        } catch (err) {
+          setError(err.message || 'Gagal menghapus data guru terpilih.');
+          closeConfirm();
+        } finally {
+          setIsDeletingBulkStaff(false);
+        }
+      },
+    });
   };
 
-  const handleDeleteAllStaff = async () => {
+  const handleDeleteAllStaff = () => {
     if (staff.length === 0) {
-      alert('Tidak ada data guru atau tenaga kependidikan untuk dihapus.');
+      setNotice('Tidak ada data guru atau tenaga kependidikan untuk dihapus.', 'info');
       return;
     }
 
     const count = staff.length;
-    const confirm1 = window.confirm(
-      `PERINGATAN: Apakah Anda yakin ingin menghapus SEMUA (${count}) data Guru & Tenaga Kependidikan?\n\n` +
-      `Tindakan ini akan:\n` +
-      `1. Menghapus seluruh data identitas GTK & barcode token.\n` +
-      `2. Menghapus seluruh akun login SSO GTK terkait.\n\n` +
-      `Tindakan ini permanen dan TIDAK DAPAT DIBATALKAN. Lanjutkan?`
-    );
-    if (!confirm1) return;
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Hapus SEMUA Guru & Tenaga Kependidikan',
+      message:
+        `PERINGATAN: Apakah Anda yakin ingin menghapus SEMUA (${count}) data Guru & Tenaga Kependidikan?\n\n` +
+        `Tindakan ini akan:\n` +
+        `1. Menghapus seluruh data identitas GTK & barcode token.\n` +
+        `2. Menghapus seluruh akun login SSO GTK terkait.\n\n` +
+        `Tindakan ini permanen dan TIDAK DAPAT DIBATALKAN. Lanjutkan?`,
+      confirmText: `Hapus SEMUA (${count}) GTK`,
+      cancelText: 'Batal',
+      isDanger: true,
+      isLoading: false,
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isLoading: true }));
+        setIsDeletingBulkStaff(true);
+        setNotice(`Sedang menghapus SEMUA ${count} data guru & akun SSO... Mohon jangan tutup browser.`);
 
-    setIsDeletingBulkStaff(true);
-    setNotice(`Sedang menghapus SEMUA ${count} data guru & akun SSO... Mohon jangan tutup browser.`);
+        try {
+          const allStaff = [...staff];
+          const chunkSize = 5;
 
-    try {
-      const allStaff = [...staff];
-      const chunkSize = 5;
-
-      for (let i = 0; i < allStaff.length; i += chunkSize) {
-        const chunk = allStaff.slice(i, i + chunkSize);
-        await Promise.all(
-          chunk.map(async (person) => {
-            try {
-              await schoolPeopleApi.delete(person.id);
-            } catch (e) {
-              console.warn('Gagal menghapus person:', person.id, e);
-            }
-
-            const identifier = person.nip || person.nisn;
-            const matching = accounts.filter(
-              (acc) =>
-                acc.id === person.id ||
-                acc.person_id === person.id ||
-                (identifier && (acc.nim_nip === identifier || acc.username === identifier || acc.nisn === identifier))
-            );
-
+          for (let i = 0; i < allStaff.length; i += chunkSize) {
+            const chunk = allStaff.slice(i, i + chunkSize);
             await Promise.all(
-              matching.map((acc) =>
-                accountApiAdapter.delete(acc.id).catch((e) => {
-                  console.warn('Gagal menghapus akun:', acc.id, e);
-                })
-              )
+              chunk.map(async (person) => {
+                try {
+                  await schoolPeopleApi.delete(person.id);
+                } catch (e) {
+                  console.warn('Gagal menghapus person:', person.id, e);
+                }
+
+                const identifier = person.nip || person.nisn;
+                const matching = accounts.filter(
+                  (acc) =>
+                    acc.id === person.id ||
+                    acc.person_id === person.id ||
+                    (identifier && (acc.nim_nip === identifier || acc.username === identifier || acc.nisn === identifier))
+                );
+
+                await Promise.all(
+                  matching.map((acc) =>
+                    accountApiAdapter.delete(acc.id).catch((e) => {
+                      console.warn('Gagal menghapus akun:', acc.id, e);
+                    })
+                  )
+                );
+              })
             );
-          })
-        );
-      }
+          }
 
-      setSavedPasswords({});
-      try {
-        localStorage.removeItem('spenspra_staff_passwords');
-      } catch (e) {}
+          setSavedPasswords({});
+          try {
+            localStorage.removeItem('spenspra_staff_passwords');
+          } catch (e) {}
 
-      setSelectedStaffIds([]);
-      setNotice(`Seluruh data ${count} Guru & Tenaga Kependidikan berhasil dihapus.`);
-
-      await loadAll();
-    } catch (err) {
-      setError(err.message || 'Gagal menghapus seluruh data guru.');
-    } finally {
-      setIsDeletingBulkStaff(false);
-    }
+          setSelectedStaffIds([]);
+          setNotice(`Seluruh data ${count} Guru & Tenaga Kependidikan berhasil dihapus.`);
+          closeConfirm();
+          await loadAll();
+        } catch (err) {
+          setError(err.message || 'Gagal menghapus seluruh data guru.');
+          closeConfirm();
+        } finally {
+          setIsDeletingBulkStaff(false);
+        }
+      },
+    });
   };
 
   // ────────────────────────────────────────────────────────
@@ -901,109 +995,124 @@ const generateUsernameFromName = (name) => {
     setSelectedStudentIds([]);
   };
 
-  const handleDeleteSelectedStudents = async () => {
+  const handleDeleteSelectedStudents = () => {
     if (selectedStudentIds.length === 0) return;
     const count = selectedStudentIds.length;
-    if (
-      !window.confirm(
-        `Hapus ${count} data siswa yang dipilih?\n\nTindakan ini menghapus data siswa, kartu barcode, dan akun SSO secara permanen.`
-      )
-    ) {
-      return;
-    }
 
-    setIsDeletingBulkStudent(true);
-    setNotice(`Sedang menghapus ${count} data siswa & akun terkait...`);
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Hapus Siswa Terpilih',
+      message: `Hapus ${count} data siswa yang dipilih?\n\nTindakan ini menghapus data siswa, kartu barcode, dan akun SSO secara permanen.`,
+      confirmText: `Ya, Hapus (${count}) Siswa`,
+      cancelText: 'Batal',
+      isDanger: true,
+      isLoading: false,
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isLoading: true }));
+        setIsDeletingBulkStudent(true);
+        setNotice(`Sedang menghapus ${count} data siswa & akun terkait...`);
 
-    try {
-      const selectedPeople = students.filter((s) => selectedStudentIds.includes(s.id));
-      const chunkSize = 5;
+        try {
+          const selectedPeople = students.filter((s) => selectedStudentIds.includes(s.id));
+          const chunkSize = 5;
 
-      for (let i = 0; i < selectedPeople.length; i += chunkSize) {
-        const chunk = selectedPeople.slice(i, i + chunkSize);
-        await Promise.all(
-          chunk.map(async (person) => {
-            try {
-              await schoolPeopleApi.delete(person.id);
-            } catch (e) {}
+          for (let i = 0; i < selectedPeople.length; i += chunkSize) {
+            const chunk = selectedPeople.slice(i, i + chunkSize);
+            await Promise.all(
+              chunk.map(async (person) => {
+                try {
+                  await schoolPeopleApi.delete(person.id);
+                } catch (e) {}
 
-            const identifier = person.nisn || person.nip;
-            const matching = accounts.filter(
-              (acc) =>
-                acc.id === person.id ||
-                acc.person_id === person.id ||
-                (identifier && (acc.nim_nip === identifier || acc.username === identifier || acc.nisn === identifier))
+                const identifier = person.nisn || person.nip;
+                const matching = accounts.filter(
+                  (acc) =>
+                    acc.id === person.id ||
+                    acc.person_id === person.id ||
+                    (identifier && (acc.nim_nip === identifier || acc.username === identifier || acc.nisn === identifier))
+                );
+
+                await Promise.all(matching.map((acc) => accountApiAdapter.delete(acc.id).catch(() => {})));
+              })
             );
+          }
 
-            await Promise.all(matching.map((acc) => accountApiAdapter.delete(acc.id).catch(() => {})));
-          })
-        );
-      }
-
-      setSelectedStudentIds([]);
-      setNotice(`Berhasil menghapus ${count} data siswa dari sistem.`);
-
-      await loadAll();
-    } catch (err) {
-      setError(err.message || 'Gagal menghapus beberapa data siswa terpilih.');
-    } finally {
-      setIsDeletingBulkStudent(false);
-    }
+          setSelectedStudentIds([]);
+          setNotice(`Berhasil menghapus ${count} data siswa dari sistem.`);
+          closeConfirm();
+          await loadAll();
+        } catch (err) {
+          setError(err.message || 'Gagal menghapus beberapa data siswa terpilih.');
+          closeConfirm();
+        } finally {
+          setIsDeletingBulkStudent(false);
+        }
+      },
+    });
   };
 
-  const handleDeleteAllStudents = async () => {
+  const handleDeleteAllStudents = () => {
     if (students.length === 0) {
-      alert('Tidak ada data siswa untuk dihapus.');
+      setNotice('Tidak ada data siswa untuk dihapus.', 'info');
       return;
     }
 
     const count = students.length;
-    const confirm1 = window.confirm(
-      `PERINGATAN: Apakah Anda yakin ingin menghapus SEMUA (${count}) data Siswa?\n\n` +
-      `Tindakan ini akan:\n` +
-      `1. Menghapus seluruh data master identitas siswa & barcode token.\n` +
-      `2. Menghapus seluruh akun login SSO siswa terkait.\n\n` +
-      `Tindakan ini permanen dan TIDAK DAPAT DIBATALKAN. Lanjutkan?`
-    );
-    if (!confirm1) return;
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Hapus SEMUA Data Siswa',
+      message:
+        `PERINGATAN: Apakah Anda yakin ingin menghapus SEMUA (${count}) data Siswa?\n\n` +
+        `Tindakan ini akan:\n` +
+        `1. Menghapus seluruh data master identitas siswa & barcode token.\n` +
+        `2. Menghapus seluruh akun login SSO siswa terkait.\n\n` +
+        `Tindakan ini permanen dan TIDAK DAPAT DIBATALKAN. Lanjutkan?`,
+      confirmText: `Hapus SEMUA (${count}) Siswa`,
+      cancelText: 'Batal',
+      isDanger: true,
+      isLoading: false,
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isLoading: true }));
+        setIsDeletingBulkStudent(true);
+        setNotice(`Sedang menghapus seluruh ${count} data siswa... Mohon jangan tutup browser.`);
 
-    setIsDeletingBulkStudent(true);
-    setNotice(`Sedang menghapus seluruh ${count} data siswa... Mohon jangan tutup browser.`);
+        try {
+          const allStudents = [...students];
+          const chunkSize = 5;
 
-    try {
-      const allStudents = [...students];
-      const chunkSize = 5;
+          for (let i = 0; i < allStudents.length; i += chunkSize) {
+            const chunk = allStudents.slice(i, i + chunkSize);
+            await Promise.all(
+              chunk.map(async (person) => {
+                try {
+                  await schoolPeopleApi.delete(person.id);
+                } catch (e) {}
 
-      for (let i = 0; i < allStudents.length; i += chunkSize) {
-        const chunk = allStudents.slice(i, i + chunkSize);
-        await Promise.all(
-          chunk.map(async (person) => {
-            try {
-              await schoolPeopleApi.delete(person.id);
-            } catch (e) {}
+                const identifier = person.nisn || person.nip;
+                const matching = accounts.filter(
+                  (acc) =>
+                    acc.id === person.id ||
+                    acc.person_id === person.id ||
+                    (identifier && (acc.nim_nip === identifier || acc.username === identifier || acc.nisn === identifier))
+                );
 
-            const identifier = person.nisn || person.nip;
-            const matching = accounts.filter(
-              (acc) =>
-                acc.id === person.id ||
-                acc.person_id === person.id ||
-                (identifier && (acc.nim_nip === identifier || acc.username === identifier || acc.nisn === identifier))
+                await Promise.all(matching.map((acc) => accountApiAdapter.delete(acc.id).catch(() => {})));
+              })
             );
+          }
 
-            await Promise.all(matching.map((acc) => accountApiAdapter.delete(acc.id).catch(() => {})));
-          })
-        );
-      }
-
-      setSelectedStudentIds([]);
-      setNotice(`Seluruh data ${count} Siswa berhasil dihapus.`);
-
-      await loadAll();
-    } catch (err) {
-      setError(err.message || 'Gagal menghapus seluruh data siswa.');
-    } finally {
-      setIsDeletingBulkStudent(false);
-    }
+          setSelectedStudentIds([]);
+          setNotice(`Seluruh data ${count} Siswa berhasil dihapus.`);
+          closeConfirm();
+          await loadAll();
+        } catch (err) {
+          setError(err.message || 'Gagal menghapus seluruh data siswa.');
+          closeConfirm();
+        } finally {
+          setIsDeletingBulkStudent(false);
+        }
+      },
+    });
   };
 
   // ────────────────────────────────────────────────────────
@@ -2627,7 +2736,18 @@ const generateUsernameFromName = (name) => {
             </form>
           </div>
         </div>
-      )}
+      {/* Dialog Konfirmasi Kustom */}
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        isDanger={confirmDialog.isDanger}
+        isLoading={confirmDialog.isLoading}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={closeConfirm}
+      />
     </div>
   );
 }

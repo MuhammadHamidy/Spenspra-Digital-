@@ -84,8 +84,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 128M
+          cpus: '1.0'
+          memory: 384M
     networks: [spenspra]
 
   sso-frontend:
@@ -118,8 +118,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '1.0'
+          memory: 768M
     networks: [spenspra]
 
   rapor-migrate:
@@ -179,8 +179,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 128M
+          cpus: '1.0'
+          memory: 384M
     networks: [spenspra]
 
   rapor-frontend:
@@ -193,7 +193,7 @@ services:
     container_name: spenspra-rapor-frontend
     environment:
       NODE_ENV: production
-      NODE_OPTIONS: "--max-old-space-size=384"
+      NODE_OPTIONS: "--max-old-space-size=512"
       HOSTNAME: "0.0.0.0"
       PORT: 3000
       NEXT_PUBLIC_API_URL: ${RAPOR_PUBLIC_API_URL:-http://rapor.localhost/api}
@@ -205,8 +205,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '1.0'
+          memory: 768M
     networks: [spenspra]
 
   perpus-migrate:
@@ -266,8 +266,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 128M
+          cpus: '1.0'
+          memory: 384M
     networks: [spenspra]
 
   perpus-frontend:
@@ -280,7 +280,7 @@ services:
     container_name: spenspra-perpus-frontend
     environment:
       NODE_ENV: production
-      NODE_OPTIONS: "--max-old-space-size=256"
+      NODE_OPTIONS: "--max-old-space-size=512"
       HOSTNAME: "0.0.0.0"
       PORT: 3000
       NEXT_PUBLIC_API_URL: ${PERPUS_PUBLIC_API_URL:-http://perpus.localhost/api}
@@ -293,8 +293,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '1.0'
+          memory: 768M
     networks: [spenspra]
 
   redis:

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Modal from '@/components/Modal';
+import ConfirmModal from '@/components/ConfirmModal';
 import { courseApiAdapter } from '@/lib/features/courses/infrastructure/courseApiAdapter';
 import {
   getRawOrderedSubjects,
@@ -27,6 +28,7 @@ export default function SubjectsManagementPage() {
   const [successMsg, setSuccessMsg] = useState('');
   const [hasUnsavedOrder, setHasUnsavedOrder] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState(null); // { title, message, onConfirm, type }
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -178,18 +180,20 @@ export default function SubjectsManagementPage() {
   };
 
   const handleResetOrder = () => {
-    if (
-      !window.confirm(
-        'Kembalikan tata urutan mata pelajaran ke susunan resmi bawaan SMP Negeri 1 Prambon?'
-      )
-    ) {
-      return;
-    }
-    resetOrderedRaporSubjects();
-    loadCourses();
-    setHasUnsavedOrder(false);
-    setSuccessMsg('Urutan mata pelajaran telah direset ke format resmi awal.');
-    setTimeout(() => setSuccessMsg(''), 4500);
+    setConfirmConfig({
+      title: 'Reset Susunan Mata Pelajaran?',
+      message: 'Kembalikan tata urutan mata pelajaran ke susunan resmi bawaan SMP Negeri 1 Prambon?',
+      confirmText: 'Ya, Reset',
+      type: 'warning',
+      onConfirm: () => {
+        resetOrderedRaporSubjects();
+        loadCourses();
+        setHasUnsavedOrder(false);
+        setSuccessMsg('Urutan mata pelajaran telah direset ke format resmi awal.');
+        setTimeout(() => setSuccessMsg(''), 4500);
+        setConfirmConfig(null);
+      },
+    });
   };
 
   const openCreateModal = () => {
@@ -266,22 +270,28 @@ export default function SubjectsManagementPage() {
     }
   };
 
-  const handleDelete = async (course) => {
-    if (!window.confirm(`Hapus mata pelajaran "${course.name}" (${course.code}) dari e-Rapor?`)) {
-      return;
-    }
-
-    try {
-      if (course.id) {
-        await courseApiAdapter.delete(course.id);
-      }
-      setCourses((prev) => prev.filter((c) => c.code !== course.code));
-      setHasUnsavedOrder(true);
-      setSuccessMsg(`Mata pelajaran "${course.name}" berhasil dihapus.`);
-      setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (err) {
-      alert(`Gagal menghapus mata pelajaran: ${err.message}`);
-    }
+  const handleDelete = (course) => {
+    setConfirmConfig({
+      title: 'Hapus Mata Pelajaran?',
+      message: `Hapus mata pelajaran "${course.name}" (${course.code}) dari e-Rapor? Penugasan jadwal terkait mungkin akan terpengaruh.`,
+      confirmText: 'Ya, Hapus',
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          if (course.id) {
+            await courseApiAdapter.delete(course.id);
+          }
+          setCourses((prev) => prev.filter((c) => c.code !== course.code));
+          setHasUnsavedOrder(true);
+          setSuccessMsg(`Mata pelajaran "${course.name}" berhasil dihapus.`);
+          setTimeout(() => setSuccessMsg(''), 4000);
+        } catch (err) {
+          setError(`Gagal menghapus mata pelajaran: ${err.message}`);
+        } finally {
+          setConfirmConfig(null);
+        }
+      },
+    });
   };
 
   return (
@@ -754,6 +764,18 @@ export default function SubjectsManagementPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Modal Konfirmasi Kustom */}
+      <ConfirmModal
+        isOpen={Boolean(confirmConfig)}
+        title={confirmConfig?.title || 'Konfirmasi'}
+        message={confirmConfig?.message || ''}
+        confirmText={confirmConfig?.confirmText || 'Konfirmasi'}
+        cancelText="Batal"
+        type={confirmConfig?.type || 'danger'}
+        onConfirm={confirmConfig?.onConfirm || (() => {})}
+        onCancel={() => setConfirmConfig(null)}
+      />
     </div>
   );
 }

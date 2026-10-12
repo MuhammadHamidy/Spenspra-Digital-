@@ -6,6 +6,7 @@ import { attendanceApi } from '@/lib/attendanceApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 import { deadlineApiAdapter } from '@/lib/features/deadlines/infrastructure/deadlineApiAdapter';
 import Pagination from '@/components/Pagination';
+import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
 
 const DEFAULT_DESCRIPTIONS = {
   A: 'Sangat baik dalam memahami materi semester ini dan mampu menerapkannya secara mandiri.',
@@ -31,23 +32,11 @@ const INITIAL_PREDICATE_DESCRIPTIONS = {
 };
 
 export default function PenilaianUASPage() {
-  const [subjects, setSubjects] = useState([
-    { code: 'BIG', name: 'Bahasa Inggris' },
-    { code: 'MAT', name: 'Matematika' },
-    { code: 'PAI', name: 'Pendidikan Agama Islam dan Budi Pekerti' },
-    { code: 'PP', name: 'Pendidikan Pancasila' },
-    { code: 'BI', name: 'Bahasa Indonesia' },
-    { code: 'IPA', name: 'Ilmu Pengetahuan Alam' },
-    { code: 'IPS', name: 'Ilmu Pengetahuan Sosial' },
-    { code: 'PJOK', name: 'Pendidikan Jasmani, Olahraga, dan Kesehatan' },
-    { code: 'INF', name: 'Informatika' },
-    { code: 'SBP', name: 'Seni Budaya dan Prakarya' },
-    { code: 'BJ', name: 'Bahasa Jawa' },
-    { code: 'BTQ', name: 'Baca Tulis Al Qur’an' },
-  ]);
-  const [classes, setClasses] = useState(['7A']);
-  const [subject, setSubject] = useState('BIG');
-  const [className, setClassName] = useState('7A');
+  const [currentUser, setCurrentUser] = useState(null);
+  const [subjects, setSubjects] = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [subject, setSubject] = useState('');
+  const [className, setClassName] = useState('');
   const [rows, setRows] = useState([]);
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -57,19 +46,30 @@ export default function PenilaianUASPage() {
   const [predicateTemplates, setPredicateTemplates] = useState(INITIAL_PREDICATE_DESCRIPTIONS);
   const [uasDeadline, setUasDeadline] = useState(null);
 
+  // Filter Tahun Ajaran & Semester sinkron otomatis dengan Super Admin
+  const [academicYear, setAcademicYear] = useState(() => getSchoolAcademicPeriod().year);
+  const [semester, setSemester] = useState(() => getSchoolAcademicPeriod().semester);
+
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
   // Load master courses & classes from backend filtered by logged-in teacher
   useEffect(() => {
+    const period = getSchoolAcademicPeriod();
+    if (period?.year) setAcademicYear(period.year);
+    if (period?.semester) setSemester(period.semester);
+
     deadlineApiAdapter.getDeadlines().then((list) => {
       const dl = list.find((d) => d.type === 'UAS');
       if (dl) setUasDeadline(dl);
     }).catch(() => {});
+
     const fetchMasterData = async () => {
       try {
-        const currentUser = tokenStorage.getUser();
+        const user = tokenStorage.getUser();
+        setCurrentUser(user);
+
         const [clsRes, crsRes] = await Promise.all([
           attendanceApi.getClasses(),
           attendanceApi.getCourses(),
@@ -80,42 +80,45 @@ export default function PenilaianUASPage() {
           availableSubjects = crsRes.data.map((c) => ({ code: c.code, name: c.name }));
         }
 
-        if (clsRes.success && Array.isArray(clsRes.data) && clsRes.data.length > 0) {
+        const isTeacherRole = user && (user.role === 'GURU' || user.roleName === 'GURU');
+
+        if (clsRes.success && Array.isArray(clsRes.data)) {
           let teacherClasses = clsRes.data;
-          if (currentUser && (currentUser.role === 'GURU' || currentUser.roleName === 'GURU')) {
-            const myName = (currentUser.fullName || currentUser.full_name || '').toLowerCase();
+          if (isTeacherRole) {
+            const myName = (user.fullName || user.full_name || '').toLowerCase();
             const filtered = clsRes.data.filter((c) =>
-              c.dosen_id === currentUser.id ||
-              c.teacher_id === currentUser.id ||
+              c.dosen_id === user.id ||
+              c.teacher_id === user.id ||
               (myName && c.teacher_name && c.teacher_name.toLowerCase().includes(myName)) ||
-              (currentUser.nimNip && (c.dosen_id?.includes(currentUser.nimNip) || c.teacher_nip?.includes(currentUser.nimNip)))
+              (user.nimNip && (c.dosen_id?.includes(user.nimNip) || c.teacher_nip?.includes(user.nimNip)))
             );
-            if (filtered.length > 0) {
-              teacherClasses = filtered;
-            }
+            teacherClasses = filtered;
           }
 
-          const classNames = [...new Set(teacherClasses.map((c) => c.class_code || c.name || c.id))];
+          const classNames = [...new Set(teacherClasses.map((c) => c.class_code || c.name || c.id).filter(Boolean))];
+          setClasses(classNames);
           if (classNames.length > 0) {
-            setClasses(classNames);
-            if (!classNames.includes(className)) {
-              setClassName(classNames[0]);
-            }
+            setClassName((prev) => (classNames.includes(prev) ? prev : classNames[0]));
+          } else {
+            setClassName('');
           }
 
-          if (currentUser && (currentUser.role === 'GURU' || currentUser.roleName === 'GURU')) {
-            const teacherCourseCodes = [...new Set(teacherClasses.map((c) => c.course_code || c.course_id))];
+          if (isTeacherRole) {
+            const teacherCourseCodes = [...new Set(teacherClasses.map((c) => c.course_code || c.course_id).filter(Boolean))];
             const filteredSubjects = availableSubjects.filter((s) =>
               teacherCourseCodes.some((tc) => tc === s.code || tc === `crs-${s.code.toLowerCase()}`)
             );
+            setSubjects(filteredSubjects);
             if (filteredSubjects.length > 0) {
-              setSubjects(filteredSubjects);
-              setSubject(filteredSubjects[0].code);
-            } else if (availableSubjects.length > 0) {
-              setSubjects(availableSubjects);
+              setSubject((prev) => (filteredSubjects.some((s) => s.code === prev) ? prev : filteredSubjects[0].code));
+            } else {
+              setSubject('');
             }
-          } else if (availableSubjects.length > 0) {
+          } else {
             setSubjects(availableSubjects);
+            if (availableSubjects.length > 0) {
+              setSubject((prev) => (availableSubjects.some((s) => s.code === prev) ? prev : availableSubjects[0].code));
+            }
           }
         }
       } catch (err) {
@@ -134,11 +137,17 @@ export default function PenilaianUASPage() {
   const loadStudentsAndGrades = useCallback(async () => {
     setSaved(false);
     setSaveMessage('');
+    if (!className || !subject) {
+      setRows([]);
+      return;
+    }
     try {
       const res = await gradeApi.getGrades({
         className,
         subjectCode: subject,
         assessmentType: 'PAS',
+        academicYear,
+        semester,
       });
       if (res.success && Array.isArray(res.data) && res.data.length > 0) {
         setRows(
@@ -164,7 +173,7 @@ export default function PenilaianUASPage() {
       console.warn('Gagal memuat nilai UAS dari server:', err);
       setRows([]);
     }
-  }, [className, subject, formatDescription]);
+  }, [className, subject, academicYear, semester, formatDescription]);
 
   useEffect(() => {
     loadStudentsAndGrades();
@@ -362,11 +371,15 @@ export default function PenilaianUASPage() {
               onChange={(event) => setSubject(event.target.value)}
               className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-blue-600"
             >
-              {subjects.map((item) => (
-                <option key={item.code} value={item.code}>
-                  {item.code} — {item.name}
-                </option>
-              ))}
+              {subjects.length === 0 ? (
+                <option value="">— Belum Ada Mapel Diampu —</option>
+              ) : (
+                subjects.map((item) => (
+                  <option key={item.code} value={item.code}>
+                    {item.code} — {item.name}
+                  </option>
+                ))
+              )}
             </select>
           </label>
           <label className="text-xs font-semibold text-slate-700">
@@ -376,11 +389,15 @@ export default function PenilaianUASPage() {
               onChange={(event) => setClassName(event.target.value)}
               className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-blue-600"
             >
-              {classes.map((item) => (
-                <option key={item} value={item}>
-                  Kelas {item}
-                </option>
-              ))}
+              {classes.length === 0 ? (
+                <option value="">— Belum Ada Kelas —</option>
+              ) : (
+                classes.map((item) => (
+                  <option key={item} value={item}>
+                    Kelas {item}
+                  </option>
+                ))
+              )}
             </select>
           </label>
           <label className="text-xs font-semibold text-slate-700">
