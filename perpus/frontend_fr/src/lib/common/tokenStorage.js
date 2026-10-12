@@ -7,6 +7,26 @@ const LAST_ACTIVITY_KEY = 'spenspra_last_activity';
  * Menyimpan cookie sesi (Session Cookie tanpa atribut expires).
  * Cookie ini hanya hidup selama sesi browser berjalan.
  */
+function getParentDomain() {
+  if (typeof window === 'undefined' || !window.location.hostname) return '';
+  const hostname = window.location.hostname;
+  if (hostname.includes('localhost') || /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+    return '';
+  }
+  const hostParts = hostname.split('.');
+  if (hostParts.length >= 3) {
+    const secondLast = hostParts[hostParts.length - 2].toLowerCase();
+    const multiPartTlds = ['sch', 'co', 'ac', 'go', 'or', 'my', 'biz', 'web', 'mil', 'net', 'edu', 'gov', 'org', 'com'];
+    if (multiPartTlds.includes(secondLast)) {
+      return '.' + hostParts.slice(-3).join('.');
+    }
+  }
+  if (hostParts.length >= 2) {
+    return '.' + hostParts.slice(-2).join('.');
+  }
+  return '';
+}
+
 function setSessionCookie(name, value) {
   if (typeof window === 'undefined') return;
   const encoded = encodeURIComponent(value);
@@ -16,12 +36,9 @@ function setSessionCookie(name, value) {
   document.cookie = `${name}=${encoded}; path=/; domain=localhost; SameSite=Lax${secureFlag}`;
   document.cookie = `${name}=${encoded}; path=/; domain=.localhost; SameSite=Lax${secureFlag}`;
 
-  if (window.location.hostname && !window.location.hostname.includes('localhost')) {
-    const hostParts = window.location.hostname.split('.');
-    if (hostParts.length >= 2) {
-      const parentDomain = '.' + hostParts.slice(-2).join('.');
-      document.cookie = `${name}=${encoded}; path=/; domain=${parentDomain}; SameSite=Lax${secureFlag}`;
-    }
+  const parentDomain = getParentDomain();
+  if (parentDomain) {
+    document.cookie = `${name}=${encoded}; path=/; domain=${parentDomain}; SameSite=Lax${secureFlag}`;
   }
   document.cookie = `${name}=${encoded}; path=/; SameSite=Lax${secureFlag}`;
 }
@@ -37,9 +54,8 @@ function removeCookie(name) {
   if (window.location && window.location.hostname) {
     document.cookie = `${name}=; ${expired}; domain=${window.location.hostname}`;
     document.cookie = `${name}=; ${expired}; domain=.${window.location.hostname}`;
-    const hostParts = window.location.hostname.split('.');
-    if (hostParts.length >= 2) {
-      const parentDomain = '.' + hostParts.slice(-2).join('.');
+    const parentDomain = getParentDomain();
+    if (parentDomain) {
       document.cookie = `${name}=; ${expired}; domain=${parentDomain}`;
     }
   }
