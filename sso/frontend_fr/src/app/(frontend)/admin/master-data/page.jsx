@@ -2736,6 +2736,8 @@ const generateUsernameFromName = (name) => {
             </form>
           </div>
         </div>
+      )}
+
       {/* Dialog Konfirmasi Kustom */}
       <ConfirmModal
         isOpen={confirmDialog.isOpen}
