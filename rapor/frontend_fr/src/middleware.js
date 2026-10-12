@@ -10,7 +10,10 @@ export function middleware(request) {
   if (!token) {
     const ssoLoginUrl = process.env.NEXT_PUBLIC_SSO_LOGIN_URL || 'http://sso.localhost/login';
     const redirectUrl = new URL(ssoLoginUrl, request.url);
-    redirectUrl.searchParams.set('app', 'erapor');
+    // Gunakan redirect_uri agar SSO tahu ke mana harus kembali setelah login.
+    // Tidak menggunakan ?app= agar URL lebih bersih dan tidak mengekspos nama internal.
+    const raporUrl = process.env.NEXT_PUBLIC_RAPOR_URL || 'http://rapor.localhost';
+    redirectUrl.searchParams.set('redirect_uri', raporUrl);
     return NextResponse.redirect(redirectUrl);
   }
 

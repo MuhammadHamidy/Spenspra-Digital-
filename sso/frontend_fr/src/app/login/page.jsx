@@ -23,40 +23,19 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const result = await login(username, password);
+      await login(username, password);
 
-      // 1. Whitelist resmi aplikasi terdaftar di ekosistem Spenspra
-      const APP_TARGET_MAP = {
-        erapor: process.env.NEXT_PUBLIC_RAPOR_URL || 'http://rapor.localhost',
-        rapor: process.env.NEXT_PUBLIC_RAPOR_URL || 'http://rapor.localhost',
-        perpus: process.env.NEXT_PUBLIC_PERPUS_URL || 'http://perpus.localhost',
-        perpusdig: process.env.NEXT_PUBLIC_PERPUS_URL || 'http://perpus.localhost',
-        sso: process.env.NEXT_PUBLIC_SSO_URL || 'http://sso.localhost',
-      };
-
-      const appParam = searchParams.get('app')?.toLowerCase();
-      if (appParam && APP_TARGET_MAP[appParam]) {
-        const dest = APP_TARGET_MAP[appParam];
-        window.location.href = dest;
-        return;
-      }
-
-      // 2. Validasi ketat jika ada parameter redirect_uri
+      // Validasi ketat redirect_uri — hanya domain resmi ekosistem Spenspra yang diizinkan
       const targetUrl = searchParams.get('redirect_uri');
       if (targetUrl) {
         try {
           const parsed = new URL(targetUrl, window.location.origin);
-          const allowedHosts = [
-            'localhost',
-            'sso.localhost',
-            'rapor.localhost',
-            'perpus.localhost',
-            '127.0.0.1',
-          ];
-
           const isAllowedHost =
-            allowedHosts.includes(parsed.hostname) ||
+            parsed.hostname === 'localhost' ||
             parsed.hostname.endsWith('.localhost') ||
+            parsed.hostname === '127.0.0.1' ||
+            parsed.hostname === 'spenspra.com' ||
+            parsed.hostname.endsWith('.spenspra.com') ||
             parsed.hostname === 'spenspra.sch.id' ||
             parsed.hostname.endsWith('.spenspra.sch.id');
 

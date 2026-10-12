@@ -6,6 +6,7 @@ import { schoolPeopleApi } from '@/lib/features/schoolPeopleApi';
 import { classApiAdapter } from '@/lib/features/classes/infrastructure/classApiAdapter';
 import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApiAdapter';
 import Pagination from '@/components/Pagination';
+import { ToastContainer, useToast } from '@/components/Toast';
 
 function MasterDataContent() {
   const searchParams = useSearchParams();
@@ -30,7 +31,9 @@ function MasterDataContent() {
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState(null);
+  const { toasts, addToast, removeToast } = useToast();
+  // Alias agar tidak perlu ubah semua call setNotice secara manual
+  const setNotice = (msg, type = 'success') => { if (msg) addToast(msg, type); };
 
   // Search & Filter
   const [search, setSearch] = useState('');
@@ -312,7 +315,7 @@ function MasterDataContent() {
         updated.semester === 'GENAP' ? 'Genap' : 'Ganjil'
       }. Seluruh sistem e-Rapor dan modul sekolah telah disinkronkan.`
     );
-    setTimeout(() => setNotice(null), 5000);
+
   };
 
   const handleQuickActivatePeriod = (p) => {
@@ -344,7 +347,7 @@ function MasterDataContent() {
         p.semester === 'GENAP' ? 'Genap' : 'Ganjil'
       }.`
     );
-    setTimeout(() => setNotice(null), 5000);
+
   };
 
   // ────────────────────────────────────────────────────────
@@ -389,7 +392,7 @@ function MasterDataContent() {
 
       setIsClassModalOpen(false);
       setClassForm({ class_code: '', grade_level: '7', room: '' });
-      setTimeout(() => setNotice(null), 3500);
+
       loadAll();
     } catch (err) {
       setError(err.message || 'Gagal menyimpan rombel.');
@@ -405,7 +408,7 @@ function MasterDataContent() {
       }
       setClasses((prev) => prev.filter((c) => (c.id ? c.id !== cls.id : c.class_code !== cls.class_code)));
       setNotice(`Rombel ${cls.class_code} berhasil dihapus.`);
-      setTimeout(() => setNotice(null), 3000);
+
     } catch (err) {
       setError(err.message || 'Gagal menghapus rombel.');
     }
@@ -494,7 +497,7 @@ function MasterDataContent() {
       setNotice(`Kata sandi akun ${passwordModal.fullName} (${passwordModal.username}) berhasil diperbarui.`);
       setIsPasswordModalOpen(false);
       setPasswordModal(null);
-      setTimeout(() => setNotice(null), 4000);
+
     } catch (err) {
       setError(err.message || 'Gagal memperbarui kata sandi akun.');
     }
@@ -644,7 +647,7 @@ const generateUsernameFromName = (name) => {
       }
 
       setIsPersonModalOpen(false);
-      setTimeout(() => setNotice(null), 4000);
+
       loadAll();
     } catch (err) {
       setError(err.message || 'Gagal menyimpan data pengguna.');
@@ -697,7 +700,7 @@ const generateUsernameFromName = (name) => {
       setSelectedStudentIds((prev) => prev.filter((item) => item !== id));
 
       setNotice(`Seluruh data & akses ${name} berhasil dihapus dari sistem.`);
-      setTimeout(() => setNotice(null), 3500);
+
       loadAll();
     } catch (err) {
       setError(err.message || 'Gagal menghapus data.');
@@ -794,7 +797,7 @@ const generateUsernameFromName = (name) => {
 
       setSelectedStaffIds([]);
       setNotice(`Berhasil menghapus ${count} data guru & staf dari sistem.`);
-      setTimeout(() => setNotice(null), 4000);
+
       await loadAll();
     } catch (err) {
       setError(err.message || 'Gagal menghapus data guru terpilih.');
@@ -862,7 +865,7 @@ const generateUsernameFromName = (name) => {
 
       setSelectedStaffIds([]);
       setNotice(`Seluruh data ${count} Guru & Tenaga Kependidikan berhasil dihapus.`);
-      setTimeout(() => setNotice(null), 4000);
+
       await loadAll();
     } catch (err) {
       setError(err.message || 'Gagal menghapus seluruh data guru.');
@@ -939,7 +942,7 @@ const generateUsernameFromName = (name) => {
 
       setSelectedStudentIds([]);
       setNotice(`Berhasil menghapus ${count} data siswa dari sistem.`);
-      setTimeout(() => setNotice(null), 4000);
+
       await loadAll();
     } catch (err) {
       setError(err.message || 'Gagal menghapus beberapa data siswa terpilih.');
@@ -994,7 +997,7 @@ const generateUsernameFromName = (name) => {
 
       setSelectedStudentIds([]);
       setNotice(`Seluruh data ${count} Siswa berhasil dihapus.`);
-      setTimeout(() => setNotice(null), 4000);
+
       await loadAll();
     } catch (err) {
       setError(err.message || 'Gagal menghapus seluruh data siswa.');
@@ -1040,7 +1043,7 @@ const generateUsernameFromName = (name) => {
         password: credentialModal.defaultPassword,
       });
       setNotice(`Kredensial berhasil dikirimkan ke email ${credentialModal.email}.`);
-      setTimeout(() => setNotice(null), 3500);
+
       setCredentialModal(null);
     } catch (err) {
       alert(`Pengiriman via SMTP: ${err.message}\n\nAnda dapat menggunakan tombol alternatif di bawah: "Buka Email Client" atau "Kirim WhatsApp".`);
@@ -1090,19 +1093,15 @@ const generateUsernameFromName = (name) => {
         </div>
       </div>
 
-      {notice && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 flex items-center gap-2 animate-in fade-in">
-          <span>✓</span>
-          <span>{notice}</span>
-        </div>
-      )}
-
       {error && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800 flex items-center gap-2">
           <span>⚠️</span>
           <span>{error}</span>
         </div>
       )}
+
+      {/* Floating Toast Notifications */}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       {/* Indikator Modul Sub-Menu Aktif (Navigasi via Sidebar) */}
       <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
@@ -2130,7 +2129,7 @@ const generateUsernameFromName = (name) => {
                     const text = `Akun SSO SMPN 1 Prambon:\nNama: ${credentialModal.fullName}\nUsername: ${credentialModal.username}\nPassword: ${credentialModal.defaultPassword}\nPortal: http://sso.localhost/login`;
                     navigator.clipboard.writeText(text);
                     setNotice('Kredensial berhasil disalin ke clipboard!');
-                    setTimeout(() => setNotice(null), 3000);
+
                   }}
                   className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-left hover:bg-slate-100 transition cursor-pointer"
                 >
@@ -2352,7 +2351,7 @@ const generateUsernameFromName = (name) => {
                       const msg = `*AKUN SSO SMPN 1 PRAMBON*\n\nNama: ${detailStaffModal.full_name}\nUsername: ${user}\nPassword: ${pass}\n\nLogin ke: http://sso.localhost`;
                       navigator.clipboard.writeText(msg);
                       setNotice('Format kredensial akun berhasil disalin ke clipboard.');
-                      setTimeout(() => setNotice(null), 3000);
+
                     }}
                     className="inline-flex items-center gap-1 text-[11px] font-bold text-[#4B3B78] hover:text-[#30264F] cursor-pointer"
                   >
@@ -2374,7 +2373,7 @@ const generateUsernameFromName = (name) => {
                         onClick={() => {
                           navigator.clipboard.writeText(getStaffUsername(detailStaffModal));
                           setNotice('Username disalin.');
-                          setTimeout(() => setNotice(null), 2000);
+
                         }}
                         className="text-slate-400 hover:text-[#4B3B78] text-xs p-1 cursor-pointer"
                         title="Salin Username"
@@ -2405,7 +2404,7 @@ const generateUsernameFromName = (name) => {
                           onClick={() => {
                             navigator.clipboard.writeText(getStaffPassword(detailStaffModal));
                             setNotice('Kata sandi disalin.');
-                            setTimeout(() => setNotice(null), 2000);
+
                           }}
                           className="text-slate-400 hover:text-[#4B3B78] text-xs p-1 cursor-pointer"
                           title="Salin Kata Sandi"
@@ -2454,7 +2453,7 @@ const generateUsernameFromName = (name) => {
                     onClick={() => {
                       navigator.clipboard.writeText(detailStaffModal.barcode_token || '');
                       setNotice('Barcode token disalin.');
-                      setTimeout(() => setNotice(null), 2000);
+
                     }}
                     className="text-[11px] text-[#4F8FBB] hover:underline font-semibold cursor-pointer"
                   >
@@ -2555,7 +2554,7 @@ const generateUsernameFromName = (name) => {
                       onClick={() => {
                         navigator.clipboard.writeText(passwordModal.username);
                         setNotice('Username disalin ke clipboard.');
-                        setTimeout(() => setNotice(null), 2500);
+
                       }}
                       className="text-slate-400 hover:text-blue-600 cursor-pointer"
                       title="Salin Username"

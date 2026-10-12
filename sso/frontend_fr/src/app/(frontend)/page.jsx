@@ -89,16 +89,16 @@ export default function MainPage() {
         const g9 = studentList.filter((s) => s.class_name?.startsWith('9') || s.class_name?.startsWith('IX')).length;
 
         setStats({
-          teachers: teacherList.length || 1,
-          students: studentList.length || 317,
-          tendik: tendikList.length || 1,
-          classes: cList.length || 10,
-          barcodes: pList.length || 318,
-          grade7: g7 || 108,
-          grade8: g8 || 105,
-          grade9: g9 || 104,
-          totalAccounts: aList.length || pList.length,
-          teachersWithAccount: teacherList.length || 1,
+          teachers: teacherList.length,
+          students: studentList.length,
+          tendik: tendikList.length,
+          classes: cList.length,
+          barcodes: pList.length,
+          grade7: g7,
+          grade8: g8,
+          grade9: g9,
+          totalAccounts: aList.length,
+          teachersWithAccount: teacherList.length,
         });
       })
       .catch((err) => console.warn('Gagal memuat statistik SSO:', err))
