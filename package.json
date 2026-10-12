@@ -1,0 +1,37 @@
+{
+  "name": "spenspra-digital-monorepo",
+  "version": "3.1.0",
+  "description": "Ekosistem Aplikasi Sekolah Terpadu SMPN 1 Prambon (SSO, e-Rapor, e-Perpus)",
+  "private": true,
+  "workspaces": [
+    "sso/frontend_fr",
+    "rapor/frontend_fr",
+    "perpus/frontend_fr"
+  ],
+  "scripts": {
+    "sync:assets": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-shared-assets.ps1",
+    "sync:assets:sh": "bash scripts/sync-shared-assets.sh",
+    "docker:up": "docker compose --env-file .env.docker up -d",
+    "docker:down": "docker compose --env-file .env.docker down",
+    "docker:logs": "docker compose --env-file .env.docker logs -f",
+    "docker:status": "docker compose --env-file .env.docker ps",
+    "build:sso": "docker compose --env-file .env.docker build sso-frontend",
+    "build:rapor": "docker compose --env-file .env.docker build rapor-frontend",
+    "build:perpus": "docker compose --env-file .env.docker build perpus-frontend",
+    "build:api": "docker compose --env-file .env.docker build sso-api rapor-api perpus-api",
+    "deploy:sso": "docker compose --env-file .env.docker up -d --no-deps sso-frontend",
+    "deploy:rapor": "docker compose --env-file .env.docker up -d --no-deps rapor-frontend",
+    "deploy:perpus": "docker compose --env-file .env.docker up -d --no-deps perpus-frontend"
+  },
+  "keywords": [
+    "spenspra",
+    "sso",
+    "rapor",
+    "perpus",
+    "monorepo",
+    "nextjs",
+    "golang"
+  ],
+  "author": "SMPN 1 Prambon",
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,352 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: spenspra-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change-me}
+      POSTGRES_DB: ${SSO_DB_NAME:-presdig_sso}
+      POSTGRES_MULTIPLE_DATABASES: "${SSO_DB_NAME:-presdig_sso},${RAPOR_DB_NAME:-presdig_rapor},${PERPUS_DB_NAME:-perpusdig}"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init-multiple-databases.sh:/docker-entrypoint-initdb.d/init-multiple-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-user} -d ${SSO_DB_NAME:-presdig_sso}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          memory: 128M
+    networks: [spenspra]
+
+  sso-migrate:
+    image: migrate/migrate
+    container_name: spenspra-sso-migrate
+    volumes:
+      - ./sso/backend_fr/sso/migrations:/migrations:ro
+    command: ["-path=/migrations", "-database", "postgres://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${SSO_DB_NAME:-presdig_sso}?sslmode=disable", "up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [spenspra]
+
+  sso-seeder:
+    image: postgres:15-alpine
+    container_name: spenspra-sso-seeder
+    volumes:
+      - ./sso/backend_fr/sso/seeders:/seeders:ro
+    command: ["sh", "-c", "for f in /seeders/*.sql; do psql -h postgres -U \"$${POSTGRES_USER:-user}\" -d \"$${POSTGRES_DB:-presdig_sso}\" -f \"$$f\"; done"]
+    environment:
+      POSTGRES_USER: ${DB_USER:-user}
+      POSTGRES_DB: ${SSO_DB_NAME:-presdig_sso}
+      PGPASSWORD: ${DB_PASSWORD:-change-me}
+    depends_on:
+      sso-migrate:
+        condition: service_completed_successfully
+    networks: [spenspra]
+
+  sso-api:
+    build:
+      context: ./sso/backend_fr
+      dockerfile: sso/Dockerfile
+    container_name: spenspra-sso-api
+    environment:
+      APP_NAME: sso
+      APP_ENV: production
+      APP_PORT: 8080
+      APP_POSTGRES_URL: postgres://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${SSO_DB_NAME:-presdig_sso}?sslmode=disable
+      APP_REDIS_ADDRESS: redis:6379
+      APP_REDIS_PASSWORD: ""
+      APP_REDIS_DB: 0
+      APP_LOG_LEVEL: info
+      APP_LOG_FORMAT: json
+      APP_SERVICE_NAME: sso
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-hamidym83@gmail.com}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-izjvgzwqcjzreszu}
+      SMTP_FROM: ${SMTP_FROM:-hamidym83@gmail.com}
+      SMTP_SENDER_NAME: ${SMTP_SENDER_NAME:-SMPN 1 Prambon - Presensi Digital}
+      APP_PORTAL_URL: ${APP_PORTAL_URL:-http://sso.localhost/login}
+    volumes:
+      # Hanya SSO yang memegang kunci privat untuk menandatangani token.
+      - ./shared/keys/jwt_private.pem:/keys/jwt_private.pem:ro
+    depends_on:
+      sso-seeder:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+    networks: [spenspra]
+
+  sso-frontend:
+    build:
+      context: ./sso/frontend_fr
+      dockerfile: Dockerfile
+      target: final
+      args:
+        NEXT_PUBLIC_API_URL: ${SSO_PUBLIC_API_URL:-http://sso.localhost/api}
+        NEXT_PUBLIC_RAPOR_API_URL: ${RAPOR_PUBLIC_API_URL:-http://rapor.localhost/api}
+        NEXT_PUBLIC_PERPUS_API_URL: ${PERPUS_PUBLIC_API_URL:-http://perpus.localhost/api}
+    container_name: spenspra-sso-frontend
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=384"
+      HOSTNAME: "0.0.0.0"
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: ${SSO_PUBLIC_API_URL:-http://sso.localhost/api}
+      NEXT_PUBLIC_RAPOR_API_URL: ${RAPOR_PUBLIC_API_URL:-http://rapor.localhost/api}
+      NEXT_PUBLIC_PERPUS_API_URL: ${PERPUS_PUBLIC_API_URL:-http://perpus.localhost/api}
+      DATABASE_URL: postgresql://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${SSO_DB_NAME:-presdig_sso}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-spenspra-default-jwt-secret-key-2026-minimum-32-chars}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_USERNAME: ${SMTP_USERNAME:-hamidym83@gmail.com}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-izjvgzwqcjzreszu}
+      SMTP_FROM: ${SMTP_FROM:-hamidym83@gmail.com}
+      APP_PORTAL_URL: ${APP_PORTAL_URL:-http://sso.localhost/login}
+    command: ["node", "server.js"]
+    depends_on: [sso-api]
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    networks: [spenspra]
+
+  rapor-migrate:
+    image: migrate/migrate
+    container_name: spenspra-rapor-migrate
+    volumes:
+      - ./rapor/backend_fr/rapor/migrations:/migrations:ro
+    command: ["-path=/migrations", "-database", "postgres://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${RAPOR_DB_NAME:-presdig_rapor}?sslmode=disable", "up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [spenspra]
+
+  rapor-seeder:
+    image: postgres:15-alpine
+    container_name: spenspra-rapor-seeder
+    volumes:
+      - ./rapor/backend_fr/rapor/seeders:/seeders:ro
+    environment:
+      POSTGRES_USER: ${DB_USER:-user}
+      POSTGRES_DB: ${RAPOR_DB_NAME:-presdig_rapor}
+      PGPASSWORD: ${DB_PASSWORD:-change-me}
+    command: ["sh", "-c", "for f in /seeders/*.sql; do psql -h postgres -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -f \"$$f\"; done"]
+    depends_on:
+      rapor-migrate:
+        condition: service_completed_successfully
+    networks: [spenspra]
+
+  rapor-api:
+    build:
+      context: ./rapor/backend_fr
+      dockerfile: rapor/Dockerfile
+    container_name: spenspra-rapor-api
+    environment:
+      APP_NAME: rapor
+      APP_ENV: production
+      APP_PORT: 8080
+      APP_POSTGRES_URL: postgres://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${RAPOR_DB_NAME:-presdig_rapor}?sslmode=disable
+      APP_REDIS_ADDRESS: redis:6379
+      APP_REDIS_PASSWORD: ""
+      APP_REDIS_DB: 1
+      APP_LOG_LEVEL: info
+      APP_LOG_FORMAT: json
+      APP_SERVICE_NAME: rapor
+      SSO_API_URL: http://sso-api:8080
+      JWT_PUBLIC_KEY_PATH: /keys/jwt_public.pem
+    volumes:
+      # Hanya kunci publik. Kunci privat TIDAK boleh ada di container satelit.
+      - ./shared/keys/jwt_public.pem:/keys/jwt_public.pem:ro
+    depends_on:
+      rapor-seeder:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      sso-api:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+    networks: [spenspra]
+
+  rapor-frontend:
+    build:
+      context: ./rapor/frontend_fr
+      dockerfile: Dockerfile
+      target: final
+      args:
+        NEXT_PUBLIC_API_URL: ${RAPOR_PUBLIC_API_URL:-http://rapor.localhost/api}
+    container_name: spenspra-rapor-frontend
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=384"
+      HOSTNAME: "0.0.0.0"
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: ${RAPOR_PUBLIC_API_URL:-http://rapor.localhost/api}
+      NEXT_PUBLIC_SSO_LOGIN_URL: ${SSO_LOGIN_URL:-http://sso.localhost/login}
+      DATABASE_URL: postgresql://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${RAPOR_DB_NAME:-presdig_rapor}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-spenspra-default-jwt-secret-key-2026-minimum-32-chars}
+    command: ["node", "server.js"]
+    depends_on: [rapor-api]
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    networks: [spenspra]
+
+  perpus-migrate:
+    image: migrate/migrate
+    container_name: spenspra-perpus-migrate
+    volumes:
+      - ./perpus/backend_fr/facerec/migrations:/migrations:ro
+    command: ["-path=/migrations", "-database", "postgres://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${PERPUS_DB_NAME:-perpusdig}?sslmode=disable", "up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [spenspra]
+
+  perpus-seeder:
+    image: postgres:15-alpine
+    container_name: spenspra-perpus-seeder
+    volumes:
+      - ./perpus/backend_fr/facerec/seeders:/seeders:ro
+    environment:
+      POSTGRES_USER: ${DB_USER:-user}
+      POSTGRES_DB: ${PERPUS_DB_NAME:-perpusdig}
+      PGPASSWORD: ${DB_PASSWORD:-change-me}
+    command: ["sh", "-c", "for f in /seeders/*.sql; do psql -h postgres -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -f \"$$f\"; done"]
+    depends_on:
+      perpus-migrate:
+        condition: service_completed_successfully
+    networks: [spenspra]
+
+  perpus-api:
+    build:
+      context: ./perpus/backend_fr
+      dockerfile: facerec/Dockerfile
+    container_name: spenspra-perpus-api
+    environment:
+      APP_NAME: perpus
+      APP_ENV: production
+      APP_PORT: 8080
+      APP_POSTGRES_URL: postgres://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${PERPUS_DB_NAME:-perpusdig}?sslmode=disable
+      APP_REDIS_ADDRESS: redis:6379
+      APP_REDIS_PASSWORD: ""
+      APP_REDIS_DB: 2
+      APP_LOG_LEVEL: info
+      APP_LOG_FORMAT: json
+      APP_SERVICE_NAME: perpus
+      SSO_API_URL: http://sso-api:8080
+      JWT_PUBLIC_KEY_PATH: /keys/jwt_public.pem
+    volumes:
+      # Hanya kunci publik. Kunci privat TIDAK boleh ada di container satelit.
+      - ./shared/keys/jwt_public.pem:/keys/jwt_public.pem:ro
+    depends_on:
+      perpus-seeder:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      sso-api:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+    networks: [spenspra]
+
+  perpus-frontend:
+    build:
+      context: ./perpus/frontend_fr
+      dockerfile: Dockerfile
+      target: final
+      args:
+        NEXT_PUBLIC_API_URL: ${PERPUS_PUBLIC_API_URL:-http://perpus.localhost/api}
+    container_name: spenspra-perpus-frontend
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=256"
+      HOSTNAME: "0.0.0.0"
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: ${PERPUS_PUBLIC_API_URL:-http://perpus.localhost/api}
+      DATABASE_URL: postgresql://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${PERPUS_DB_NAME:-perpusdig}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-spenspra-default-jwt-secret-key-2026-minimum-32-chars}
+    command: ["node", "server.js"]
+    depends_on:
+      perpus-api:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    networks: [spenspra]
+
+  redis:
+    image: redis:7-alpine
+    container_name: spenspra-redis
+    command: redis-server --appendonly yes --maxmemory 96mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+    networks: [spenspra]
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: spenspra-nginx
+    ports:
+      - "127.0.0.1:80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./shared/assets:/var/www/shared/assets:ro
+    depends_on:
+      sso-frontend:
+        condition: service_started
+      rapor-frontend:
+        condition: service_started
+      perpus-frontend:
+        condition: service_started
+      sso-api:
+        condition: service_started
+      rapor-api:
+        condition: service_started
+      perpus-api:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 64M
+    networks: [spenspra]
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  spenspra:
+    name: spenspra

@@ -1,0 +1,54 @@
+=== RUN   TestRoleHandler_GetRoles
+=== RUN   TestRoleHandler_GetRoles/Success
+=== RUN   TestRoleHandler_GetRoles/Error
+--- PASS: TestRoleHandler_GetRoles (0.00s)
+    --- PASS: TestRoleHandler_GetRoles/Success (0.00s)
+    --- PASS: TestRoleHandler_GetRoles/Error (0.00s)
+=== RUN   TestRoleHandler_GetPermissions
+=== RUN   TestRoleHandler_GetPermissions/Success
+--- PASS: TestRoleHandler_GetPermissions (0.00s)
+    --- PASS: TestRoleHandler_GetPermissions/Success (0.00s)
+=== RUN   TestRoleHandler_CreateRole
+=== RUN   TestRoleHandler_CreateRole/Success
+=== RUN   TestRoleHandler_CreateRole/BadRequest
+--- PASS: TestRoleHandler_CreateRole (0.00s)
+    --- PASS: TestRoleHandler_CreateRole/Success (0.00s)
+    --- PASS: TestRoleHandler_CreateRole/BadRequest (0.00s)
+=== RUN   TestRoleHandler_UpdateRole
+=== RUN   TestRoleHandler_UpdateRole/Success
+=== RUN   TestRoleHandler_UpdateRole/EmptyName
+--- PASS: TestRoleHandler_UpdateRole (0.00s)
+    --- PASS: TestRoleHandler_UpdateRole/Success (0.00s)
+    --- PASS: TestRoleHandler_UpdateRole/EmptyName (0.00s)
+=== RUN   TestRoleHandler_DeleteRole
+=== RUN   TestRoleHandler_DeleteRole/Success
+=== RUN   TestRoleHandler_DeleteRole/UseCaseError
+=== RUN   TestRoleHandler_DeleteRole/MissingContext
+--- PASS: TestRoleHandler_DeleteRole (0.00s)
+    --- PASS: TestRoleHandler_DeleteRole/Success (0.00s)
+    --- PASS: TestRoleHandler_DeleteRole/UseCaseError (0.00s)
+    --- PASS: TestRoleHandler_DeleteRole/MissingContext (0.00s)
+=== RUN   TestRoleHandler_GetRoleByID
+=== RUN   TestRoleHandler_GetRoleByID/Success
+--- PASS: TestRoleHandler_GetRoleByID (0.00s)
+    --- PASS: TestRoleHandler_GetRoleByID/Success (0.00s)
+=== RUN   TestRoleHandler_CreateRole_Edges
+=== RUN   TestRoleHandler_CreateRole_Edges/MissingContext
+=== RUN   TestRoleHandler_CreateRole_Edges/UseCaseError
+--- PASS: TestRoleHandler_CreateRole_Edges (0.00s)
+    --- PASS: TestRoleHandler_CreateRole_Edges/MissingContext (0.00s)
+    --- PASS: TestRoleHandler_CreateRole_Edges/UseCaseError (0.00s)
+=== RUN   TestRoleHandler_GetPermissions_Error
+=== RUN   TestRoleHandler_GetPermissions_Error/UseCaseError
+--- PASS: TestRoleHandler_GetPermissions_Error (0.00s)
+    --- PASS: TestRoleHandler_GetPermissions_Error/UseCaseError (0.00s)
+=== RUN   TestRoleHandler_GetRoleByID_Error
+=== RUN   TestRoleHandler_GetRoleByID_Error/UseCaseError
+=== RUN   TestRoleHandler_GetRoleByID_Error/EmptyName
+--- PASS: TestRoleHandler_GetRoleByID_Error (0.00s)
+    --- PASS: TestRoleHandler_GetRoleByID_Error/UseCaseError (0.00s)
+    --- PASS: TestRoleHandler_GetRoleByID_Error/EmptyName (0.00s)
+=== RUN   TestRoleHandler_RegisterRoutes
+--- PASS: TestRoleHandler_RegisterRoutes (0.00s)
+PASS
+ok  	github.com/rapor/rapor-be/rapor/module/roles/delivery/http	10.196s

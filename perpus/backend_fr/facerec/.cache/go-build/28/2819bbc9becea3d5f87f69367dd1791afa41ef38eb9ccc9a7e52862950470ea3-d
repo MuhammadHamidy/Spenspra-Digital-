@@ -1,0 +1,4 @@
+./attendance_usecase.go
+./get_attendances.go
+./manual_visit.go
+./recognize_visit.go

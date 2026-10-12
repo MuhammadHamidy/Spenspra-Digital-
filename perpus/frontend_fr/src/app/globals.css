@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: #F6FAFD;
+    --foreground: #0A1931;
+    --card: #FFFFFF;
+    --card-foreground: #0A1931;
+    --border: #B3CFE5;
+
+    --prambon-dark: #0A1931;
+    --prambon-ocean: #1A3D63;
+    --prambon-slate: #4A7FA7;
+    --prambon-powder: #B3CFE5;
+    --prambon-bg: #F6FAFD;
+  }
+}
+
+html {
+  color-scheme: light;
+  background-color: #F6FAFD;
+}
+
+body {
+  background-color: #F6FAFD;
+  color: #0A1931;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  min-height: 100vh;
+  margin: 0;
+}
+
+/* Glassmorphism Card with Light Theme Elevation */
+.glass-card {
+  background-color: #FFFFFF;
+  border: 1px solid #B3CFE5;
+  box-shadow: 0 4px 20px -2px rgba(26, 61, 99, 0.08);
+}
+
+/* High Contrast Banner Cards (Gradient using palette) */
+.glass-banner-indigo {
+  background: linear-gradient(135deg, #1A3D63 0%, #0A1931 100%);
+  border: 1px solid #4A7FA7;
+  box-shadow: 0 10px 25px -5px rgba(26, 61, 99, 0.25);
+}
+
+/* Typography contrast helper classes */
+.text-heading {
+  color: #0A1931 !important;
+}
+
+.text-body {
+  color: #1A3D63 !important;
+}
+
+.text-muted {
+  color: #4A7FA7 !important;
+}
+
+/* Accent Buttons & Badges */
+.btn-primary {
+  background-color: #1A3D63;
+  color: #ffffff;
+  font-weight: 700;
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-primary:hover {
+  background-color: #0A1931;
+  box-shadow: 0 4px 12px rgba(10, 25, 49, 0.25);
+}
+
+/* ==========================================================================
+   Global Modern Select Dropdown Styling (Menghilangkan Icon Bawaan Browser)
+   ========================================================================== */
+select {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3e%3c/svg%3e") !important;
+  background-position: right 0.75rem center !important;
+  background-repeat: no-repeat !important;
+  background-size: 1rem 1rem !important;
+  padding-right: 2.25rem !important;
+  cursor: pointer;
+}
+
+select:focus {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%231A3D63' stroke-width='2'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3e%3c/svg%3e") !important;
+}
+
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+

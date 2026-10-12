@@ -1,0 +1,10 @@
+=== RUN   TestScanQRCode_HadirOnTime
+--- PASS: TestScanQRCode_HadirOnTime (0.04s)
+=== RUN   TestScanQRCode_TerlambatAfterCutoff
+--- PASS: TestScanQRCode_TerlambatAfterCutoff (0.00s)
+=== RUN   TestScanQRCode_AntiDoubleScan
+--- PASS: TestScanQRCode_AntiDoubleScan (0.00s)
+=== RUN   TestGenerateQRCodePNG
+--- PASS: TestGenerateQRCodePNG (0.00s)
+PASS
+ok  	github.com/rapor/rapor-be/rapor/module/school_attendances/usecase	2.534s

@@ -1,0 +1,4 @@
+=== RUN   TestGetSummary
+--- PASS: TestGetSummary (0.00s)
+PASS
+ok  	github.com/facerec/facerec-be/facerec/module/monitoring/usecase	3.025s

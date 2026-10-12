@@ -1,0 +1,28 @@
+=== RUN   TestUseCase_Roles
+=== RUN   TestUseCase_Roles/FindAll
+=== RUN   TestUseCase_Roles/Get
+=== RUN   TestUseCase_Roles/Create
+=== RUN   TestUseCase_Roles/Update
+=== RUN   TestUseCase_Roles/Delete
+=== RUN   TestUseCase_Roles/ListPermissions
+=== RUN   TestUseCase_Roles/Create_Duplicate
+=== RUN   TestUseCase_Roles/Update_ValidationFail
+=== RUN   TestUseCase_Roles/Delete_Error
+=== RUN   TestUseCase_Roles/FindAll_Error
+=== RUN   TestUseCase_Roles/Update_NotFound
+=== RUN   TestUseCase_Roles/Create_StoreFail
+--- PASS: TestUseCase_Roles (0.00s)
+    --- PASS: TestUseCase_Roles/FindAll (0.00s)
+    --- PASS: TestUseCase_Roles/Get (0.00s)
+    --- PASS: TestUseCase_Roles/Create (0.00s)
+    --- PASS: TestUseCase_Roles/Update (0.00s)
+    --- PASS: TestUseCase_Roles/Delete (0.00s)
+    --- PASS: TestUseCase_Roles/ListPermissions (0.00s)
+    --- PASS: TestUseCase_Roles/Create_Duplicate (0.00s)
+    --- PASS: TestUseCase_Roles/Update_ValidationFail (0.00s)
+    --- PASS: TestUseCase_Roles/Delete_Error (0.00s)
+    --- PASS: TestUseCase_Roles/FindAll_Error (0.00s)
+    --- PASS: TestUseCase_Roles/Update_NotFound (0.00s)
+    --- PASS: TestUseCase_Roles/Create_StoreFail (0.00s)
+PASS
+ok  	github.com/rapor/rapor-be/rapor/module/roles/usecase	8.577s

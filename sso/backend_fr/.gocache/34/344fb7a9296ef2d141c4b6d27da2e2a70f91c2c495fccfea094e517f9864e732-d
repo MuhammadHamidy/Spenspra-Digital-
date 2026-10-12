@@ -1,0 +1,10 @@
+=== RUN   TestResolveBarcode_Active
+--- PASS: TestResolveBarcode_Active (0.00s)
+=== RUN   TestResolveBarcode_Revoked
+--- PASS: TestResolveBarcode_Revoked (0.00s)
+=== RUN   TestCreatePerson_GeneratesBarcodeWithPrambonPrefix
+--- PASS: TestCreatePerson_GeneratesBarcodeWithPrambonPrefix (0.00s)
+=== RUN   TestRevokeBarcode_InvalidatesToken
+--- PASS: TestRevokeBarcode_InvalidatesToken (0.00s)
+PASS
+ok  	github.com/sso/sso-be/sso/module/school_people/usecase	1.129s
