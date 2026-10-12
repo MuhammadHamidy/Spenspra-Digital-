@@ -92,17 +92,7 @@ function LoginForm() {
         return;
       }
 
-      if (
-        roleName === 'ADMIN' ||
-        roleName === 'SUPERADMIN' ||
-        roleName === 'SUPER_ADMIN' ||
-        roleName === 'KEPALA_SEKOLAH' ||
-        roleName === 'OPERATOR'
-      ) {
-        window.location.href = '/admin';
-      } else {
-        window.location.href = '/';
-      }
+      window.location.href = '/';
     } catch (err) {
       setError(err.message || 'Login gagal. Periksa kembali username/NIP dan kata sandi Anda.');
     } finally {
