@@ -3,7 +3,14 @@
 import React from 'react';
 import Link from 'next/link';
 
-export default function WaliKelasToolbar({ onOpenAttendance, onPrint, onExportExcel, onBulkPrint }) {
+export default function WaliKelasToolbar({
+  onOpenAttendance,
+  onPrint,
+  onExportExcel,
+  onBulkPrint,
+  isAdminOrKepalaSekolah = false,
+  onOpenSignature = null,
+}) {
   return (
     <section className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-xs print:hidden">
       <div className="flex flex-wrap items-center gap-2.5">
@@ -18,6 +25,18 @@ export default function WaliKelasToolbar({ onOpenAttendance, onPrint, onExportEx
           </svg>
           <span>Cetak Massal Rapor (1 Rombel)</span>
         </button>
+
+        {isAdminOrKepalaSekolah && onOpenSignature && (
+          <button
+            type="button"
+            onClick={onOpenSignature}
+            className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shadow-xs flex items-center gap-2 cursor-pointer"
+            title="Pengesahan tanda tangan & stempel resmi Kepala Sekolah"
+          >
+            <span>✍️</span>
+            <span>Pengesahan TTD & Stempel</span>
+          </button>
+        )}
         <button
           type="button"
           onClick={onExportExcel}

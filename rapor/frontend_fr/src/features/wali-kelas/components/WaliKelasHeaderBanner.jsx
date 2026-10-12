@@ -11,6 +11,8 @@ export default function WaliKelasHeaderBanner({
   setAcademicYear,
   setSemester,
   endorsement = null,
+  isAdminOrKepalaSekolah = false,
+  onOpenSignature = null,
 }) {
   const isEndorsed = Boolean(endorsement && (endorsement.status === 'APPROVED' || endorsement.signature_data));
 
@@ -35,6 +37,18 @@ export default function WaliKelasHeaderBanner({
                 <span className="w-2 h-2 rounded-full bg-amber-500"></span>
                 <span>Menunggu Pengesahan</span>
               </span>
+            )}
+
+            {isAdminOrKepalaSekolah && onOpenSignature && (
+              <button
+                type="button"
+                onClick={onOpenSignature}
+                className="px-2.5 py-1 rounded-md text-xs font-bold bg-[#193D9B] hover:bg-[#1E4DBD] text-white flex items-center gap-1.5 shadow-2xs transition cursor-pointer"
+                title="Buka form pembubuhan tanda tangan & stempel resmi Kepala Sekolah"
+              >
+                <span>✍️</span>
+                <span>{isEndorsed ? 'Ubah TTD & Stempel' : 'Sahkan Rapor Rombel Ini'}</span>
+              </button>
             )}
           </div>
 

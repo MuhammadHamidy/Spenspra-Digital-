@@ -29,10 +29,16 @@ const AttendanceModal = dynamic(() => import('@/features/wali-kelas/components/A
   loading: () => null,
 });
 
+const DigitalSignatureModal = dynamic(() => import('@/components/DigitalSignatureModal'), {
+  ssr: false,
+  loading: () => null,
+});
+
 export default function WaliKelasRaporPage() {
   const [selectedClass, setSelectedClass] = useState('');
   const [availableClasses, setAvailableClasses] = useState([]);
   const [isAdminOrKepalaSekolah, setIsAdminOrKepalaSekolah] = useState(false);
+  const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
   const [isWalas, setIsWalas] = useState(false);
   const [isCheckingWalas, setIsCheckingWalas] = useState(true);
   const [gradesData, setGradesData] = useState([]);
@@ -439,6 +445,38 @@ export default function WaliKelasRaporPage() {
     }));
   };
 
+  const handleSaveSignature = async ({ signatureData, signatureType, notes, principalName, principalNip }) => {
+    try {
+      const user = tokenStorage.getUser();
+      const finalPrincipalName = principalName?.trim() || user?.fullName || user?.full_name || 'Kepala Sekolah SMPN 1 Prambon';
+      const finalPrincipalNip = principalNip?.trim() || user?.nimNip || user?.nip || '';
+
+      const payload = {
+        class_name: selectedClass,
+        academic_year: academicYear,
+        semester: semester.toUpperCase(),
+        assessment_type: 'PTS',
+        principal_id: user?.id || '',
+        principal_name: finalPrincipalName,
+        principal_nip: finalPrincipalNip,
+        signature_type: signatureType,
+        signature_data: signatureData,
+        status: 'APPROVED',
+        notes: notes || 'Disahkan oleh Kepala Sekolah SMPN 1 Prambon',
+      };
+
+      const res = await gradeApi.saveEndorsement(payload);
+      if (res?.success) {
+        setEndorsement(payload);
+        setIsSignatureModalOpen(false);
+      } else {
+        alert(res?.error?.message || 'Gagal menyimpan pengesahan ke server');
+      }
+    } catch (err) {
+      alert(`Terjadi kesalahan saat menyimpan pengesahan: ${err.message}`);
+    }
+  };
+
   if (isCheckingWalas) {
     return (
       <div className="max-w-7xl mx-auto py-20 flex items-center justify-center">
@@ -498,6 +536,8 @@ export default function WaliKelasRaporPage() {
         setAcademicYear={setAcademicYear}
         setSemester={setSemester}
         endorsement={endorsement}
+        isAdminOrKepalaSekolah={isAdminOrKepalaSekolah}
+        onOpenSignature={() => setIsSignatureModalOpen(true)}
       />
 
       {/* Notifikasi Penyimpanan Kehadiran */}
@@ -531,6 +571,8 @@ export default function WaliKelasRaporPage() {
         onPrint={handlePrint}
         onExportExcel={handleExportExcel}
         onBulkPrint={() => setIsBulkPrintModalOpen(true)}
+        isAdminOrKepalaSekolah={isAdminOrKepalaSekolah}
+        onOpenSignature={() => setIsSignatureModalOpen(true)}
       />
 
       {/* 4. Tabel Nilai & Paginasi */}
@@ -587,6 +629,19 @@ export default function WaliKelasRaporPage() {
           endorsement={endorsement}
           academicYear={academicYear}
           semester={semester}
+        />
+      )}
+
+      {/* 8. Modal Pengesahan Rapor Kepala Sekolah (TTD & Stempel) */}
+      {isSignatureModalOpen && (
+        <DigitalSignatureModal
+          isOpen={isSignatureModalOpen}
+          onClose={() => setIsSignatureModalOpen(false)}
+          onSaveSignature={handleSaveSignature}
+          className={selectedClass}
+          initialSignature={endorsement?.signature_data || ''}
+          principalName={endorsement?.principal_name || tokenStorage.getUser()?.fullName || tokenStorage.getUser()?.full_name || ''}
+          principalNip={endorsement?.principal_nip || tokenStorage.getUser()?.nimNip || tokenStorage.getUser()?.nip || ''}
         />
       )}
     </div>
