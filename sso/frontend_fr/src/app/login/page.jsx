@@ -13,9 +13,28 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [redirectTarget, setRedirectTarget] = useState('');
 
   const reason = searchParams.get('reason');
   const [showPassword, setShowPassword] = useState(false);
+
+  // Ambil target redirect dari query string lalu bersihkan URL bar agar tetap bersih (/login)
+  React.useEffect(() => {
+    const raw = searchParams.get('redirect_uri') || searchParams.get('app');
+    if (raw) {
+      if (raw.toLowerCase() === 'erapor' || raw.toLowerCase() === 'rapor') {
+        setRedirectTarget(process.env.NEXT_PUBLIC_RAPOR_URL || 'https://rapor.spenspra.com');
+      } else if (raw.toLowerCase() === 'perpus' || raw.toLowerCase() === 'perpusdig') {
+        setRedirectTarget(process.env.NEXT_PUBLIC_PERPUS_URL || 'https://perpus.spenspra.com');
+      } else {
+        setRedirectTarget(raw);
+      }
+      // Bersihkan query string dari address bar sehingga hanya tampil /login
+      if (typeof window !== 'undefined' && window.history?.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -23,10 +42,10 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      await login(username, password);
+      const res = await login(username, password);
 
-      // Validasi ketat redirect_uri — hanya domain resmi ekosistem Spenspra yang diizinkan
-      const targetUrl = searchParams.get('redirect_uri');
+      // Validasi ketat redirect_uri jika ada
+      const targetUrl = redirectTarget || searchParams.get('redirect_uri');
       if (targetUrl) {
         try {
           const parsed = new URL(targetUrl, window.location.origin);
@@ -42,15 +61,26 @@ function LoginForm() {
           if (isAllowedHost && (parsed.protocol === 'http:' || parsed.protocol === 'https:')) {
             window.location.href = parsed.toString();
             return;
-          } else {
-            console.warn('Redirect URI di luar whitelist domain resmi, dialihkan ke dashboard.');
           }
         } catch (e) {
           console.warn('Format redirect URL tidak valid:', e);
         }
       }
 
-      router.push('/');
+      // Default redirect berdasarkan role user
+      const user = res?.user || {};
+      const roleName = (user.role || user.role_name || '').toUpperCase();
+      if (
+        roleName === 'ADMIN' ||
+        roleName === 'SUPERADMIN' ||
+        roleName === 'SUPER_ADMIN' ||
+        roleName === 'KEPALA_SEKOLAH' ||
+        roleName === 'OPERATOR'
+      ) {
+        window.location.href = '/admin';
+      } else {
+        window.location.href = '/';
+      }
     } catch (err) {
       setError(err.message || 'Login gagal. Periksa kembali username/NIP dan kata sandi Anda.');
     } finally {
