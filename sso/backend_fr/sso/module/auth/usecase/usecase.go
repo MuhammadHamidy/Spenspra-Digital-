@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/sso/sso-be/sso/module/auth/domain"
