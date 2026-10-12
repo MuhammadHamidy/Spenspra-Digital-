@@ -6,6 +6,10 @@ import AppLayoutWrapper from '@/components/AppLayoutWrapper';
 export const metadata = {
   title: 'e-Rapor SMP Negeri 1 Prambon',
   description: 'Sistem e-Rapor untuk pengelolaan penilaian siswa SMP Negeri 1 Prambon',
+  icons: {
+    icon: '/image/logo_prambon.png',
+    apple: '/image/logo_prambon.png',
+  },
 };
 
 export default function RootLayout({ children }) {

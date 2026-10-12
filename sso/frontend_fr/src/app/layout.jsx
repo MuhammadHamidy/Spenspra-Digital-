@@ -6,6 +6,10 @@ import AppLayoutWrapper from '@/components/AppLayoutWrapper';
 export const metadata = {
   title: 'SSO SMP Negeri 1 Prambon',
   description: 'Portal Single Sign-On untuk seluruh layanan digital SMP Negeri 1 Prambon',
+  icons: {
+    icon: '/image/logo_prambon.png',
+    apple: '/image/logo_prambon.png',
+  },
 };
 
 export default function RootLayout({ children }) {
