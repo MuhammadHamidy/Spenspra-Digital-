@@ -8,7 +8,7 @@ import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApi
 import Pagination from '@/components/Pagination';
 import ConfirmModal from '@/components/ConfirmModal';
 
-const KELAS_OPTIONS = ['7A', '7B', '7C', '8A', '8B', '8C', '9A', '9B', '9C'];
+const KELAS_OPTIONS = ['7A', '7B', '8A', '8B', '9A', '9B'];
 
 export default function SubjectAssignmentPage() {
   const [classes, setClasses] = useState([]);

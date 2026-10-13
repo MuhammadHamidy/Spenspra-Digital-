@@ -6,7 +6,7 @@ import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApi
 import { classApiAdapter } from '@/lib/features/classes/infrastructure/classApiAdapter';
 import Pagination from '@/components/Pagination';
 
-const KELAS_OPTIONS = ['7A', '7B', '7C', '8A', '8B', '8C', '9A', '9B', '9C'];
+const KELAS_OPTIONS = ['7A', '7B', '8A', '8B', '9A', '9B'];
 
 export default function MasterTeachersPage() {
   const [teachers, setTeachers] = useState([]);
