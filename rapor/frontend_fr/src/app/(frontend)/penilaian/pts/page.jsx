@@ -105,7 +105,8 @@ export default function PenilaianPTSPage() {
           availableSubjects = crsRes.data.map((c) => ({ code: c.code, name: c.name }));
         }
 
-        const isTeacherRole = user && (user.role === 'GURU' || user.roleName === 'GURU');
+        const roleUpper = String(user?.roleName || user?.role || user?.role_name || '').toUpperCase();
+        const isTeacherRole = Boolean(user && (roleUpper === 'GURU' || roleUpper.includes('GURU') || roleUpper.includes('TEACHER')));
 
         if (clsRes.success && Array.isArray(clsRes.data)) {
           let teacherClasses = clsRes.data;

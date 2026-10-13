@@ -79,6 +79,42 @@ function purgeBloatedCookies() {
 
 purgeBloatedCookies();
 
+function parseJwtUser(token) {
+  if (!token) return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const parsed = JSON.parse(jsonPayload);
+    if (!parsed || (!parsed.sub && !parsed.id && !parsed.username)) return null;
+
+    const roleName = String(parsed.role_name || parsed.role || parsed.roleId || 'GURU').toUpperCase();
+    const fullName = parsed.full_name || parsed.fullName || parsed.username || '';
+
+    return {
+      id: parsed.id || parsed.sub,
+      username: parsed.username || '',
+      fullName: fullName,
+      full_name: fullName,
+      role: roleName,
+      roleName: roleName,
+      role_name: roleName,
+      roleId: parsed.role_id || parsed.roleId || '',
+      nimNip: parsed.nim_nip || parsed.nimNip || '',
+      nim_nip: parsed.nim_nip || parsed.nimNip || '',
+    };
+  } catch {
+    return null;
+  }
+}
+
 export const tokenStorage = {
   getToken: () => {
     if (typeof window === 'undefined') return null;
@@ -142,13 +178,32 @@ export const tokenStorage = {
       } catch (e) {}
     }
 
-    if (!data) return null;
-
-    try {
-      return JSON.parse(data);
-    } catch {
-      return null;
+    if (data) {
+      try {
+        const parsed = JSON.parse(data);
+        if (parsed && (parsed.id || parsed.username || parsed.fullName || parsed.full_name)) {
+          return parsed;
+        }
+      } catch {
+        // Fallback
+      }
     }
+
+    // Fallback otomatis: Dekode dari JWT token SSO yang dibagikan via cookie
+    const token = tokenStorage.getToken();
+    if (token) {
+      const userFromJwt = parseJwtUser(token);
+      if (userFromJwt) {
+        try {
+          const userStr = JSON.stringify(userFromJwt);
+          sessionStorage.setItem(USER_KEY, userStr);
+          localStorage.setItem(USER_KEY, userStr);
+        } catch (e) {}
+        return userFromJwt;
+      }
+    }
+
+    return null;
   },
 
   setUser: (user) => {
