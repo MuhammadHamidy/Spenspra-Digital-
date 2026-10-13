@@ -45,6 +45,16 @@ function LoginForm() {
     try {
       const res = await login(username, password);
 
+      const user = res?.user || {};
+      const roleName = (user.roleName || user.role || user.role_name || '').toUpperCase();
+
+      // Super Admin adalah pengelola portal SSO: selalu masuk ke panel /superadmin,
+      // abaikan redirect_uri dari aplikasi satelit (e-Rapor / Perpus).
+      if (roleName === 'SUPER_ADMIN' || roleName === 'SUPER-ADMIN') {
+        window.location.href = '/superadmin';
+        return;
+      }
+
       // Validasi ketat redirect_uri jika ada
       const targetUrl = redirectTarget || searchParams.get('redirect_uri');
       if (targetUrl) {
@@ -69,13 +79,6 @@ function LoginForm() {
       }
 
       // Default redirect berdasarkan role user
-      const user = res?.user || {};
-      const roleName = (user.role || user.role_name || user.roleName || '').toUpperCase();
-
-      if (roleName === 'SUPER_ADMIN' || roleName === 'SUPER-ADMIN') {
-        window.location.href = '/superadmin';
-        return;
-      }
 
       if (roleName === 'ADMIN_RAPOR' || roleName === 'ADMIN-RAPOR') {
         const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
