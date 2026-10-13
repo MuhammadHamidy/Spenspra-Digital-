@@ -323,8 +323,10 @@ services:
     container_name: spenspra-nginx
     ports:
       - "${NGINX_PORT_BINDING:-80}:80"
+      - "${NGINX_SSL_PORT_BINDING:-443}:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
       - ./shared/assets:/var/www/shared/assets:ro
     depends_on:
       sso-frontend:
