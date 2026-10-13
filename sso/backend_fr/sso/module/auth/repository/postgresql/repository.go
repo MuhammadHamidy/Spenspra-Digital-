@@ -3,6 +3,7 @@ package postgresql
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/sso/sso-be/sso/module/auth/domain"
@@ -20,7 +21,23 @@ func NewRepository(db *gorm.DB) domain.AuthRepository {
 
 func (r *Repository) FindByUsername(ctx context.Context, username string) (*domain.Account, error) {
 	var account domain.Account
-	err := r.db.WithContext(ctx).Where("username = ? OR email = ? OR nim_nip = ? OR nisn = ?", username, username, username, username).First(&account).Error
+	u := strings.TrimSpace(username)
+	uLower := strings.ToLower(u)
+
+	query := r.db.WithContext(ctx).Where(
+		"LOWER(TRIM(username)) = ? OR LOWER(TRIM(email)) = ? OR LOWER(TRIM(nim_nip)) = ? OR LOWER(TRIM(nisn)) = ?",
+		uLower, uLower, uLower, uLower,
+	)
+
+	// Izinkan alias umum untuk super admin
+	if uLower == "superadmin" || uLower == "admin" {
+		query = r.db.WithContext(ctx).Where(
+			"LOWER(TRIM(username)) = ? OR LOWER(TRIM(username)) = 'superadmin.prambon' OR LOWER(TRIM(email)) = ? OR LOWER(TRIM(nim_nip)) = ?",
+			uLower, uLower, uLower,
+		)
+	}
+
+	err := query.First(&account).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
