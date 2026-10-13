@@ -8,6 +8,8 @@ import { deadlineApiAdapter } from '@/lib/features/deadlines/infrastructure/dead
 
 import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
 
+const DEFAULT_KKM = 75.0;
+
 export default function MainPage() {
   const [user, setUser] = useState(null);
   const [academicYear, setAcademicYear] = useState(() => getSchoolAcademicPeriod().year || '2025/2026');
@@ -256,15 +258,15 @@ export default function MainPage() {
             </span>
             {metrics.schoolAvg > 0 && (
               <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${
-                metrics.schoolAvg >= DEFAULT_KKM
+                metrics.schoolAvg >= schoolKkm
                   ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
                   : 'text-rose-700 bg-rose-50 border-rose-200'
               }`}>
-                {metrics.schoolAvg >= DEFAULT_KKM ? `+${(metrics.schoolAvg - DEFAULT_KKM).toFixed(1)} KKM` : `${(metrics.schoolAvg - DEFAULT_KKM).toFixed(1)} KKM`}
+                {metrics.schoolAvg >= schoolKkm ? `+${(metrics.schoolAvg - schoolKkm).toFixed(1)} KKM` : `${(metrics.schoolAvg - schoolKkm).toFixed(1)} KKM`}
               </span>
             )}
           </div>
-          <p className="mt-1.5 text-[11px] text-slate-400">Standar KKM: {DEFAULT_KKM}</p>
+          <p className="mt-1.5 text-[11px] text-slate-400">Standar KKM: {schoolKkm}</p>
         </div>
 
         {/* Metric 2: Tingkat Ketuntasan Belajar */}
@@ -324,7 +326,7 @@ export default function MainPage() {
                     Komparasi Rata-rata Nilai per Kelas
                   </h2>
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                    KKM: {DEFAULT_KKM}
+                    KKM: {schoolKkm}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -393,7 +395,7 @@ export default function MainPage() {
                   {/* Bars for Each Class */}
                   {filteredClasses.map((c) => {
                     const heightPercent = Math.min(100, Math.max(8, ((c.avg - 50) / 50) * 100));
-                    const isAboveKkm = c.avg >= DEFAULT_KKM;
+                    const isAboveKkm = c.avg >= schoolKkm;
 
                     return (
                       <div
@@ -615,7 +617,7 @@ export default function MainPage() {
               {rawSubjects.map((sub, idx) => {
                 const isHighest = idx === 0 && rawSubjects.length > 1;
                 const isLowest = idx === rawSubjects.length - 1 && rawSubjects.length > 1;
-                const isAboveKkm = sub.avg >= DEFAULT_KKM;
+                const isAboveKkm = sub.avg >= schoolKkm;
                 const barWidth = Math.min(100, Math.max(8, ((sub.avg - 50) / 50) * 100));
 
                 return (
@@ -829,7 +831,7 @@ export default function MainPage() {
 
                   <div className="text-right">
                     <span className="text-sm font-black text-rose-600">{Number(s.lowest_score?.toFixed(1)) || s.lowest_score}</span>
-                    <span className="text-[10px] text-rose-500 font-semibold block">KKM {DEFAULT_KKM}</span>
+                    <span className="text-[10px] text-rose-500 font-semibold block">KKM {schoolKkm}</span>
                   </div>
                 </div>
               ))}
