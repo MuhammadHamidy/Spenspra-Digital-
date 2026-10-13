@@ -75,6 +75,10 @@ export default function PenilaianPTSPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  const roleStr = String(currentUser?.role || currentUser?.roleName || '').toUpperCase();
+  const isTeacherRole = roleStr === 'GURU' || roleStr.includes('TEACHER');
+  const isKepalaSekolah = roleStr.includes('KEPALA');
+
   // Load master courses & classes from backend filtered by logged-in teacher
   useEffect(() => {
     const period = getSchoolAcademicPeriod();
@@ -174,6 +178,12 @@ export default function PenilaianPTSPage() {
   const loadStudentsAndGrades = useCallback(async () => {
     setSaved(false);
     setSaveMessage('');
+    if (!className || !subject) {
+      setRows([]);
+      setIsLocked(false);
+      setLockDetails(null);
+      return;
+    }
     try {
       const [res, lockRes] = await Promise.all([
         gradeApi.getGrades({
@@ -617,7 +627,7 @@ export default function PenilaianPTSPage() {
         </div>
       )}
 
-      {/* Banner Status Penguncian Nilai */}
+      {/* Banner Status Penguncian Nilai & Mode Kepala Sekolah */}
       {isLocked ? (
         <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/80 text-amber-900 flex flex-wrap items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-3">
@@ -642,16 +652,33 @@ export default function PenilaianPTSPage() {
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowUnlockModal(true)}
-            className="px-3.5 py-1.5 rounded-lg bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-            </svg>
-            <span>Buka Kunci Nilai</span>
-          </button>
+          {!isKepalaSekolah && (
+            <button
+              type="button"
+              onClick={() => setShowUnlockModal(true)}
+              className="px-3.5 py-1.5 rounded-lg bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+              <span>Buka Kunci Nilai</span>
+            </button>
+          )}
+        </div>
+      ) : isKepalaSekolah ? (
+        <div className="p-3.5 rounded-xl border border-blue-200 bg-blue-50/80 text-blue-900 flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-base shrink-0">👑</span>
+            <div>
+              <p className="font-bold text-slate-900">Mode Supervisi & Pemantauan Kepala Sekolah (Hanya Lihat)</p>
+              <p className="text-[11px] text-blue-800 mt-0.5">
+                Kepala Sekolah memiliki wewenang untuk meninjau dan memonitor nilai siswa seluruh kelas. Penginputan nilai hanya dapat dilakukan oleh Guru Mata Pelajaran pengampu.
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1 rounded-lg bg-white border border-blue-200 text-blue-800 font-bold text-xs shadow-2xs">
+            Hak Akses: Read-Only
+          </span>
         </div>
       ) : (
         <div className="p-3 rounded-xl border border-emerald-200 bg-emerald-50/70 text-emerald-900 flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -768,17 +795,19 @@ export default function PenilaianPTSPage() {
             <span>Unduh Template Penilaian (.xls)</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setIsImportModalOpen(true)}
-            className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
-            title="Impor nilai dari berkas Excel atau salin-tempel"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <span>Impor Nilai Excel</span>
-          </button>
+          {!isKepalaSekolah && (
+            <button
+              type="button"
+              onClick={() => setIsImportModalOpen(true)}
+              className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+              title="Impor nilai dari berkas Excel atau salin-tempel"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>Impor Nilai Excel</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -792,17 +821,19 @@ export default function PenilaianPTSPage() {
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowTemplateConfig(!showTemplateConfig)}
-          className="px-3.5 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"
-        >
-          <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          <span>{showTemplateConfig ? 'Tutup Pengaturan' : 'Template Deskripsi'}</span>
-        </button>
+        {!isKepalaSekolah && (
+          <button
+            type="button"
+            onClick={() => setShowTemplateConfig(!showTemplateConfig)}
+            className="px-3.5 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span>{showTemplateConfig ? 'Tutup Pengaturan' : 'Template Deskripsi'}</span>
+          </button>
+        )}
       </div>
 
       {/* Panel Pengaturan Template Deskripsi Capaian */}
@@ -905,120 +936,142 @@ export default function PenilaianPTSPage() {
         </section>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/80 px-4 py-3">
-          <div>
-            <h2 className="text-sm font-bold text-slate-900">
-              Kelas {className} <span className="font-normal text-slate-500">• {subjects.find((item) => item.code === subject)?.name}</span>
-            </h2>
-            <p className="mt-0.5 text-[11px] text-slate-500">
-              {visibleRows.length} siswa terdata • Tahun {academicYear} Semester {semester}
-            </p>
+      {isTeacherRole && (classes.length === 0 || subjects.length === 0 || !className || !subject) ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/90 p-8 text-center space-y-3 shadow-xs">
+          <div className="w-12 h-12 mx-auto rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-xl">
+            ⚠️
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={isSaving || isLocked}
-              onClick={handleSaveGrades}
-              className={`rounded-lg px-4 py-2 text-xs font-bold text-white shadow-xs transition ${
-                isLocked
-                  ? 'bg-slate-400 cursor-not-allowed'
-                  : 'bg-[#193D9B] hover:bg-[#153280] cursor-pointer disabled:opacity-50'
-              }`}
-            >
-              {isLocked ? '🔒 Nilai Terkunci (Final)' : isSaving ? 'Menyimpan...' : 'Simpan Nilai USTS'}
-            </button>
-          </div>
+          <h3 className="text-sm font-bold text-slate-900">
+            Belum Ditentukan Mata Pelajaran & Kelas Pengampu
+          </h3>
+          <p className="text-xs text-amber-800 max-w-lg mx-auto leading-relaxed">
+            Akun Anda belum memiliki mata pelajaran atau rombongan belajar pengampu aktif pada Tahun Ajaran <strong>{academicYear} ({semester})</strong>.
+            Anda tidak dapat menginputkan nilai siswa sebelum Administrator e-Rapor menetapkan penugasan mata pelajaran pengampu Anda di menu <em>Pengampu Mata Pelajaran</em>.
+          </p>
         </div>
-        {saved && (
-          <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-800">
-            {saveMessage || 'Nilai USTS berhasil disimpan.'}
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/80 px-4 py-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">
+                Kelas {className} <span className="font-normal text-slate-500">• {subjects.find((item) => item.code === subject)?.name}</span>
+              </h2>
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                {visibleRows.length} siswa terdata • Tahun {academicYear} Semester {semester}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {isKepalaSekolah ? (
+                <span className="rounded-lg bg-blue-100 border border-blue-200 px-3.5 py-2 text-xs font-bold text-blue-900 flex items-center gap-1.5 shadow-2xs">
+                  <span>👑</span>
+                  <span>Mode Pantau Kepala Sekolah</span>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isSaving || isLocked}
+                  onClick={handleSaveGrades}
+                  className={`rounded-lg px-4 py-2 text-xs font-bold text-white shadow-xs transition ${
+                    isLocked
+                      ? 'bg-slate-400 cursor-not-allowed'
+                      : 'bg-[#193D9B] hover:bg-[#153280] cursor-pointer disabled:opacity-50'
+                  }`}
+                >
+                  {isLocked ? '🔒 Nilai Terkunci (Final)' : isSaving ? 'Menyimpan...' : 'Simpan Nilai USTS'}
+                </button>
+              )}
+            </div>
           </div>
-        )}
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] border-collapse text-left">
-            <thead>
-              <tr className="border-b border-slate-200 bg-white text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                <th className="w-12 px-4 py-3 text-center">No</th>
-                <th className="px-3 py-3">NISN</th>
-                <th className="px-3 py-3">Nama lengkap</th>
-                <th className="w-32 px-3 py-3">Nilai</th>
-                <th className="w-36 px-3 py-3">Predikat</th>
-                <th className="min-w-[340px] px-3 py-3">Deskripsi capaian</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedRows.map((row, index) => {
-                const predicate = getPredicate(row.score);
-                const itemNo = (currentPage - 1) * pageSize + index + 1;
-                return (
-                  <tr key={row.id} className="border-b border-slate-100 align-top last:border-0 hover:bg-blue-50/30">
-                    <td className="px-4 py-3 text-center text-xs font-semibold text-slate-400">{itemNo}</td>
-                    <td className="px-3 py-3 text-xs font-medium text-slate-600 font-mono">{row.nisn}</td>
-                    <td className="px-3 py-3 text-xs font-semibold text-slate-900">{row.name}</td>
-                    <td className="px-3 py-3">
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        disabled={isLocked}
-                        value={row.score}
-                        onChange={(event) => updateScore(row.id, event.target.value)}
-                        className={`w-20 rounded-lg border px-2.5 py-2 text-center text-sm font-bold text-slate-900 outline-none ${
-                          isLocked
-                            ? 'bg-slate-100 border-slate-200 cursor-not-allowed text-slate-500'
-                            : 'border-slate-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
-                        }`}
-                        aria-label={`Nilai ${row.name}`}
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="flex flex-col items-start gap-1">
-                        <span className={`inline-flex min-w-8 justify-center rounded-md px-2 py-1 text-xs font-bold ${predicate === 'A' ? 'bg-emerald-100 text-emerald-800' : predicate === 'B' ? 'bg-blue-100 text-blue-800' : predicate === 'C' ? 'bg-amber-100 text-amber-800' : predicate === 'D' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-500'}`}>{predicate}</span>
-                        {predicate !== '-' && (
-                          <span className="text-[10px] font-medium text-slate-500 leading-tight">
-                            {PREDICATE_LABELS[predicate]}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3">
-                      <textarea
-                        value={row.description}
-                        disabled={isLocked}
-                        onChange={(event) => updateDescription(row.id, event.target.value)}
-                        rows={2}
-                        placeholder="Deskripsi capaian kompetensi..."
-                        className={`w-full resize-y rounded-lg border px-3 py-2 text-xs leading-5 text-slate-700 outline-none ${
-                          isLocked
-                            ? 'bg-slate-100 border-slate-200 cursor-not-allowed text-slate-500'
-                            : 'border-slate-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
-                        }`}
-                        aria-label={`Deskripsi ${row.name}`}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        {visibleRows.length === 0 && <p className="px-4 py-10 text-center text-xs text-slate-500">Siswa tidak ditemukan pada rombel ini.</p>}
+          {saved && (
+            <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-800">
+              {saveMessage || 'Nilai USTS berhasil disimpan.'}
+            </div>
+          )}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[820px] border-collapse text-left">
+              <thead>
+                <tr className="border-b border-slate-200 bg-white text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <th className="w-12 px-4 py-3 text-center">No</th>
+                  <th className="px-3 py-3">NISN</th>
+                  <th className="px-3 py-3">Nama lengkap</th>
+                  <th className="w-32 px-3 py-3">Nilai</th>
+                  <th className="w-36 px-3 py-3">Predikat</th>
+                  <th className="min-w-[340px] px-3 py-3">Deskripsi capaian</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedRows.map((row, index) => {
+                  const predicate = getPredicate(row.score);
+                  const itemNo = (currentPage - 1) * pageSize + index + 1;
+                  return (
+                    <tr key={row.id} className="border-b border-slate-100 align-top last:border-0 hover:bg-blue-50/30">
+                      <td className="px-4 py-3 text-center text-xs font-semibold text-slate-400">{itemNo}</td>
+                      <td className="px-3 py-3 text-xs font-medium text-slate-600 font-mono">{row.nisn}</td>
+                      <td className="px-3 py-3 text-xs font-semibold text-slate-900">{row.name}</td>
+                      <td className="px-3 py-3">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          disabled={isLocked || isKepalaSekolah}
+                          value={row.score}
+                          onChange={(event) => updateScore(row.id, event.target.value)}
+                          className={`w-20 rounded-lg border px-2.5 py-2 text-center text-sm font-bold outline-none ${
+                            isLocked || isKepalaSekolah
+                              ? 'bg-slate-100 border-slate-200 cursor-not-allowed text-slate-600'
+                              : 'border-slate-300 text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+                          }`}
+                          aria-label={`Nilai ${row.name}`}
+                        />
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex flex-col items-start gap-1">
+                          <span className={`inline-flex min-w-8 justify-center rounded-md px-2 py-1 text-xs font-bold ${predicate === 'A' ? 'bg-emerald-100 text-emerald-800' : predicate === 'B' ? 'bg-blue-100 text-blue-800' : predicate === 'C' ? 'bg-amber-100 text-amber-800' : predicate === 'D' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-500'}`}>{predicate}</span>
+                          {predicate !== '-' && (
+                            <span className="text-[10px] font-medium text-slate-500 leading-tight">
+                              {PREDICATE_LABELS[predicate]}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <textarea
+                          value={row.description}
+                          disabled={isLocked || isKepalaSekolah}
+                          onChange={(event) => updateDescription(row.id, event.target.value)}
+                          rows={2}
+                          placeholder="Deskripsi capaian kompetensi..."
+                          className={`w-full resize-y rounded-lg border px-3 py-2 text-xs leading-5 outline-none ${
+                            isLocked || isKepalaSekolah
+                              ? 'bg-slate-100 border-slate-200 cursor-not-allowed text-slate-600'
+                              : 'border-slate-300 text-slate-700 focus:border-blue-600 focus:ring-2 focus:ring-blue-100'
+                          }`}
+                          aria-label={`Deskripsi ${row.name}`}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {visibleRows.length === 0 && <p className="px-4 py-10 text-center text-xs text-slate-500">Siswa tidak ditemukan pada rombel ini.</p>}
 
-        {/* Paginasi Data Siswa */}
-        <Pagination
-          currentPage={currentPage}
-          totalItems={visibleRows.length}
-          pageSize={pageSize}
-          onPageChange={setCurrentPage}
-          onPageSizeChange={(newSize) => {
-            setPageSize(newSize);
-            setCurrentPage(1);
-          }}
-          pageSizeOptions={[10, 20, 32]}
-          itemLabel="siswa"
-        />
-      </div>
+          {/* Paginasi Data Siswa */}
+          <Pagination
+            currentPage={currentPage}
+            totalItems={visibleRows.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setCurrentPage(1);
+            }}
+            pageSizeOptions={[10, 20, 32]}
+            itemLabel="siswa"
+          />
+        </div>
+      )}
       <p className="text-[11px] text-slate-400">Rentang predikat: A (86–100), B (76–85), C (66–75), D (0–65).</p>
 
       {/* Modal Buka Kunci Nilai */}

@@ -2,6 +2,7 @@ package http
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/rapor/rapor-be/libraries/responses"
@@ -71,7 +72,21 @@ func (h *GradeHandler) SaveBulk(c *fiber.Ctx) error {
 }
 
 func (h *GradeHandler) GetSummary(c *fiber.Ctx) error {
-	s, err := h.useCase.GetSummary(c.Context())
+	var kkm float64
+	if kkmStr := c.Query("kkm"); kkmStr != "" {
+		if val, err := strconv.ParseFloat(kkmStr, 64); err == nil && val > 0 {
+			kkm = val
+		}
+	}
+	if kkm <= 0 {
+		if kkmCookie := c.Cookies("spenspra_school_kkm"); kkmCookie != "" {
+			if val, err := strconv.ParseFloat(kkmCookie, 64); err == nil && val > 0 {
+				kkm = val
+			}
+		}
+	}
+
+	s, err := h.useCase.GetSummary(c.Context(), kkm)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
 	}

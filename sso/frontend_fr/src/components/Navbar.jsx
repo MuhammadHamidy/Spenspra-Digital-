@@ -39,6 +39,8 @@ export default function Navbar({ onToggleMobileSidebar = () => {} }) {
   }, []);
 
   const getBreadcrumb = () => {
+    if (pathname === '/superadmin') return { section: 'Panel Super Admin', sub: 'Pusat Kendali Ekosistem' };
+    if (pathname === '/dashboard') return { section: 'Portal Civitas', sub: 'Layanan Sekolah' };
     if (pathname === '/') return { section: 'SSO Spenspra', sub: 'Beranda' };
     if (pathname.startsWith('/admin/master-data')) return { section: 'Panel Admin', sub: 'Data Master' };
     if (pathname.startsWith('/admin/app-access')) return { section: 'Panel Admin', sub: 'Akses Aplikasi' };

@@ -11,6 +11,7 @@ export default function WaliKelasStatsBar({
   classAverage = 0,
   passedStudents = 0,
   remedialStudents = 0,
+  kkm = 75,
 }) {
   const classList = availableClasses.length > 0 ? availableClasses : (selectedClass ? [selectedClass] : []);
   return (
@@ -41,7 +42,7 @@ export default function WaliKelasStatsBar({
         <p className="text-xs font-semibold text-slate-500">Rata-rata Kelas</p>
         <div className="mt-1 flex items-baseline gap-2">
           <span className="text-2xl font-black text-slate-900">{classAverage}</span>
-          <span className="text-xs text-emerald-600 font-bold">KKM 75</span>
+          <span className="text-xs text-emerald-600 font-bold">KKM {kkm}</span>
         </div>
       </div>
 

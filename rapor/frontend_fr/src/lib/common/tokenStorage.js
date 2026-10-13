@@ -4,10 +4,6 @@ const INSTITUTION_KEY = 'rapor_institution_id';
 const SESSION_ACTIVE_KEY = 'spenspra_session_active';
 const LAST_ACTIVITY_KEY = 'spenspra_last_activity';
 
-/**
- * Menyimpan cookie sesi (Session Cookie tanpa atribut expires).
- * Cookie ini hanya hidup selama sesi browser berjalan.
- */
 function getParentDomain() {
   if (typeof window === 'undefined' || !window.location.hostname) return '';
   const hostname = window.location.hostname;
@@ -33,15 +29,13 @@ function setSessionCookie(name, value) {
   const encoded = encodeURIComponent(value);
   const isHttps = window.location.protocol === 'https:';
   const secureFlag = isHttps ? '; Secure' : '';
-
-  document.cookie = `${name}=${encoded}; path=/; domain=localhost; SameSite=Lax${secureFlag}`;
-  document.cookie = `${name}=${encoded}; path=/; domain=.localhost; SameSite=Lax${secureFlag}`;
-
   const parentDomain = getParentDomain();
+
   if (parentDomain) {
     document.cookie = `${name}=${encoded}; path=/; domain=${parentDomain}; SameSite=Lax${secureFlag}`;
+  } else {
+    document.cookie = `${name}=${encoded}; path=/; SameSite=Lax${secureFlag}`;
   }
-  document.cookie = `${name}=${encoded}; path=/; SameSite=Lax${secureFlag}`;
 }
 
 function removeCookie(name) {
@@ -49,9 +43,11 @@ function removeCookie(name) {
   const isHttps = window.location.protocol === 'https:';
   const secureFlag = isHttps ? '; Secure' : '';
   const expired = `expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; path=/; SameSite=Lax${secureFlag}`;
+
   document.cookie = `${name}=; ${expired}`;
   document.cookie = `${name}=; ${expired}; domain=localhost`;
   document.cookie = `${name}=; ${expired}; domain=.localhost`;
+
   if (window.location && window.location.hostname) {
     document.cookie = `${name}=; ${expired}; domain=${window.location.hostname}`;
     document.cookie = `${name}=; ${expired}; domain=.${window.location.hostname}`;
@@ -75,45 +71,53 @@ function getCookie(name) {
   return null;
 }
 
-function purgeLegacyLocalStorage() {
+function purgeBloatedCookies() {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    localStorage.removeItem('perpusdig_explicit_logout');
-    localStorage.removeItem(SESSION_ACTIVE_KEY);
+    removeCookie(USER_KEY);
   } catch (e) {}
 }
+
+purgeBloatedCookies();
 
 export const tokenStorage = {
   getToken: () => {
     if (typeof window === 'undefined') return null;
-    purgeLegacyLocalStorage();
+    purgeBloatedCookies();
 
-    // 1. Ambil dari sessionStorage (terikat kuat pada tab/jendela aktif)
     let token = null;
     try {
       token = sessionStorage.getItem(TOKEN_KEY);
     } catch (e) {}
 
-    // 2. Jika tab/jendela baru dibuka tanpa sesi sessionStorage aktif:
-    // Berarti pengguna telah keluar/menutup web sebelumnya.
     if (!token) {
-      const isCallback = window.location.pathname.includes('/sso/callback');
-      if (!isCallback) {
-        // Reset cookie sisa agar tidak terjadi penumpukan akses atau error sesi usang
-        tokenStorage.clear();
-        return null;
+      try {
+        token = localStorage.getItem(TOKEN_KEY);
+        if (token) {
+          sessionStorage.setItem(TOKEN_KEY, token);
+        }
+      } catch (e) {}
+    }
+
+    if (!token) {
+      token = getCookie(TOKEN_KEY);
+      if (token) {
+        try {
+          sessionStorage.setItem(TOKEN_KEY, token);
+          localStorage.setItem(TOKEN_KEY, token);
+        } catch (e) {}
       }
     }
+
     return token;
   },
 
   setToken: (token) => {
     if (typeof window !== 'undefined') {
-      purgeLegacyLocalStorage();
+      purgeBloatedCookies();
       try {
         sessionStorage.setItem(TOKEN_KEY, token);
+        localStorage.setItem(TOKEN_KEY, token);
         sessionStorage.setItem(SESSION_ACTIVE_KEY, '1');
         sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
       } catch (e) {}
@@ -123,7 +127,7 @@ export const tokenStorage = {
 
   getUser: () => {
     if (typeof window === 'undefined') return null;
-    purgeLegacyLocalStorage();
+    purgeBloatedCookies();
 
     let data = null;
     try {
@@ -131,14 +135,18 @@ export const tokenStorage = {
     } catch (e) {}
 
     if (!data) {
-      const isCallback = window.location.pathname.includes('/sso/callback');
-      if (!isCallback) {
-        return null;
-      }
+      try {
+        data = localStorage.getItem(USER_KEY);
+        if (data) {
+          sessionStorage.setItem(USER_KEY, data);
+        }
+      } catch (e) {}
     }
 
+    if (!data) return null;
+
     try {
-      return data ? JSON.parse(data) : null;
+      return JSON.parse(data);
     } catch {
       return null;
     }
@@ -146,44 +154,50 @@ export const tokenStorage = {
 
   setUser: (user) => {
     if (typeof window !== 'undefined') {
-      purgeLegacyLocalStorage();
+      purgeBloatedCookies();
       const userStr = JSON.stringify(user);
       try {
         sessionStorage.setItem(USER_KEY, userStr);
+        localStorage.setItem(USER_KEY, userStr);
         sessionStorage.setItem(SESSION_ACTIVE_KEY, '1');
         sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
       } catch (e) {}
-      setSessionCookie(USER_KEY, userStr);
+      removeCookie(USER_KEY);
     }
   },
 
   getInstitutionId: () => {
-    if (typeof window === 'undefined') return null;
+    if (typeof window === 'undefined') return 'smpn1prambon';
     try {
-      return sessionStorage.getItem(INSTITUTION_KEY) || getCookie(INSTITUTION_KEY);
+      return sessionStorage.getItem(INSTITUTION_KEY) || localStorage.getItem(INSTITUTION_KEY) || getCookie(INSTITUTION_KEY) || 'smpn1prambon';
     } catch {
-      return getCookie(INSTITUTION_KEY);
+      return 'smpn1prambon';
     }
   },
 
   setInstitutionId: (institutionId) => {
-    if (typeof window === 'undefined') return;
-    try {
-      sessionStorage.setItem(INSTITUTION_KEY, institutionId);
-    } catch {}
-    setSessionCookie(INSTITUTION_KEY, institutionId);
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(INSTITUTION_KEY, institutionId);
+        localStorage.setItem(INSTITUTION_KEY, institutionId);
+      } catch (e) {}
+      setSessionCookie(INSTITUTION_KEY, institutionId);
+    }
   },
 
   clear: () => {
     if (typeof window !== 'undefined') {
-      purgeLegacyLocalStorage();
       try {
         sessionStorage.removeItem(TOKEN_KEY);
         sessionStorage.removeItem(USER_KEY);
         sessionStorage.removeItem(INSTITUTION_KEY);
         sessionStorage.removeItem(SESSION_ACTIVE_KEY);
         sessionStorage.removeItem(LAST_ACTIVITY_KEY);
-        sessionStorage.clear();
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+        localStorage.removeItem(INSTITUTION_KEY);
+        localStorage.removeItem(SESSION_ACTIVE_KEY);
+        localStorage.removeItem(LAST_ACTIVITY_KEY);
       } catch (e) {}
       removeCookie(TOKEN_KEY);
       removeCookie(USER_KEY);
@@ -213,19 +227,14 @@ export const tokenStorage = {
 
   syncCookies: () => {
     if (typeof window !== 'undefined') {
-      purgeLegacyLocalStorage();
+      purgeBloatedCookies();
       let token = null;
-      let user = null;
       try {
-        token = sessionStorage.getItem(TOKEN_KEY);
-        user = sessionStorage.getItem(USER_KEY);
+        token = sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
       } catch (e) {}
 
       if (token && !getCookie(TOKEN_KEY)) {
         setSessionCookie(TOKEN_KEY, token);
-      }
-      if (user && !getCookie(USER_KEY)) {
-        setSessionCookie(USER_KEY, user);
       }
     }
   },

@@ -13,10 +13,10 @@ export function useAuth() {
 
   // Memvalidasi apakah sesi token dan server backend benar-benar aktif
   const validateSession = useCallback(async () => {
-    // Pada halaman login, reset total sesi yang ada agar tidak terjadi penumpukan akses
+    // Pada halaman login, jangan hapus sesi yang baru saja dibuat oleh proses login
     if (pathname === '/login') {
-      tokenStorage.clear();
-      setUser(null);
+      const stored = tokenStorage.getUser();
+      setUser(stored);
       setLoading(false);
       return;
     }

@@ -253,12 +253,17 @@ function MasterDataContent() {
 
   useEffect(() => {
     try {
+      let activeKkm = 75;
+      const storedKkm = localStorage.getItem('spenspra_school_kkm');
+      if (storedKkm && Number(storedKkm) > 0) activeKkm = Number(storedKkm);
+
       const stored = localStorage.getItem('spenspra_academic_period');
       if (stored) {
         const parsed = JSON.parse(stored);
+        if (parsed?.kkm && Number(parsed.kkm) > 0) activeKkm = Number(parsed.kkm);
         if (parsed?.year && parsed?.semester) {
-          setAcademicPeriod((prev) => ({ ...prev, ...parsed }));
-          setPeriodForm((prev) => ({ ...prev, ...parsed }));
+          setAcademicPeriod((prev) => ({ ...prev, ...parsed, kkm: activeKkm }));
+          setPeriodForm((prev) => ({ ...prev, ...parsed, kkm: activeKkm }));
           setPeriodHistory((prev) =>
             prev.map((item) => ({
               ...item,
@@ -286,11 +291,13 @@ function MasterDataContent() {
 
   const handleSaveAcademicPeriod = (e) => {
     e.preventDefault();
+    const cleanYear = periodForm.year?.trim() || '2025/2026';
+    const cleanKkm = Number(periodForm.kkm) || 75;
     const updated = {
       ...academicPeriod,
-      year: periodForm.year,
+      year: cleanYear,
       semester: periodForm.semester,
-      kkm: Number(periodForm.kkm) || 75,
+      kkm: cleanKkm,
       startDate: periodForm.startDate,
       endDate: periodForm.endDate,
       status: 'AKTIF',
@@ -298,12 +305,16 @@ function MasterDataContent() {
     setAcademicPeriod(updated);
     try {
       localStorage.setItem('spenspra_academic_period', JSON.stringify(updated));
+      localStorage.setItem('spenspra_school_kkm', String(cleanKkm));
       const isProd = typeof window !== 'undefined' && window.location.hostname.includes('spenspra');
       const domainPart = isProd ? '; domain=.spenspra.com' : '';
       document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
       document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
+      document.cookie = `spenspra_school_kkm=${encodeURIComponent(cleanKkm)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
+
       document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/; max-age=31536000; SameSite=Lax`;
       document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/; max-age=31536000; SameSite=Lax`;
+      document.cookie = `spenspra_school_kkm=${encodeURIComponent(cleanKkm)}; path=/; max-age=31536000; SameSite=Lax`;
     } catch (err) {}
 
     setPeriodHistory((prev) => {
@@ -332,27 +343,33 @@ function MasterDataContent() {
     setNotice(
       `Periode akademik aktif berhasil diubah ke Tahun Ajaran ${updated.year} - Semester ${
         updated.semester === 'GENAP' ? 'Genap' : 'Ganjil'
-      }. Seluruh sistem e-Rapor dan modul sekolah telah disinkronkan.`
+      } (Standar KKM: ${cleanKkm}). Seluruh sistem e-Rapor dan modul sekolah telah disinkronkan.`
     );
   };
 
   const handleQuickActivatePeriod = (p) => {
+    const activeKkm = academicPeriod.kkm || 75;
     const updated = {
       ...academicPeriod,
       year: p.year,
       semester: p.semester,
       status: 'AKTIF',
+      kkm: activeKkm,
     };
     setAcademicPeriod(updated);
-    setPeriodForm((prev) => ({ ...prev, year: p.year, semester: p.semester }));
+    setPeriodForm((prev) => ({ ...prev, year: p.year, semester: p.semester, kkm: activeKkm }));
     try {
       localStorage.setItem('spenspra_academic_period', JSON.stringify(updated));
+      localStorage.setItem('spenspra_school_kkm', String(activeKkm));
       const isProd = typeof window !== 'undefined' && window.location.hostname.includes('spenspra');
       const domainPart = isProd ? '; domain=.spenspra.com' : '';
       document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
       document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
+      document.cookie = `spenspra_school_kkm=${encodeURIComponent(activeKkm)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
+
       document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/; max-age=31536000; SameSite=Lax`;
       document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/; max-age=31536000; SameSite=Lax`;
+      document.cookie = `spenspra_school_kkm=${encodeURIComponent(activeKkm)}; path=/; max-age=31536000; SameSite=Lax`;
     } catch (err) {}
 
     setPeriodHistory((prev) =>
@@ -2287,19 +2304,38 @@ const generateUsernameFromName = (name) => {
 
             <form onSubmit={handleSaveAcademicPeriod} className="mt-4 space-y-3.5">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Tahun Ajaran *
-                </label>
-                <select
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Tahun Ajaran *
+                  </label>
+                  <span className="text-[10px] text-slate-400">Dapat diketik manual</span>
+                </div>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: 2026/2027"
                   value={periodForm.year}
                   onChange={(e) => setPeriodForm({ ...periodForm, year: e.target.value })}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white cursor-pointer"
-                >
-                  <option value="2024/2025">2024/2025</option>
-                  <option value="2025/2026">2025/2026 (Tahun Berjalan)</option>
-                  <option value="2026/2027">2026/2027</option>
-                  <option value="2027/2028">2027/2028</option>
-                </select>
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                />
+                {/* Saran Cepat Tahun Ajaran */}
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] text-slate-400 font-medium">Saran Cepat:</span>
+                  {['2024/2025', '2025/2026', '2026/2027', '2027/2028', '2028/2029'].map((yr) => (
+                    <button
+                      key={yr}
+                      type="button"
+                      onClick={() => setPeriodForm({ ...periodForm, year: yr })}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition cursor-pointer ${
+                        periodForm.year === yr
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900'
+                      }`}
+                    >
+                      {yr}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div>
@@ -2359,16 +2395,25 @@ const generateUsernameFromName = (name) => {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Standar KKM Sekolah (Ketuntasan Minimal)
+                  Standar KKM Sekolah (Ketuntasan Minimal) *
                 </label>
-                <input
-                  type="number"
-                  min="50"
-                  max="100"
-                  value={periodForm.kkm}
-                  onChange={(e) => setPeriodForm({ ...periodForm, kkm: e.target.value })}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold"
-                />
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="50"
+                    max="100"
+                    required
+                    value={periodForm.kkm}
+                    onChange={(e) => setPeriodForm({ ...periodForm, kkm: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold pr-12"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                    / 100
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Standar KKM ini otomatis menjadi acuan standar kelulusan & ambang remedial di seluruh dashboard dan e-Rapor.
+                </p>
               </div>
 
               <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-800 space-y-1">

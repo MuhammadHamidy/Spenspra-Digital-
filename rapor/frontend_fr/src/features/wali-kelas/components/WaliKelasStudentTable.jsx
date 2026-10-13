@@ -39,6 +39,7 @@ export default function WaliKelasStudentTable({
   setCurrentPage,
   setPageSize,
   onSelectStudentForReport,
+  kkm = 75,
 }) {
   const [columns, setColumns] = useState(() => getDynamicSubjectColumns());
 
@@ -120,7 +121,7 @@ export default function WaliKelasStudentTable({
                     {columns.map((col) => {
                       const score = s.scores[col.code];
                       const hasScore = typeof score === 'number';
-                      const isPassing = hasScore && score >= 75;
+                      const isPassing = hasScore && score >= kkm;
                       return (
                         <td
                           key={col.code}
@@ -140,7 +141,7 @@ export default function WaliKelasStudentTable({
                       <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-bold ${
                         s.avgScore >= 85
                           ? 'bg-[#DCFCE7] text-[#15803D]'
-                          : s.avgScore >= 75
+                          : s.avgScore >= kkm
                           ? 'bg-[#EFF4FE] text-[#1E4DBD]'
                           : 'bg-[#FEE2E2] text-[#DC2626]'
                       }`}>

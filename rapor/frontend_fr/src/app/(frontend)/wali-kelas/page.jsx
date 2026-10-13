@@ -46,6 +46,7 @@ export default function WaliKelasRaporPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [academicYear, setAcademicYear] = useState(() => getSchoolAcademicPeriod().year);
   const [semester, setSemester] = useState(() => getSchoolAcademicPeriod().semester);
+  const [schoolKkm, setSchoolKkm] = useState(() => getSchoolAcademicPeriod().kkm);
   const [endorsement, setEndorsement] = useState(null);
   const [selectedStudentForReport, setSelectedStudentForReport] = useState(null);
   const [isBulkPrintModalOpen, setIsBulkPrintModalOpen] = useState(false);
@@ -301,7 +302,7 @@ export default function WaliKelasRaporPage() {
       const totalScore = scoreValues.reduce((acc, curr) => acc + curr, 0);
       const avgScore = scoreValues.length > 0 ? Number((totalScore / scoreValues.length).toFixed(1)) : 0;
       const isComplete = SUBJECT_COLUMNS.every((col) => student.scores[col.code] !== undefined);
-      const isPassed = avgScore >= 75;
+      const isPassed = avgScore >= schoolKkm;
       const att = attendanceMap[student.id] || { hadir: 58, sakit: 0, izin: 0, alfa: 0 };
 
       return {
@@ -323,7 +324,7 @@ export default function WaliKelasRaporPage() {
       ...student,
       rank: student.avgScore > 0 ? idx + 1 : '-',
     }));
-  }, [gradesData, selectedClass, attendanceMap]);
+  }, [gradesData, selectedClass, attendanceMap, schoolKkm]);
 
   const filteredStudents = useMemo(() => {
     if (!searchQuery) return studentsSummary;
@@ -410,13 +411,25 @@ export default function WaliKelasRaporPage() {
     });
   };
 
+  const attendanceStorageKey = `spenspra_attendance_${selectedClass}_${academicYear.replace('/', '_')}_${semester}`;
+
+  useEffect(() => {
+    if (!selectedClass) return;
+    try {
+      const stored = localStorage.getItem(`spenspra_attendance_${selectedClass}_${academicYear.replace('/', '_')}_${semester}`);
+      if (stored) {
+        setAttendanceMap(JSON.parse(stored));
+      }
+    } catch (e) {}
+  }, [selectedClass, academicYear, semester]);
+
   const handleOpenAttendanceModal = () => {
     const initialMap = {};
     studentsSummary.forEach((s) => {
       initialMap[s.id] = {
         hadir: s.attendance?.hadir ?? 58,
-        sakit: s.attendance?.sakit ?? 1,
-        izin: s.attendance?.izin ?? 1,
+        sakit: s.attendance?.sakit ?? 0,
+        izin: s.attendance?.izin ?? 0,
         alfa: s.attendance?.alfa ?? 0,
       };
     });
@@ -425,10 +438,14 @@ export default function WaliKelasRaporPage() {
   };
 
   const handleSaveAttendance = () => {
-    setAttendanceMap((prev) => ({
-      ...prev,
+    const updated = {
+      ...attendanceMap,
       ...tempAttendance,
-    }));
+    };
+    setAttendanceMap(updated);
+    try {
+      localStorage.setItem(attendanceStorageKey, JSON.stringify(updated));
+    } catch (e) {}
     setIsAttendanceModalOpen(false);
     setAttendanceSaveNotice(true);
     setTimeout(() => setAttendanceSaveNotice(false), 4000);
@@ -555,6 +572,7 @@ export default function WaliKelasRaporPage() {
 
       {/* 2. Filter & Stat Bar */}
       <WaliKelasStatsBar
+        kkm={schoolKkm}
         selectedClass={selectedClass}
         setSelectedClass={setSelectedClass}
         isAdminOrKepalaSekolah={isAdminOrKepalaSekolah}
@@ -577,6 +595,7 @@ export default function WaliKelasRaporPage() {
 
       {/* 4. Tabel Nilai & Paginasi */}
       <WaliKelasStudentTable
+        kkm={schoolKkm}
         isLoading={isLoading}
         selectedClass={selectedClass}
         searchQuery={searchQuery}

@@ -71,6 +71,11 @@ function LoginForm() {
       const user = res?.user || {};
       const roleName = (user.role || user.role_name || user.roleName || '').toUpperCase();
 
+      if (roleName === 'SUPER_ADMIN' || roleName === 'SUPER-ADMIN') {
+        window.location.href = '/superadmin';
+        return;
+      }
+
       if (roleName === 'ADMIN_RAPOR' || roleName === 'ADMIN-RAPOR') {
         const raporBaseUrl = process.env.NEXT_PUBLIC_RAPOR_URL || 'https://rapor.spenspra.com';
         const userPayload = {
@@ -92,7 +97,8 @@ function LoginForm() {
         return;
       }
 
-      window.location.href = '/';
+      // Pengguna Guru, Tenaga Kependidikan, dan Kepala Sekolah diarahkan ke /dashboard
+      window.location.href = '/dashboard';
     } catch (err) {
       setError(err.message || 'Login gagal. Periksa kembali username/NIP dan kata sandi Anda.');
     } finally {

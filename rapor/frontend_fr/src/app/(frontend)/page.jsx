@@ -6,12 +6,13 @@ import { gradeApi } from '@/lib/gradeApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 import { deadlineApiAdapter } from '@/lib/features/deadlines/infrastructure/deadlineApiAdapter';
 
-const DEFAULT_KKM = 75.0;
+import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
 
 export default function MainPage() {
   const [user, setUser] = useState(null);
-  const [academicYear, setAcademicYear] = useState('2025/2026');
-  const [semester, setSemester] = useState('GENAP');
+  const [academicYear, setAcademicYear] = useState(() => getSchoolAcademicPeriod().year || '2025/2026');
+  const [semester, setSemester] = useState(() => getSchoolAcademicPeriod().semester || 'GENAP');
+  const [schoolKkm, setSchoolKkm] = useState(() => getSchoolAcademicPeriod().kkm || 75);
   const [levelFilter, setLevelFilter] = useState('ALL');
   const [deadlines, setDeadlines] = useState([]);
   const [endorsements, setEndorsements] = useState([]);
@@ -24,15 +25,11 @@ export default function MainPage() {
     const currentUser = tokenStorage.getUser();
     setUser(currentUser);
 
-    // Ambil sinkronisasi periode dari Super Admin jika tersimpan
-    try {
-      const stored = localStorage.getItem('spenspra_academic_period');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.year) setAcademicYear(parsed.year);
-        if (parsed?.semester) setSemester(parsed.semester);
-      }
-    } catch (e) {}
+    // Ambil sinkronisasi periode & KKM dari Super Admin
+    const period = getSchoolAcademicPeriod();
+    if (period.year) setAcademicYear(period.year);
+    if (period.semester) setSemester(period.semester);
+    if (period.kkm) setSchoolKkm(period.kkm);
   }, []);
 
   useEffect(() => {
@@ -40,7 +37,7 @@ export default function MainPage() {
       setIsLoading(true);
       try {
         const [sumRes, dlRes, endRes] = await Promise.all([
-          gradeApi.getMonitoringSummary().catch(() => null),
+          gradeApi.getMonitoringSummary(schoolKkm).catch(() => null),
           deadlineApiAdapter.getDeadlines().catch(() => []),
           gradeApi.getEndorsements({ academicYear, semester }).catch(() => ({ data: [] })),
         ]);
@@ -71,7 +68,7 @@ export default function MainPage() {
     };
 
     loadDashboardData();
-  }, [academicYear, semester]);
+  }, [academicYear, semester, schoolKkm]);
 
   const role = String(user?.roleName || user?.role || '').toUpperCase();
   const isAdmin = role.includes('ADMIN') || role === 'SUPER_ADMIN';

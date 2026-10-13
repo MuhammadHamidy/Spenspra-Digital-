@@ -38,6 +38,7 @@ services:
   sso-seeder:
     image: postgres:15-alpine
     container_name: spenspra-sso-seeder
+    profiles: ["seed"]
     volumes:
       - ./sso/backend_fr/sso/seeders:/seeders:ro
     command: ["sh", "-c", "for f in /seeders/*.sql; do psql -h postgres -U \"$${POSTGRES_USER:-user}\" -d \"$${POSTGRES_DB:-presdig_sso}\" -f \"$$f\"; done"]
@@ -77,7 +78,7 @@ services:
       # Hanya SSO yang memegang kunci privat untuk menandatangani token.
       - ./shared/keys/jwt_private.pem:/keys/jwt_private.pem:ro
     depends_on:
-      sso-seeder:
+      sso-migrate:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
@@ -136,6 +137,7 @@ services:
   rapor-seeder:
     image: postgres:15-alpine
     container_name: spenspra-rapor-seeder
+    profiles: ["seed"]
     volumes:
       - ./rapor/backend_fr/rapor/seeders:/seeders:ro
     environment:
@@ -170,7 +172,7 @@ services:
       # Hanya kunci publik. Kunci privat TIDAK boleh ada di container satelit.
       - ./shared/keys/jwt_public.pem:/keys/jwt_public.pem:ro
     depends_on:
-      rapor-seeder:
+      rapor-migrate:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
@@ -223,6 +225,7 @@ services:
   perpus-seeder:
     image: postgres:15-alpine
     container_name: spenspra-perpus-seeder
+    profiles: ["seed"]
     volumes:
       - ./perpus/backend_fr/facerec/seeders:/seeders:ro
     environment:
@@ -257,7 +260,7 @@ services:
       # Hanya kunci publik. Kunci privat TIDAK boleh ada di container satelit.
       - ./shared/keys/jwt_public.pem:/keys/jwt_public.pem:ro
     depends_on:
-      perpus-seeder:
+      perpus-migrate:
         condition: service_completed_successfully
       redis:
         condition: service_healthy

@@ -275,7 +275,7 @@ type Repository interface {
 type UseCase interface {
 	List(ctx context.Context, f GradeFilter) ([]*StudentGrade, error)
 	SaveBulk(ctx context.Context, req BulkGradeRequest, reason string) (int, error)
-	GetSummary(ctx context.Context) (*AcademicSummary, error)
+	GetSummary(ctx context.Context, kkm ...float64) (*AcademicSummary, error)
 	GetDeadlines(ctx context.Context) ([]*GradeDeadline, error)
 	SaveDeadline(ctx context.Context, dl *GradeDeadline) error
 

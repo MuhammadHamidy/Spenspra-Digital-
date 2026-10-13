@@ -1,5 +1,8 @@
-import { redirect } from 'next/navigation';
+'use client';
+
+import React from 'react';
+import CivitasDashboard from '@/components/CivitasDashboard';
 
 export default function DashboardPage() {
-  redirect('/');
+  return <CivitasDashboard />;
 }

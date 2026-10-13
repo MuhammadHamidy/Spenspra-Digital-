@@ -1,8 +1,0 @@
-=== RUN   TestPredicateCalculation
---- PASS: TestPredicateCalculation (0.00s)
-=== RUN   TestSaveBulkValidation
---- PASS: TestSaveBulkValidation (0.00s)
-=== RUN   TestGetSummary
---- PASS: TestGetSummary (0.00s)
-PASS
-ok  	github.com/rapor/rapor-be/rapor/module/grades/usecase	1.148s

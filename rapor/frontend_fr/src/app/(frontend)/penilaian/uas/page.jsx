@@ -54,6 +54,10 @@ export default function PenilaianUASPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  const roleStr = String(currentUser?.role || currentUser?.roleName || '').toUpperCase();
+  const isTeacherRole = roleStr === 'GURU' || roleStr.includes('TEACHER');
+  const isKepalaSekolah = roleStr.includes('KEPALA');
+
   // Load master courses & classes from backend filtered by logged-in teacher
   useEffect(() => {
     const period = getSchoolAcademicPeriod();
@@ -349,6 +353,24 @@ export default function PenilaianUASPage() {
           </p>
         </div>
       </div>
+
+      {/* Banner Peringatan Guru Belum Ada Penugasan Mengajar */}
+      {isTeacherRole && (classes.length === 0 || subjects.length === 0 || !className || !subject) && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-xs flex items-start gap-3">
+          <div className="w-9 h-9 rounded-lg bg-amber-100 border border-amber-300 flex items-center justify-center shrink-0 text-amber-800">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div>
+            <h4 className="font-bold text-xs text-slate-900">Belum Ditentukan Mata Pelajaran & Kelas Pengampu</h4>
+            <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+              Akun Anda belum memiliki mata pelajaran atau rombel yang diatur pada jadwal e-Rapor untuk Tahun Ajaran <strong>{academicYear} ({semester})</strong>.
+              Sistem tidak akan memasukkan data kelas atau mapel secara sembarangan. Silakan hubungi Administrator e-Rapor sekolah untuk mengatur penugasan mengampu di menu <em>Pengampu Mata Pelajaran</em>.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Pratinjau Layout Form UAS (Coming Soon) */}
       <div className="p-4 rounded-2xl bg-slate-100/70 border border-slate-200">

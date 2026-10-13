@@ -157,8 +157,12 @@ func (u *useCase) SaveBulk(ctx context.Context, req domain.BulkGradeRequest, rea
 	return len(rows), nil
 }
 
-func (u *useCase) GetSummary(ctx context.Context) (*domain.AcademicSummary, error) {
-	return u.repo.GetSummary(ctx, DefaultKKM)
+func (u *useCase) GetSummary(ctx context.Context, kkm ...float64) (*domain.AcademicSummary, error) {
+	targetKKM := DefaultKKM
+	if len(kkm) > 0 && kkm[0] > 0 {
+		targetKKM = kkm[0]
+	}
+	return u.repo.GetSummary(ctx, targetKKM)
 }
 
 func (u *useCase) GetDeadlines(ctx context.Context) ([]*domain.GradeDeadline, error) {

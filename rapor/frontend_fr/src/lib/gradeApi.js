@@ -47,8 +47,9 @@ export const gradeApi = {
     });
   },
 
-  getMonitoringSummary: async () => {
-    return fetchJson('/monitoring/summary');
+  getMonitoringSummary: async (kkm) => {
+    const qs = kkm ? `?kkm=${encodeURIComponent(kkm)}` : '';
+    return fetchJson(`/monitoring/summary${qs}`);
   },
 
   // Kunci Nilai

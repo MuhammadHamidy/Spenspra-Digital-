@@ -45,6 +45,7 @@ function AdminMonitoringContent() {
   const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
   const [academicYear, setAcademicYear] = useState(() => getSchoolAcademicPeriod().year);
   const [semester, setSemester] = useState(() => getSchoolAcademicPeriod().semester);
+  const [schoolKkm, setSchoolKkm] = useState(() => getSchoolAcademicPeriod().kkm);
   const [savedSignatureData, setSavedSignatureData] = useState('');
 
   // Modal Deadline State
@@ -62,7 +63,7 @@ function AdminMonitoringContent() {
     setIsLoading(true);
     try {
       const [resSummary, resDeadlines, resEndorsements, resClasses, resCourses] = await Promise.all([
-        gradeApi.getMonitoringSummary(),
+        gradeApi.getMonitoringSummary(schoolKkm),
         deadlineApiAdapter.getDeadlines(),
         gradeApi.getEndorsements({ academicYear, semester }).catch(() => ({ data: [] })),
         attendanceApi.getClasses().catch(() => ({ data: [] })),
