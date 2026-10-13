@@ -7,6 +7,7 @@ import { getRole } from '@/lib/access/portalAccess';
 import { schoolPeopleApi } from '@/lib/features/schoolPeopleApi';
 import { classApiAdapter } from '@/lib/features/classes/infrastructure/classApiAdapter';
 import { tokenStorage } from '@/lib/common/tokenStorage';
+import { getDynamicAppUrl } from '@/lib/common/urlHelper';
 
 export default function CivitasDashboard() {
   const { user } = useAuth();
@@ -24,8 +25,8 @@ export default function CivitasDashboard() {
     kkm: 75,
   });
 
-  const raporBaseUrl = process.env.NEXT_PUBLIC_RAPOR_URL || 'http://rapor.localhost';
-  const perpusBaseUrl = process.env.NEXT_PUBLIC_PERPUS_URL || 'http://perpus.localhost';
+  const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
+  const perpusBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus');
 
   const getRaporLaunchUrl = (targetPath = '') => {
     const token = tokenStorage.getToken() || 'sso-session-token';

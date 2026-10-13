@@ -23,7 +23,14 @@ export async function httpRequest(endpoint, options = {}) {
       if (response.status === 401) {
         tokenStorage.clear();
         if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-          window.location.href = 'http://sso.localhost/login?reason=expired';
+          const isSpenspra = window.location.hostname.includes('spenspra.com');
+          const isSch = window.location.hostname.includes('spenspra.sch.id');
+          const loginUrl = isSpenspra
+            ? 'https://sso.spenspra.com/login?reason=expired'
+            : isSch
+            ? 'https://sso.spenspra.sch.id/login?reason=expired'
+            : (process.env.NEXT_PUBLIC_SSO_LOGIN_URL ? `${process.env.NEXT_PUBLIC_SSO_LOGIN_URL}?reason=expired` : 'http://sso.localhost/login?reason=expired');
+          window.location.href = loginUrl;
         }
       }
       const errorMsg = data?.error?.message || data?.message || `HTTP Error ${response.status}`;

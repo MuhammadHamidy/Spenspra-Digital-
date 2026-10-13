@@ -6,13 +6,29 @@ export function middleware(request) {
     return NextResponse.next();
   }
 
+  const host = request.headers.get('host') || '';
+  const isSpenspraCom = host.includes('spenspra.com');
+  const isSpenspraSch = host.includes('spenspra.sch.id');
+
+  const defaultSsoUrl = isSpenspraCom
+    ? 'https://sso.spenspra.com/login'
+    : isSpenspraSch
+    ? 'https://sso.spenspra.sch.id/login'
+    : 'http://sso.localhost/login';
+
+  const defaultRaporUrl = isSpenspraCom
+    ? 'https://rapor.spenspra.com'
+    : isSpenspraSch
+    ? 'https://rapor.spenspra.sch.id'
+    : 'http://rapor.localhost';
+
+  const ssoLoginUrl = process.env.NEXT_PUBLIC_SSO_LOGIN_URL || defaultSsoUrl;
+  const raporUrl = process.env.NEXT_PUBLIC_RAPOR_URL || defaultRaporUrl;
+
   const token = request.cookies.get('perpusdig_auth_token')?.value;
   if (!token) {
-    const ssoLoginUrl = process.env.NEXT_PUBLIC_SSO_LOGIN_URL || 'http://sso.localhost/login';
     const redirectUrl = new URL(ssoLoginUrl, request.url);
     // Gunakan redirect_uri agar SSO tahu ke mana harus kembali setelah login.
-    // Tidak menggunakan ?app= agar URL lebih bersih dan tidak mengekspos nama internal.
-    const raporUrl = process.env.NEXT_PUBLIC_RAPOR_URL || 'http://rapor.localhost';
     redirectUrl.searchParams.set('redirect_uri', raporUrl);
     return NextResponse.redirect(redirectUrl);
   }
@@ -26,7 +42,6 @@ export function middleware(request) {
 
       if (payload.aud && Array.isArray(payload.aud)) {
         if (!payload.aud.includes('erapor')) {
-          const ssoLoginUrl = process.env.NEXT_PUBLIC_SSO_LOGIN_URL || 'http://sso.localhost/login';
           const redirectUrl = new URL(ssoLoginUrl, request.url);
           redirectUrl.searchParams.set('reason', 'unauthorized_app');
           return NextResponse.redirect(redirectUrl);

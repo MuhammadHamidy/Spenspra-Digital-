@@ -36,7 +36,17 @@ export function middleware(request) {
 
         if (payload.aud && Array.isArray(payload.aud)) {
           if (!payload.aud.includes('perpus')) {
-            const ssoLoginUrl = process.env.NEXT_PUBLIC_SSO_LOGIN_URL || 'http://sso.localhost/login';
+            const host = request.headers.get('host') || '';
+            const isSpenspraCom = host.includes('spenspra.com');
+            const isSpenspraSch = host.includes('spenspra.sch.id');
+
+            const defaultSsoUrl = isSpenspraCom
+              ? 'https://sso.spenspra.com/login'
+              : isSpenspraSch
+              ? 'https://sso.spenspra.sch.id/login'
+              : 'http://sso.localhost/login';
+
+            const ssoLoginUrl = process.env.NEXT_PUBLIC_SSO_LOGIN_URL || defaultSsoUrl;
             const redirectUrl = new URL(ssoLoginUrl, request.url);
             redirectUrl.searchParams.set('reason', 'unauthorized_app');
             return NextResponse.redirect(redirectUrl);

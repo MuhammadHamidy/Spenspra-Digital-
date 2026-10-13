@@ -80,7 +80,12 @@ export const accountApiAdapter = {
 
     // Fallback: ambil data master siswa dari SSO jika rapor belum disinkronkan
     try {
-      const resp = await fetch('http://sso.localhost/api/master/people?person_type=SISWA');
+      const ssoApiBase = typeof window !== 'undefined' && window.location.hostname.includes('spenspra.com')
+        ? 'https://sso.spenspra.com/api'
+        : typeof window !== 'undefined' && window.location.hostname.includes('spenspra.sch.id')
+        ? 'https://sso.spenspra.sch.id/api'
+        : (process.env.NEXT_PUBLIC_SSO_API_URL || 'http://sso.localhost/api');
+      const resp = await fetch(`${ssoApiBase}/master/people?person_type=SISWA`);
       if (resp.ok) {
         const json = await resp.json();
         if (Array.isArray(json.data) && json.data.length > 0) {

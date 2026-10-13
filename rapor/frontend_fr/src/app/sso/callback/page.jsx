@@ -54,7 +54,13 @@ function SSOCallbackContent() {
           <h3 className="text-sm font-bold text-slate-800 mb-1">Gagal Menyelesaikan Autentikasi</h3>
           <p className="text-xs text-red-600 mb-4">{error}</p>
           <a
-            href="http://sso.localhost/login"
+            href={
+              typeof window !== 'undefined' && window.location.hostname.includes('spenspra.com')
+                ? 'https://sso.spenspra.com/login'
+                : typeof window !== 'undefined' && window.location.hostname.includes('spenspra.sch.id')
+                ? 'https://sso.spenspra.sch.id/login'
+                : (process.env.NEXT_PUBLIC_SSO_LOGIN_URL || 'http://sso.localhost/login')
+            }
             className="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
           >
             Kembali ke Login SSO

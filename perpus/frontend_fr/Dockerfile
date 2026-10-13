@@ -31,7 +31,11 @@ RUN --mount=type=bind,source=package.json,target=package.json \
 ################################################################################
 FROM deps as build
 ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_SSO_LOGIN_URL
+ARG NEXT_PUBLIC_PERPUS_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_SSO_LOGIN_URL=$NEXT_PUBLIC_SSO_LOGIN_URL
+ENV NEXT_PUBLIC_PERPUS_URL=$NEXT_PUBLIC_PERPUS_URL
 ENV DATABASE_URL="postgresql://user:change-me@localhost:5432/perpusdig?schema=public"
 ENV JWT_SECRET="spenspra-default-jwt-secret-key-2026-minimum-32-chars"
 

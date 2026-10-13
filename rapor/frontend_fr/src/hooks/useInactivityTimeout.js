@@ -44,7 +44,14 @@ export function useInactivityTimeout(onTimeout) {
         if (typeof onTimeout === 'function') {
           onTimeout();
         } else {
-          window.location.href = 'http://sso.localhost/login?reason=inactivity';
+          const isSpenspra = typeof window !== 'undefined' && window.location.hostname.includes('spenspra.com');
+          const isSch = typeof window !== 'undefined' && window.location.hostname.includes('spenspra.sch.id');
+          const loginUrl = isSpenspra
+            ? 'https://sso.spenspra.com/login?reason=inactivity'
+            : isSch
+            ? 'https://sso.spenspra.sch.id/login?reason=inactivity'
+            : (process.env.NEXT_PUBLIC_SSO_LOGIN_URL ? `${process.env.NEXT_PUBLIC_SSO_LOGIN_URL}?reason=inactivity` : 'http://sso.localhost/login?reason=inactivity');
+          window.location.href = loginUrl;
         }
       }
     }, CHECK_INTERVAL_MS);

@@ -4,6 +4,7 @@ import React, { useState, Suspense } from 'react';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/features/auth/presentation/useAuth';
+import { getDynamicAppUrl } from '@/lib/common/urlHelper';
 
 function LoginForm() {
   const router = useRouter();
@@ -23,9 +24,9 @@ function LoginForm() {
     const raw = searchParams.get('redirect_uri') || searchParams.get('app');
     if (raw) {
       if (raw.toLowerCase() === 'erapor' || raw.toLowerCase() === 'rapor') {
-        setRedirectTarget(process.env.NEXT_PUBLIC_RAPOR_URL || 'https://rapor.spenspra.com');
+        setRedirectTarget(getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor'));
       } else if (raw.toLowerCase() === 'perpus' || raw.toLowerCase() === 'perpusdig') {
-        setRedirectTarget(process.env.NEXT_PUBLIC_PERPUS_URL || 'https://perpus.spenspra.com');
+        setRedirectTarget(getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus'));
       } else {
         setRedirectTarget(raw);
       }
@@ -77,7 +78,7 @@ function LoginForm() {
       }
 
       if (roleName === 'ADMIN_RAPOR' || roleName === 'ADMIN-RAPOR') {
-        const raporBaseUrl = process.env.NEXT_PUBLIC_RAPOR_URL || 'https://rapor.spenspra.com';
+        const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
         const userPayload = {
           id: user?.id || user?.person_id || 'user-admin-rapor',
           username: user?.username || '',
@@ -92,7 +93,7 @@ function LoginForm() {
       }
 
       if (roleName === 'ADMIN_PERPUS' || roleName === 'ADMIN-PERPUS' || roleName === 'PUSTAKAWAN') {
-        const perpusBaseUrl = process.env.NEXT_PUBLIC_PERPUS_URL || 'https://perpus.spenspra.com';
+        const perpusBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus');
         window.location.href = `${perpusBaseUrl}/pustakawan`;
         return;
       }

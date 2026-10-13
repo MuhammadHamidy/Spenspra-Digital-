@@ -290,7 +290,9 @@ function SidebarContent({ mobileOpen = false, onCloseMobile = () => {} }) {
       localStorage.clear();
     } catch (e) {}
     const isProd = typeof window !== 'undefined' && window.location.hostname.includes('spenspra.com');
-    window.location.href = isProd ? 'https://spenspra.com/login' : 'http://sso.localhost/login';
+    const isSch = typeof window !== 'undefined' && window.location.hostname.includes('spenspra.sch.id');
+    const targetLogin = isProd ? 'https://sso.spenspra.com/login' : isSch ? 'https://sso.spenspra.sch.id/login' : (process.env.NEXT_PUBLIC_SSO_LOGIN_URL || 'http://sso.localhost/login');
+    window.location.href = targetLogin;
   };
 
   return (

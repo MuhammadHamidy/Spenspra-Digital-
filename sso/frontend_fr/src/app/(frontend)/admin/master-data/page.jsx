@@ -2217,51 +2217,58 @@ const generateUsernameFromName = (name) => {
                 </button>
 
                 {/* 2. Buka Mail Client (Mailto) */}
-                <a
-                  href={`mailto:${credentialModal.email}?subject=Kredensial%20Akun%20SSO%20SMPN%201%20Prambon&body=Yth.%20${encodeURIComponent(
-                    credentialModal.fullName
-                  )},%0A%0ABerikut%20adalah%20informasi%20akses%20akun%20SSO%20SMPN%201%20Prambon%20Anda:%0A- Username:%20${encodeURIComponent(
-                    credentialModal.username
-                  )}%0A- Password:%20${encodeURIComponent(
-                    credentialModal.defaultPassword
-                  )}%0A- Tautan:%20http://sso.localhost/login%0A%0ASilakan%20login%20dan%20segera%20ganti%20password%20Anda.`}
-                  className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-left hover:bg-slate-100 transition cursor-pointer"
-                >
-                  <p className="text-xs font-bold text-slate-900">✉️ Buka Email Client</p>
-                  <p className="text-[10px] text-slate-600 mt-0.5">Buka via Outlook / Gmail langsung</p>
-                </a>
+                {/* Dynamic Portal Login URL */}
+                {(() => {
+                  const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://sso.spenspra.com/login';
+                  return (
+                    <>
+                      <a
+                        href={`mailto:${credentialModal.email}?subject=Kredensial%20Akun%20SSO%20SMPN%201%20Prambon&body=Yth.%20${encodeURIComponent(
+                          credentialModal.fullName
+                        )},%0A%0ABerikut%20adalah%20informasi%20akses%20akun%20SSO%20SMPN%201%20Prambon%20Anda:%0A- Username:%20${encodeURIComponent(
+                          credentialModal.username
+                        )}%0A- Password:%20${encodeURIComponent(
+                          credentialModal.defaultPassword
+                        )}%0A- Tautan:%20${encodeURIComponent(portalUrl)}%0A%0ASilakan%20login%20dan%20segera%20ganti%20password%20Anda.`}
+                        className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-left hover:bg-slate-100 transition cursor-pointer"
+                      >
+                        <p className="text-xs font-bold text-slate-900">✉️ Buka Email Client</p>
+                        <p className="text-[10px] text-slate-600 mt-0.5">Buka via Outlook / Gmail langsung</p>
+                      </a>
 
-                {/* 3. Kirim via WhatsApp */}
-                <a
-                  href={`https://wa.me/${(credentialModal.phone || '').replace(/[^0-9]/g, '')}?text=Halo%20${encodeURIComponent(
-                    credentialModal.fullName
-                  )},%20berikut%20adalah%20akun%20SSO%20SMPN%201%20Prambon%20Anda:%0AUsername:%20${encodeURIComponent(
-                    credentialModal.username
-                  )}%0APassword:%20${encodeURIComponent(
-                    credentialModal.defaultPassword
-                  )}%0APortal:%20http://sso.localhost/login`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-left hover:bg-emerald-100/70 transition cursor-pointer"
-                >
-                  <p className="text-xs font-bold text-emerald-900">💬 Kirim via WhatsApp</p>
-                  <p className="text-[10px] text-emerald-700 mt-0.5">Kirimkan format teks via WhatsApp Web</p>
-                </a>
+                      {/* 3. Kirim via WhatsApp */}
+                      <a
+                        href={`https://wa.me/${(credentialModal.phone || '').replace(/[^0-9]/g, '')}?text=Halo%20${encodeURIComponent(
+                          credentialModal.fullName
+                        )},%20berikut%20adalah%20akun%20SSO%20SMPN%201%20Prambon%20Anda:%0AUsername:%20${encodeURIComponent(
+                          credentialModal.username
+                        )}%0APassword:%20${encodeURIComponent(
+                          credentialModal.defaultPassword
+                        )}%0APortal:%20${encodeURIComponent(portalUrl)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-left hover:bg-emerald-100/70 transition cursor-pointer"
+                      >
+                        <p className="text-xs font-bold text-emerald-900">💬 Kirim via WhatsApp</p>
+                        <p className="text-[10px] text-emerald-700 mt-0.5">Kirimkan format teks via WhatsApp Web</p>
+                      </a>
 
-                {/* 4. Salin Teks Kredensial */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const text = `Akun SSO SMPN 1 Prambon:\nNama: ${credentialModal.fullName}\nUsername: ${credentialModal.username}\nPassword: ${credentialModal.defaultPassword}\nPortal: http://sso.localhost/login`;
-                    navigator.clipboard.writeText(text);
-                    setNotice('Kredensial berhasil disalin ke clipboard!');
-
-                  }}
-                  className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-left hover:bg-slate-100 transition cursor-pointer"
-                >
-                  <p className="text-xs font-bold text-slate-900">📋 Salin Teks</p>
-                  <p className="text-[10px] text-slate-600 mt-0.5">Salin informasi akun ke clipboard</p>
-                </button>
+                      {/* 4. Salin Teks Kredensial */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const text = `Akun SSO SMPN 1 Prambon:\nNama: ${credentialModal.fullName}\nUsername: ${credentialModal.username}\nPassword: ${credentialModal.defaultPassword}\nPortal: ${portalUrl}`;
+                          navigator.clipboard.writeText(text);
+                          setNotice('Kredensial berhasil disalin ke clipboard!');
+                        }}
+                        className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-left hover:bg-slate-100 transition cursor-pointer"
+                      >
+                        <p className="text-xs font-bold text-slate-900">📋 Salin Teks</p>
+                        <p className="text-[10px] text-slate-600 mt-0.5">Salin informasi akun ke clipboard</p>
+                      </button>
+                    </>
+                  );
+                })()}
               </div>
             </div>
 
@@ -2502,10 +2509,10 @@ const generateUsernameFromName = (name) => {
                     onClick={() => {
                       const user = getStaffUsername(detailStaffModal);
                       const pass = getStaffPassword(detailStaffModal);
-                      const msg = `*AKUN SSO SMPN 1 PRAMBON*\n\nNama: ${detailStaffModal.full_name}\nUsername: ${user}\nPassword: ${pass}\n\nLogin ke: http://sso.localhost`;
+                      const portalOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://sso.spenspra.com';
+                      const msg = `*AKUN SSO SMPN 1 PRAMBON*\n\nNama: ${detailStaffModal.full_name}\nUsername: ${user}\nPassword: ${pass}\n\nLogin ke: ${portalOrigin}`;
                       navigator.clipboard.writeText(msg);
                       setNotice('Format kredensial akun berhasil disalin ke clipboard.');
-
                     }}
                     className="inline-flex items-center gap-1 text-[11px] font-bold text-[#4B3B78] hover:text-[#30264F] cursor-pointer"
                   >

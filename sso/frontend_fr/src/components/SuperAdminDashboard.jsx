@@ -8,6 +8,7 @@ import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApi
 import { schoolPeopleApi } from '@/lib/features/schoolPeopleApi';
 import { classApiAdapter } from '@/lib/features/classes/infrastructure/classApiAdapter';
 import { tokenStorage } from '@/lib/common/tokenStorage';
+import { getDynamicAppUrl } from '@/lib/common/urlHelper';
 
 export default function SuperAdminDashboard() {
   const { user } = useAuth();
@@ -34,8 +35,8 @@ export default function SuperAdminDashboard() {
   });
   const [loadingStats, setLoadingStats] = useState(false);
 
-  const raporBaseUrl = process.env.NEXT_PUBLIC_RAPOR_URL || 'http://rapor.localhost';
-  const perpusBaseUrl = process.env.NEXT_PUBLIC_PERPUS_URL || 'http://perpus.localhost';
+  const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
+  const perpusBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus');
 
   const getRaporLaunchUrl = (targetPath = '') => {
     const token = tokenStorage.getToken() || 'sso-session-token';
