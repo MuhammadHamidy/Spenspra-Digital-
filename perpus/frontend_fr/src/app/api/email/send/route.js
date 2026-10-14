@@ -100,8 +100,11 @@ export async function POST(req) {
 
     const portalURL = process.env.APP_PORTAL_URL || 'http://localhost:3000/login';
     const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-    const smtpUser = process.env.SMTP_USERNAME || 'hamidym83@gmail.com';
-    const smtpPass = process.env.SMTP_PASSWORD || 'izjv gzwq cjzr eszu';
+    const smtpUser = process.env.SMTP_USERNAME;
+    const smtpPass = process.env.SMTP_PASSWORD;
+    if (!smtpUser || !smtpPass) {
+      return NextResponse.json({ success: false, error: 'SMTP_USERNAME / SMTP_PASSWORD belum dikonfigurasi di server.' }, { status: 500 });
+    }
     const smtpFrom = process.env.SMTP_FROM || smtpUser;
 
 

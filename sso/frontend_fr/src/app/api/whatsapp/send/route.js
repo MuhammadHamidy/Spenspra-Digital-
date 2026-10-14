@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server';
 
 const WA_API_URL = process.env.WA_API_URL || 'https://api.fonnte.com/send';
-const WA_API_KEY = process.env.WA_API_KEY || 'BZ2ULnUerGn1T74V8Uu8';
+const WA_API_KEY = process.env.WA_API_KEY;
 
 export async function POST(request) {
+  if (!WA_API_KEY) {
+    return NextResponse.json(
+      { success: false, error: 'WA_API_KEY belum dikonfigurasi di server' },
+      { status: 500 }
+    );
+  }
+
   try {
     const body = await request.json();
     const { target, message } = body;

@@ -57,11 +57,12 @@ services:
       APP_LOG_LEVEL: info
       APP_LOG_FORMAT: json
       APP_SERVICE_NAME: sso
+      WA_API_KEY: ${WA_API_KEY:-}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USERNAME: ${SMTP_USERNAME:-hamidym83@gmail.com}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-izjvgzwqcjzreszu}
-      SMTP_FROM: ${SMTP_FROM:-hamidym83@gmail.com}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
       SMTP_SENDER_NAME: ${SMTP_SENDER_NAME:-SMPN 1 Prambon - Presensi Digital}
       APP_PORTAL_URL: ${APP_PORTAL_URL:-http://sso.localhost/login}
     depends_on:
@@ -89,11 +90,12 @@ services:
       NEXT_PUBLIC_RAPOR_API_URL: ${RAPOR_PUBLIC_API_URL:-http://rapor.localhost/api}
       NEXT_PUBLIC_PERPUS_API_URL: ${PERPUS_PUBLIC_API_URL:-http://perpus.localhost/api}
       DATABASE_URL: postgresql://${SSO_DB_USER:-user}:${SSO_DB_PASSWORD:-change-me}@postgres-sso:5432/${SSO_DB_NAME:-presdig}?schema=public
-      JWT_SECRET: ${JWT_SECRET:-spenspra-default-jwt-secret-key-2026-minimum-32-chars}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env.docker}
+      WA_API_KEY: ${WA_API_KEY:-}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
-      SMTP_USERNAME: ${SMTP_USERNAME:-hamidym83@gmail.com}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-izjvgzwqcjzreszu}
-      SMTP_FROM: ${SMTP_FROM:-hamidym83@gmail.com}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
       APP_PORTAL_URL: ${APP_PORTAL_URL:-http://sso.localhost/login}
     command: ["node", "server.js"]
     depends_on: [sso-api]
@@ -157,6 +159,7 @@ services:
       APP_LOG_LEVEL: info
       APP_LOG_FORMAT: json
       APP_SERVICE_NAME: rapor
+      WA_API_KEY: ${WA_API_KEY:-}
       SSO_API_URL: http://sso-api:8080
     depends_on:
       rapor-seeder:
@@ -182,7 +185,8 @@ services:
       NEXT_PUBLIC_API_URL: ${RAPOR_PUBLIC_API_URL:-http://rapor.localhost/api}
       NEXT_PUBLIC_SSO_LOGIN_URL: ${SSO_LOGIN_URL:-http://sso.localhost/login}
       DATABASE_URL: postgresql://${RAPOR_DB_USER:-user}:${RAPOR_DB_PASSWORD:-change-me}@postgres-rapor:5432/${RAPOR_DB_NAME:-presdig}?schema=public
-      JWT_SECRET: ${JWT_SECRET:-spenspra-default-jwt-secret-key-2026-minimum-32-chars}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env.docker}
+      WA_API_KEY: ${WA_API_KEY:-}
     command: ["node", "server.js"]
     depends_on: [rapor-api]
     networks: [spenspra]
@@ -245,6 +249,7 @@ services:
       APP_LOG_LEVEL: info
       APP_LOG_FORMAT: json
       APP_SERVICE_NAME: perpus
+      WA_API_KEY: ${WA_API_KEY:-}
       SSO_API_URL: http://sso-api:8080
     depends_on:
       perpus-seeder:
@@ -269,7 +274,8 @@ services:
       PORT: 3000
       NEXT_PUBLIC_API_URL: ${PERPUS_PUBLIC_API_URL:-http://perpus.localhost/api}
       DATABASE_URL: postgresql://${PERPUS_DB_USER:-user}:${PERPUS_DB_PASSWORD:-change-me}@postgres-perpus:5432/${PERPUS_DB_NAME:-perpusdig}?schema=public
-      JWT_SECRET: ${JWT_SECRET:-spenspra-default-jwt-secret-key-2026-minimum-32-chars}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env.docker}
+      WA_API_KEY: ${WA_API_KEY:-}
     command: ["node", "server.js"]
     depends_on:
       perpus-api:

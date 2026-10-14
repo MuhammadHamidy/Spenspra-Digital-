@@ -30,7 +30,7 @@ func NewNotifier() Notifier {
 	}
 	apiKey := os.Getenv("WA_API_KEY")
 	if apiKey == "" {
-		apiKey = "BZ2ULnUerGn1T74V8Uu8"
+		log.Println("[WHATSAPP] WA_API_KEY belum diset, notifikasi WhatsApp tidak akan terkirim")
 	}
 
 	return &Client{
