@@ -45,3 +45,9 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Documents (jangan di-push)
+*.md
+*.pdf
+*.doc
+*.docx
