@@ -207,7 +207,7 @@ func (u *useCase) Login(ctx context.Context, req domain.LoginRequest) (*domain.L
 	case "ADMIN_PERPUS":
 		aud = []string{"sso", "perpus"}
 	case "SISWA":
-		aud = []string{"sso", "perpus", "elearning"}
+		aud = []string{"sso", "erapor", "perpus", "elearning"}
 	case "ADMIN_RAPOR", "ADMIN_ABSENSI", "GURU", "WALI_KELAS":
 		aud = []string{"sso", "erapor", "elearning"}
 	default:
