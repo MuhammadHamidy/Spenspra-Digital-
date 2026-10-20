@@ -19,6 +19,8 @@ func DefaultCSRFOriginConfig() CSRFOriginConfig {
 			"localhost",
 			".localhost",
 			"127.0.0.1",
+			"spenspra.com",
+			".spenspra.com",
 			"spenspra.sch.id",
 			".spenspra.sch.id",
 		},

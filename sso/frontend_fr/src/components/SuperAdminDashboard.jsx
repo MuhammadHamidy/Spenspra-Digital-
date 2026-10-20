@@ -37,6 +37,21 @@ export default function SuperAdminDashboard() {
 
   const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
   const perpusBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus');
+  const belajarBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_ELEARNING_URL, 'belajar');
+
+  const getBelajarLaunchUrl = (targetPath = '') => {
+    const token = tokenStorage.getToken() || 'sso-session-token';
+    const userPayload = {
+      id: user?.id || user?.person_id || 'user-1',
+      username: user?.username || '',
+      fullName: user?.fullName || user?.full_name || '',
+      roleName: 'SUPER_ADMIN',
+      nimNip: user?.nimNip || user?.nip || user?.nisn || '',
+    };
+    const encodedUser = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(userPayload)))) : '';
+    const redirectParam = targetPath ? `&redirect=${encodeURIComponent(targetPath)}` : '';
+    return `${belajarBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}${redirectParam}`;
+  };
 
   const getRaporLaunchUrl = (targetPath = '') => {
     const token = tokenStorage.getToken() || 'sso-session-token';
@@ -211,6 +226,27 @@ export default function SuperAdminDashboard() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3 text-xs">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 flex flex-col justify-between hover:bg-slate-50 transition">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900">🎓 Spenspra Belajar (LMS & CBT)</span>
+                    <span className="rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-bold px-2 py-0.5">Online</span>
+                  </div>
+                  <p className="text-slate-600 text-[11px]">
+                    Materi digital, penugasan, dan ujian CBT dengan pengawasan anti-cheat.
+                  </p>
+                </div>
+                <div className="mt-3 pt-2 border-t border-slate-200/60 flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400 font-mono">Port :3004</span>
+                  <a
+                    href={getBelajarLaunchUrl()}
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-0.5"
+                  >
+                    Buka ↗
+                  </a>
+                </div>
+              </div>
+
               <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 flex flex-col justify-between hover:bg-slate-50 transition">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">

@@ -30,7 +30,13 @@ Thumbs.db
 
 # Logs
 *.log
+server_log.txt
 farmease/tmp/server
+
+# Build & runtime caches
+.gocache/
+.gocache_temp/
+.cache/
 
 # Configuration files containing credentials
 farmease/config/config.json

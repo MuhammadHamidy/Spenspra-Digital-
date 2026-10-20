@@ -25,6 +25,7 @@ import (
 	"github.com/facerec/facerec-be/facerec/module/users"
 
 	// Smart Digital Library Modules
+	"github.com/facerec/facerec-be/facerec/module/beranda"
 	"github.com/facerec/facerec-be/facerec/module/books"
 	"github.com/facerec/facerec-be/facerec/module/library_attendances"
 	"github.com/facerec/facerec-be/facerec/module/library_members"
@@ -107,6 +108,7 @@ func serveE(cmd *cobra.Command, args []string) error {
 		faces.Module,
 
 		// Digital Library Modules
+		beranda.Module,
 		library_members.Module,
 		books.Module,
 		loans.Module,

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 export function middleware(request) {
   const { pathname } = request.nextUrl;
 
-  const authToken = request.cookies.get('perpusdig_auth_token')?.value;
+  const authToken = request.cookies.get('access_token')?.value || request.cookies.get('perpusdig_auth_token')?.value;
   const authUser = request.cookies.get('perpusdig_auth_user')?.value;
   const isAuthenticated = Boolean(authToken || authUser);
 
@@ -19,7 +19,12 @@ export function middleware(request) {
   const isPublicPath =
     pathname === '/' ||
     pathname === '/perpus' ||
-    pathname === '/kiosk';
+    pathname === '/kiosk' ||
+    pathname === '/bibliografi' ||
+    pathname === '/bookmark' ||
+    pathname === '/pinjam' ||
+    pathname === '/baca' ||
+    pathname === '/pembelajaran';
 
   // If user is not authenticated and trying to access protected administrative pages -> redirect to /login
   if (!isAuthenticated && !isPublicPath) {

@@ -27,6 +27,7 @@ export default function CivitasDashboard() {
 
   const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
   const perpusBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus');
+  const belajarBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_ELEARNING_URL, 'belajar');
 
   const getRaporLaunchUrl = (targetPath = '') => {
     const token = tokenStorage.getToken() || 'sso-session-token';
@@ -40,6 +41,20 @@ export default function CivitasDashboard() {
     const encodedUser = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(userPayload)))) : '';
     const redirectParam = targetPath ? `&redirect=${encodeURIComponent(targetPath)}` : '';
     return `${raporBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}${redirectParam}`;
+  };
+
+  const getBelajarLaunchUrl = (targetPath = '') => {
+    const token = tokenStorage.getToken() || 'sso-session-token';
+    const userPayload = {
+      id: user?.id || user?.person_id || 'user-1',
+      username: user?.username || '',
+      fullName: user?.fullName || user?.full_name || '',
+      roleName: isKepalaSekolah ? 'KEPALA_SEKOLAH' : (role || 'GURU'),
+      nimNip: user?.nimNip || user?.nip || user?.nisn || '',
+    };
+    const encodedUser = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(userPayload)))) : '';
+    const redirectParam = targetPath ? `&redirect=${encodeURIComponent(targetPath)}` : '';
+    return `${belajarBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}${redirectParam}`;
   };
 
   const getPerpusLaunchUrl = () => {
@@ -280,8 +295,39 @@ export default function CivitasDashboard() {
         <h2 className="text-xs font-bold text-[#667085] uppercase tracking-wider mb-4 px-1">
           Layanan Aplikasi Civitas
         </h2>
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Menu 1: e-Rapor SPENSPRA */}
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
+          {/* Menu 1: Spenspra Belajar (LMS & CBT) */}
+          <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm hover:shadow-md hover:border-[#F2C94C] transition-all flex flex-col justify-between">
+            <div>
+              <div className="w-12 h-12 rounded-lg bg-[#FEF9E7] text-[#9A7B00] flex items-center justify-center mb-4">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+              </div>
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-[#172033] text-lg">Spenspra Belajar</h3>
+                <span className="text-[10px] font-semibold text-[#8B6E00] bg-[#FFFBEA] border border-[#F2C94C] px-2 py-0.5 rounded-full">
+                  LMS & CBT
+                </span>
+              </div>
+              <p className="text-sm text-[#667085] mt-1.5 leading-relaxed">
+                Platform pembelajaran daring, bank materi, penugasan digital, serta ujian CBT anti-cheat.
+              </p>
+            </div>
+            <div className="mt-6 pt-4 border-t border-[#E5E7EB]">
+              <a
+                href={getBelajarLaunchUrl()}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#2E7D5B] hover:bg-[#236348] active:bg-[#1A4C36] text-white py-2.5 px-4 text-sm font-semibold transition shadow-sm cursor-pointer"
+              >
+                <span>Buka Belajar & CBT</span>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            </div>
+          </div>
+
+          {/* Menu 2: e-Rapor SPENSPRA */}
           <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm hover:shadow-md hover:border-[#B9B0D2] transition-all flex flex-col justify-between">
             <div>
               <div className="w-12 h-12 rounded-lg bg-[#EDEAF5] text-[#4B3B78] flex items-center justify-center mb-4">
@@ -307,7 +353,7 @@ export default function CivitasDashboard() {
             </div>
           </div>
 
-          {/* Menu 2: e-Perpustakaan */}
+          {/* Menu 3: e-Perpustakaan */}
           <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm hover:shadow-md hover:border-[#A8CBDD] transition-all flex flex-col justify-between">
             <div>
               <div className="w-12 h-12 rounded-lg bg-[#E4F1F8] text-[#4F8FBB] flex items-center justify-center mb-4">
@@ -335,7 +381,7 @@ export default function CivitasDashboard() {
             </div>
           </div>
 
-          {/* Menu 3: Presensi Barcode */}
+          {/* Menu 4: Presensi Barcode */}
           <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
             <div>
               <div className="w-12 h-12 rounded-lg bg-[#FFF6D6] text-[#A97E0D] flex items-center justify-center mb-4">

@@ -203,15 +203,15 @@ func (u *useCase) Login(ctx context.Context, req domain.LoginRequest) (*domain.L
 	var aud []string
 	switch account.RoleName {
 	case "SUPER_ADMIN", "ADMIN", "KEPALA_SEKOLAH":
-		aud = []string{"sso", "erapor", "perpus"}
+		aud = []string{"sso", "erapor", "perpus", "elearning"}
 	case "ADMIN_PERPUS":
 		aud = []string{"sso", "perpus"}
 	case "SISWA":
-		aud = []string{"sso", "perpus"}
+		aud = []string{"sso", "perpus", "elearning"}
 	case "ADMIN_RAPOR", "ADMIN_ABSENSI", "GURU", "WALI_KELAS":
-		aud = []string{"sso", "erapor"}
+		aud = []string{"sso", "erapor", "elearning"}
 	default:
-		aud = []string{"sso", "erapor"}
+		aud = []string{"sso", "erapor", "elearning"}
 	}
 
 	expiresAt := time.Now().Add(7 * 24 * time.Hour)

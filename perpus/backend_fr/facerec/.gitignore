@@ -35,6 +35,12 @@ Thumbs.db
 # Build output
 bin/
 /users
+main.exe
 
-# Temporary ignore for init
-./
+# Logs and Caches
+*.log
+server_log.txt
+.gocache/
+.gocache_temp/
+.cache/
+tmp/

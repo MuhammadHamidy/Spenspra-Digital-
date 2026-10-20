@@ -21,7 +21,7 @@ export function getDynamicAppUrl(envVal, appSubdomain) {
     }
     const parts = hostname.split('.');
     if (parts.length >= 2) {
-      if (['sso', 'rapor', 'perpus'].includes(parts[0])) {
+      if (['sso', 'rapor', 'perpus', 'belajar'].includes(parts[0])) {
         parts[0] = appSubdomain;
       } else {
         parts.unshift(appSubdomain);

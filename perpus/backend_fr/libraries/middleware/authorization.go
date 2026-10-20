@@ -143,6 +143,7 @@ func (a *AuthorizationMiddleware) Authenticate(scopes ...string) fiber.Handler {
 				c.Locals(XExternalSubject, sub)
 				c.Locals("user_role", roleName)
 				c.Locals("full_name", fullName)
+				c.Locals("claims", claims)
 				c.Locals(XGroupKey, []string{})
 				return c.Next()
 			}

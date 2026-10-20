@@ -9,8 +9,10 @@
     "perpus/frontend_fr"
   ],
   "scripts": {
-    "sync:assets": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-shared-assets.ps1",
-    "sync:assets:sh": "bash scripts/sync-shared-assets.sh",
+    "dev:sso": "npm run dev --workspace=sso-frontend",
+    "dev:rapor": "npm run dev --workspace=rapor-frontend",
+    "dev:perpus": "npm run dev --workspace=perpus-frontend",
+    "sync:assets": "node shared/sync-assets.mjs",
     "docker:up": "docker compose --env-file .env.docker up -d",
     "docker:down": "docker compose --env-file .env.docker down",
     "docker:logs": "docker compose --env-file .env.docker logs -f",

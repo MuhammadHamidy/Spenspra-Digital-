@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: ${DB_USER:-user}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-change-me}
       POSTGRES_DB: ${SSO_DB_NAME:-presdig_sso}
-      POSTGRES_MULTIPLE_DATABASES: "${SSO_DB_NAME:-presdig_sso},${RAPOR_DB_NAME:-presdig_rapor},${PERPUS_DB_NAME:-perpusdig}"
+      POSTGRES_MULTIPLE_DATABASES: "${SSO_DB_NAME:-presdig_sso},${RAPOR_DB_NAME:-presdig_rapor},${PERPUS_DB_NAME:-perpusdig},${ELEARNING_DB_NAME:-presdig_elearning}"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./docker/postgres/init-multiple-databases.sh:/docker-entrypoint-initdb.d/init-multiple-databases.sh:ro
@@ -317,6 +317,100 @@ services:
           memory: 768M
     networks: [spenspra]
 
+  elearning-db-init:
+    image: postgres:15-alpine
+    container_name: spenspra-elearning-db-init
+    environment:
+      PGPASSWORD: ${DB_PASSWORD:-change-me}
+    command:
+      - "sh"
+      - "-c"
+      - >
+        psql -h postgres -U ${DB_USER:-user} -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = '${ELEARNING_DB_NAME:-presdig_elearning}'" | grep -q 1 ||
+        psql -h postgres -U ${DB_USER:-user} -d postgres -c "CREATE DATABASE ${ELEARNING_DB_NAME:-presdig_elearning};"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [spenspra]
+
+  elearning-migrate:
+    image: migrate/migrate
+    container_name: spenspra-elearning-migrate
+    volumes:
+      - ./elearning/backend_fr/elearning/migrations:/migrations:ro
+    command: ["-path=/migrations", "-database", "postgres://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${ELEARNING_DB_NAME:-presdig_elearning}?sslmode=disable", "up"]
+    depends_on:
+      elearning-db-init:
+        condition: service_completed_successfully
+    networks: [spenspra]
+
+  elearning-api:
+    build:
+      context: ./elearning/backend_fr
+      dockerfile: elearning/Dockerfile
+    container_name: spenspra-elearning-api
+    environment:
+      APP_NAME: elearning
+      APP_ENV: production
+      APP_PORT: 8080
+      APP_POSTGRES_URL: postgres://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${ELEARNING_DB_NAME:-presdig_elearning}?sslmode=disable
+      APP_REDIS_ADDRESS: redis:6379
+      APP_REDIS_PASSWORD: ""
+      APP_REDIS_DB: 3
+      APP_LOG_LEVEL: info
+      APP_LOG_FORMAT: json
+      APP_SERVICE_NAME: elearning
+      SSO_API_URL: http://sso-api:8080
+      JWT_PUBLIC_KEY_PATH: /keys/jwt_public.pem
+    ports:
+      - "${ELEARNING_API_PORT:-8084}:8080"
+    volumes:
+      - ./shared/keys/jwt_public.pem:/keys/jwt_public.pem:ro
+    depends_on:
+      elearning-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 384M
+    networks: [spenspra]
+
+  elearning-frontend:
+    build:
+      context: ./elearning/frontend_fr
+      dockerfile: Dockerfile
+      target: final
+      args:
+        NEXT_PUBLIC_API_URL: ${ELEARNING_PUBLIC_API_URL:-https://belajar.spenspra.com/api}
+        NEXT_PUBLIC_SSO_LOGIN_URL: ${SSO_LOGIN_URL:-https://sso.spenspra.com/login}
+        NEXT_PUBLIC_ELEARNING_URL: ${ELEARNING_PUBLIC_URL:-https://belajar.spenspra.com}
+    container_name: spenspra-elearning-frontend
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=512"
+      HOSTNAME: "0.0.0.0"
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: ${ELEARNING_PUBLIC_API_URL:-https://belajar.spenspra.com/api}
+      NEXT_PUBLIC_SSO_LOGIN_URL: ${SSO_LOGIN_URL:-https://sso.spenspra.com/login}
+      NEXT_PUBLIC_ELEARNING_URL: ${ELEARNING_PUBLIC_URL:-https://belajar.spenspra.com}
+      DATABASE_URL: postgresql://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${ELEARNING_DB_NAME:-presdig_elearning}?schema=public
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env.docker}
+    ports:
+      - "${ELEARNING_PORT:-3004}:3000"
+    command: ["node", "server.js"]
+    depends_on:
+      elearning-api:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 768M
+    networks: [spenspra]
+
   redis:
     image: redis:7-alpine
     container_name: spenspra-redis
@@ -345,19 +439,6 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
       - ./shared/assets:/var/www/shared/assets:ro
-    depends_on:
-      sso-frontend:
-        condition: service_started
-      rapor-frontend:
-        condition: service_started
-      perpus-frontend:
-        condition: service_started
-      sso-api:
-        condition: service_started
-      rapor-api:
-        condition: service_started
-      perpus-api:
-        condition: service_started
     deploy:
       resources:
         limits:
