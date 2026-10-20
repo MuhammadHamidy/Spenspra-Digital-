@@ -1,8 +1,0 @@
-=== RUN   TestResolveBarcode_Success
---- PASS: TestResolveBarcode_Success (0.01s)
-=== RUN   TestResolveBarcode_RevokedOrInvalid
---- PASS: TestResolveBarcode_RevokedOrInvalid (0.00s)
-=== RUN   TestResolveBarcode_EmptyToken
---- PASS: TestResolveBarcode_EmptyToken (0.00s)
-PASS
-ok  	github.com/facerec/facerec-be/facerec/libraries/ssoclient	2.064s

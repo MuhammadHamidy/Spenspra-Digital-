@@ -33,6 +33,7 @@ type UseCase interface {
 
 	// Students Master
 	GetStudents(ctx context.Context, className string) ([]*Student, error)
+	GetRombel(ctx context.Context) ([]string, error)
 
 	// Master SSO Synchronization
 	SyncFromSSO(ctx context.Context) (map[string]int, error)

@@ -3,6 +3,7 @@ package postgresql
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 
@@ -530,6 +531,41 @@ func (r *repository) FindAllStudents(ctx context.Context, className string) ([]*
 
 	err := q.Find(&list).Error
 	return list, err
+}
+
+func (r *repository) FindAllRombel(ctx context.Context) ([]string, error) {
+	var rombelFromAccounts []string
+	_ = r.db.WithContext(ctx).Table("accounts").
+		Where("class_name IS NOT NULL AND class_name != ''").
+		Distinct("class_name").
+		Pluck("class_name", &rombelFromAccounts).Error
+
+	var rombelFromClasses []string
+	_ = r.db.WithContext(ctx).Table("classes").
+		Where("class_code IS NOT NULL AND class_code != ''").
+		Distinct("class_code").
+		Pluck("class_code", &rombelFromClasses).Error
+
+	classSet := make(map[string]bool)
+	for _, c := range rombelFromAccounts {
+		clean := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(c, "Kelas"), "kelas"))
+		if clean != "" {
+			classSet[clean] = true
+		}
+	}
+	for _, c := range rombelFromClasses {
+		clean := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(c, "Kelas"), "kelas"))
+		if clean != "" {
+			classSet[clean] = true
+		}
+	}
+
+	var result []string
+	for k := range classSet {
+		result = append(result, k)
+	}
+	sort.Strings(result)
+	return result, nil
 }
 
 func (r *repository) UpsertMasterPerson(ctx context.Context, personID, personType, fullName, nimNip, nisn, email, phone, className string, isActive bool) error {

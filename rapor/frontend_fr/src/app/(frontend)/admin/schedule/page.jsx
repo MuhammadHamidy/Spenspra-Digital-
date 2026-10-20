@@ -8,12 +8,11 @@ import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApi
 import Pagination from '@/components/Pagination';
 import ConfirmModal from '@/components/ConfirmModal';
 
-const KELAS_OPTIONS = ['7A', '7B', '8A', '8B', '9A', '9B'];
-
 export default function SubjectAssignmentPage() {
   const [classes, setClasses] = useState([]);
   const [courses, setCourses] = useState([]);
   const [teachers, setTeachers] = useState([]);
+  const [masterRombel, setMasterRombel] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Filters
@@ -29,6 +28,8 @@ export default function SubjectAssignmentPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [formClassCode, setFormClassCode] = useState('7A');
+  const [isCustomClass, setIsCustomClass] = useState(false);
+  const [customClassInput, setCustomClassInput] = useState('');
   const [deleteConfirmItem, setDeleteConfirmItem] = useState(null);
   const [formCourseId, setFormCourseId] = useState('');
   const [formTeacherId, setFormTeacherId] = useState('');
@@ -38,14 +39,16 @@ export default function SubjectAssignmentPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [classList, courseList, teacherList] = await Promise.all([
+      const [classList, courseList, teacherList, rombelList] = await Promise.all([
         classApiAdapter.getAll(),
         courseApiAdapter.getAll(),
         accountApiAdapter.getTeachers(),
+        classApiAdapter.getMasterRombel(),
       ]);
       setClasses(Array.isArray(classList) ? classList : []);
       setCourses(Array.isArray(courseList) ? courseList : []);
       setTeachers(Array.isArray(teacherList) ? teacherList : []);
+      setMasterRombel(Array.isArray(rombelList) ? rombelList : []);
     } catch (err) {
       console.warn('Gagal memuat data pengampu:', err);
     } finally {
@@ -61,7 +64,7 @@ export default function SubjectAssignmentPage() {
     setIsSyncingSSO(true);
     try {
       const res = await accountApiAdapter.syncFromSSO();
-      alert(res?.message || 'Data master guru & siswa berhasil disinkronkan langsung dari SSO!');
+      alert(res?.message || 'Data master guru, siswa & rombel berhasil disinkronkan langsung dari SSO!');
       await loadData();
     } catch (err) {
       alert(err.message || 'Gagal menyinkronkan data dari SSO.');
@@ -70,9 +73,26 @@ export default function SubjectAssignmentPage() {
     }
   };
 
+  // Distinct classes available from SSO master rombel, students, and existing assignments
+  const availableClasses = useMemo(() => {
+    const set = new Set();
+    masterRombel.forEach((r) => set.add(r));
+    classes.forEach((c) => {
+      if (c.class_code) set.add(c.class_code.replace(/^Kelas\s*/i, '').trim());
+    });
+    const list = Array.from(set).filter(Boolean);
+    if (list.length === 0) {
+      return ['7A', '7B', '7C', '7D', '8A', '8B', '8C', '8D', '9A', '9B', '9C', '9D'];
+    }
+    return list.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+  }, [masterRombel, classes]);
+
   const openCreateModal = () => {
     setEditingItem(null);
-    setFormClassCode(selectedClassFilter !== 'ALL' ? selectedClassFilter : '7A');
+    const initialClass = selectedClassFilter !== 'ALL' ? selectedClassFilter : (availableClasses[0] || '7A');
+    setFormClassCode(initialClass);
+    setIsCustomClass(false);
+    setCustomClassInput('');
     setFormCourseId(courses[0]?.id || '');
     setFormTeacherId(teachers[0]?.id || '');
     setFormError('');
@@ -81,7 +101,15 @@ export default function SubjectAssignmentPage() {
 
   const openEditModal = (item) => {
     setEditingItem(item);
-    setFormClassCode(item.class_code || '7A');
+    const itemCode = (item.class_code || '').replace(/^Kelas\s*/i, '').trim() || '7A';
+    setFormClassCode(itemCode);
+    if (!availableClasses.includes(itemCode)) {
+      setIsCustomClass(true);
+      setCustomClassInput(itemCode);
+    } else {
+      setIsCustomClass(false);
+      setCustomClassInput('');
+    }
     setFormCourseId(item.course_id || '');
     setFormTeacherId(item.teacher_id || item.dosen_id || '');
     setFormError('');
@@ -90,7 +118,8 @@ export default function SubjectAssignmentPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formClassCode || !formCourseId || !formTeacherId) {
+    const finalClassCode = isCustomClass ? customClassInput.trim() : formClassCode.trim();
+    if (!finalClassCode || !formCourseId || !formTeacherId) {
       setFormError('Rombel kelas, mata pelajaran, dan guru pengampu wajib dipilih.');
       return;
     }
@@ -100,7 +129,7 @@ export default function SubjectAssignmentPage() {
 
     try {
       const payload = {
-        class_code: formClassCode.trim(),
+        class_code: finalClassCode,
         course_id: formCourseId,
         teacher_id: formTeacherId,
         academic_year: '2025/2026',
@@ -136,12 +165,6 @@ export default function SubjectAssignmentPage() {
       setDeleteConfirmItem(null);
     }
   };
-
-  // Distinct classes available
-  const availableClasses = useMemo(() => {
-    const list = [...new Set(classes.map((c) => c.class_code).filter(Boolean))];
-    return list.sort();
-  }, [classes]);
 
   // Filtered List
   const filteredClasses = useMemo(() => {
@@ -255,7 +278,7 @@ export default function SubjectAssignmentPage() {
           >
             Semua Rombel ({classes.length})
           </button>
-          {(availableClasses.length > 0 ? availableClasses : KELAS_OPTIONS).map((cls) => {
+          {availableClasses.map((cls) => {
             const count = classes.filter((c) => c.class_code === cls).length;
             return (
               <button
@@ -420,21 +443,70 @@ export default function SubjectAssignmentPage() {
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Rombongan Belajar (Kelas) <span className="text-red-500">*</span>
             </label>
-            <select
-              required
-              value={formClassCode}
-              onChange={(e) => setFormClassCode(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
-            >
-              {KELAS_OPTIONS.map((cls) => (
-                <option key={cls} value={cls}>
-                  Kelas {cls}
-                </option>
-              ))}
-            </select>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Pilih kelas siswa tempat mata pelajaran ini diajarkan.
-            </p>
+            {!isCustomClass ? (
+              <div className="space-y-1.5">
+                <select
+                  required
+                  value={formClassCode}
+                  onChange={(e) => {
+                    if (e.target.value === '__CUSTOM__') {
+                      setIsCustomClass(true);
+                      setCustomClassInput('');
+                    } else {
+                      setFormClassCode(e.target.value);
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                >
+                  {availableClasses.map((cls) => (
+                    <option key={cls} value={cls}>
+                      Kelas {cls}
+                    </option>
+                  ))}
+                  <option value="__CUSTOM__">➕ Tulis Rombel Baru / Manual...</option>
+                </select>
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span>Daftar kelas otomatis tersinkron dari Master Data SSO & Siswa.</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomClass(true);
+                      setCustomClassInput('');
+                    }}
+                    className="text-blue-600 hover:underline font-semibold cursor-pointer"
+                  >
+                    + Ketik Manual
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ketik rombel (cth: 7C atau VII-A)"
+                    value={customClassInput}
+                    onChange={(e) => setCustomClassInput(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-white border border-blue-400 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomClass(false);
+                      setCustomClassInput('');
+                    }}
+                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg cursor-pointer"
+                  >
+                    Pilih dari Daftar
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Ketik kode rombel sesuai kelas yang ada di SSO atau sekolah.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Mata Pelajaran */}

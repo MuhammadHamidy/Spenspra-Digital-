@@ -50,6 +50,7 @@ type Repository interface {
 
 	// Students Master
 	FindAllStudents(ctx context.Context, className string) ([]*Student, error)
+	FindAllRombel(ctx context.Context) ([]string, error)
 
 	// Master SSO Synchronization
 	UpsertMasterPerson(ctx context.Context, personID, personType, fullName, nimNip, nisn, email, phone, className string, isActive bool) error

@@ -6,8 +6,6 @@ import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApi
 import { classApiAdapter } from '@/lib/features/classes/infrastructure/classApiAdapter';
 import Pagination from '@/components/Pagination';
 
-const KELAS_OPTIONS = ['7A', '7B', '8A', '8B', '9A', '9B'];
-
 export default function MasterTeachersPage() {
   const [teachers, setTeachers] = useState([]);
   const [availableClasses, setAvailableClasses] = useState([]);
@@ -38,17 +36,19 @@ export default function MasterTeachersPage() {
   const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
   const [passwordNotice, setPasswordNotice] = useState(null);
 
+  const [isCustomWalas, setIsCustomWalas] = useState(false);
+  const [customWalasInput, setCustomWalasInput] = useState('');
+
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [teacherList, classList] = await Promise.all([
+      const [teacherList, rombelList] = await Promise.all([
         accountApiAdapter.getTeachers(),
-        classApiAdapter.getAll().catch(() => []),
+        classApiAdapter.getMasterRombel(),
       ]);
       setTeachers(Array.isArray(teacherList) ? teacherList : []);
-      if (Array.isArray(classList) && classList.length > 0) {
-        const unique = [...new Set(classList.map((c) => (c.class_code || c.name || '').replace(/^Kelas\s*/i, '').trim()).filter(Boolean))].sort();
-        if (unique.length > 0) setAvailableClasses(unique);
+      if (Array.isArray(rombelList) && rombelList.length > 0) {
+        setAvailableClasses(rombelList);
       }
     } catch (err) {
       console.warn('Gagal memuat data guru:', err);
@@ -465,18 +465,76 @@ export default function MasterTeachersPage() {
             <p className="text-[11px] text-amber-800/80 mb-2">
               Tentukan kelas binaan jika guru ini ditugaskan sebagai wali kelas untuk lembar rekap rapor dan cetak PDF.
             </p>
-            <select
-              value={formWalas}
-              onChange={(e) => setFormWalas(e.target.value)}
-              className="w-full px-3 py-2 bg-white border border-amber-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-600"
-            >
-              <option value="">- Bukan Wali Kelas -</option>
-              {(availableClasses.length > 0 ? availableClasses : KELAS_OPTIONS).map((cls) => (
-                <option key={cls} value={cls}>
-                  Wali Kelas {cls}
-                </option>
-              ))}
-            </select>
+            {!isCustomWalas ? (
+              <div className="space-y-1.5">
+                <select
+                  value={formWalas}
+                  onChange={(e) => {
+                    if (e.target.value === '__CUSTOM__') {
+                      setIsCustomWalas(true);
+                      setCustomWalasInput('');
+                    } else {
+                      setFormWalas(e.target.value);
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-white border border-amber-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-600"
+                >
+                  <option value="">- Bukan Wali Kelas -</option>
+                  {formWalas && !availableClasses.includes(formWalas) && (
+                    <option value={formWalas}>Wali Kelas {formWalas}</option>
+                  )}
+                  {availableClasses.map((cls) => (
+                    <option key={cls} value={cls}>
+                      Wali Kelas {cls}
+                    </option>
+                  ))}
+                  <option value="__CUSTOM__">➕ Tentukan Rombel Baru / Manual...</option>
+                </select>
+                <div className="flex items-center justify-between text-[11px] text-amber-800/80">
+                  <span>Daftar kelas tersinkron dari Master SSO & Siswa.</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomWalas(true);
+                      setCustomWalasInput('');
+                    }}
+                    className="text-amber-900 underline font-semibold cursor-pointer"
+                  >
+                    + Ketik Manual
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Ketik rombel walas (cth: 7C atau VII-A)"
+                    value={customWalasInput}
+                    onChange={(e) => {
+                      setCustomWalasInput(e.target.value);
+                      setFormWalas(e.target.value.trim());
+                    }}
+                    className="flex-1 px-3 py-2 bg-white border border-amber-400 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomWalas(false);
+                      setCustomWalasInput('');
+                      setFormWalas('');
+                    }}
+                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg cursor-pointer"
+                  >
+                    Pilih dari Daftar
+                  </button>
+                </div>
+                <p className="text-[11px] text-amber-800/80">
+                  Ketik kode rombel sesuai kelas yang ada di SSO atau sekolah.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Info Penugasan Mata Pelajaran */}

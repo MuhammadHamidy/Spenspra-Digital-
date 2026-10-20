@@ -46,6 +46,7 @@ func (h *SchoolAttendanceHandler) RegisterRoutes(app *fiber.App) {
 
 	// Kelola Siswa, Guru & Penetapan Walas (e-Rapor)
 	api.Get("/students", h.GetStudents)
+	api.Get("/rombel", h.GetRombel)
 	api.Get("/teachers", h.GetTeachers)
 	api.Post("/teachers", h.CreateTeacher)
 	api.Put("/teachers/:id", h.UpdateTeacher)
@@ -283,6 +284,14 @@ func (h *SchoolAttendanceHandler) GetStudents(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
 	}
 	return c.Status(http.StatusOK).JSON(responses.Success(students, "Daftar siswa berhasil dimuat"))
+}
+
+func (h *SchoolAttendanceHandler) GetRombel(c *fiber.Ctx) error {
+	list, err := h.useCase.GetRombel(c.Context())
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
+	}
+	return c.Status(http.StatusOK).JSON(responses.Success(list, "Daftar rombel berhasil dimuat"))
 }
 
 func (h *SchoolAttendanceHandler) SyncFromSSO(c *fiber.Ctx) error {

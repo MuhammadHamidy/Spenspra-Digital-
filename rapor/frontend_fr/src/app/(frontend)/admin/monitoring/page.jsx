@@ -11,6 +11,7 @@ import { exportToExcelXml } from '@/lib/excelExport';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 import { attendanceApi } from '@/lib/attendanceApi';
 import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
+import { classApiAdapter } from '@/lib/features/classes/infrastructure/classApiAdapter';
 
 function AdminMonitoringContent() {
   const searchParams = useSearchParams();
@@ -85,7 +86,19 @@ function AdminMonitoringContent() {
         clsList = [...new Set(resSummary.data.classes.map((c) => c.class_name).filter(Boolean))].sort();
       }
       if (clsList.length === 0) {
-        clsList = ['7A', '7B', '8A', '8B', '9A', '9B'];
+        try {
+          const masterRombel = await classApiAdapter.getMasterRombel();
+          if (Array.isArray(masterRombel) && masterRombel.length > 0) {
+            clsList = masterRombel;
+          }
+        } catch {}
+      }
+      if (clsList.length === 0) {
+        clsList = [
+          '7A', '7B', '7C', '7D', '7E', '7F', '7G', '7H', '7I', '7J',
+          '8A', '8B', '8C', '8D', '8E', '8F', '8G', '8H', '8I', '8J',
+          '9A', '9B', '9C', '9D', '9E', '9F', '9G', '9H', '9I', '9J'
+        ];
       }
       setAvailableClasses(clsList);
 
@@ -156,7 +169,11 @@ function AdminMonitoringContent() {
       const finalPrincipalName = principalName?.trim() || user?.fullName || user?.full_name || 'Kepala Sekolah SMPN 1 Prambon';
       const finalPrincipalNip = principalNip?.trim() || user?.nimNip || user?.nip || '';
 
-      const allTargetClasses = availableClasses.length > 0 ? availableClasses : ['7A', '7B', '8A', '8B', '9A', '9B'];
+      const allTargetClasses = availableClasses.length > 0 ? availableClasses : [
+        '7A', '7B', '7C', '7D', '7E', '7F', '7G', '7H', '7I', '7J',
+        '8A', '8B', '8C', '8D', '8E', '8F', '8G', '8H', '8I', '8J',
+        '9A', '9B', '9C', '9D', '9E', '9F', '9G', '9H', '9I', '9J'
+      ];
       const targetClasses = selectedClassForEndorsement === 'ALL'
         ? allTargetClasses
         : [selectedClassForEndorsement];
@@ -316,7 +333,11 @@ function AdminMonitoringContent() {
 
   const ALL_CLASS_ROSTER = useMemo(() => {
     if (availableClasses.length > 0) return availableClasses;
-    return ['7A', '7B', '8A', '8B', '9A', '9B'];
+    return [
+      '7A', '7B', '7C', '7D', '7E', '7F', '7G', '7H', '7I', '7J',
+      '8A', '8B', '8C', '8D', '8E', '8F', '8G', '8H', '8I', '8J',
+      '9A', '9B', '9C', '9D', '9E', '9F', '9G', '9H', '9I', '9J'
+    ];
   }, [availableClasses]);
 
   // Kalkulasi Matriks Kelengkapan Rombel x Mapel (Waka Kurikulum)

@@ -166,3 +166,45 @@ func (c *Client) FetchAllPeople(ctx context.Context, personType string) ([]*Pers
 
 	return listResp.Data, nil
 }
+
+type SSOClass struct {
+	ID        string `json:"id"`
+	ClassCode string `json:"class_code"`
+	Room      string `json:"room"`
+}
+
+type ssoClassListResponse struct {
+	Success bool        `json:"success"`
+	Data    []*SSOClass `json:"data"`
+	Message string      `json:"message"`
+}
+
+// FetchAllClasses mengambil data master kelas/rombel dari SSO.
+func (c *Client) FetchAllClasses(ctx context.Context) ([]*SSOClass, error) {
+	targetURL := c.baseURL + "/api/school/classes"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("ssoclient: gagal membuat request: %w", err)
+	}
+	if c.apiKey != "" {
+		req.Header.Set("X-Service-Key", c.apiKey)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("ssoclient: gagal menghubungi SSO (%s): %w", c.baseURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ssoclient: SSO mengembalikan status %d", resp.StatusCode)
+	}
+
+	var listResp ssoClassListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return nil, fmt.Errorf("ssoclient: gagal parse respons SSO: %w", err)
+	}
+
+	return listResp.Data, nil
+}
+

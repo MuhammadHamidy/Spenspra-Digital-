@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -407,6 +408,30 @@ func (u *useCase) GetStudents(ctx context.Context, className string) ([]*domain.
 	}
 
 	return students, nil
+}
+
+func (u *useCase) GetRombel(ctx context.Context) ([]string, error) {
+	rombel, err := u.repo.FindAllRombel(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if u.ssoClient != nil {
+		if ssoClasses, err := u.ssoClient.FetchAllClasses(ctx); err == nil && len(ssoClasses) > 0 {
+			classMap := make(map[string]bool)
+			for _, r := range rombel {
+				classMap[r] = true
+			}
+			for _, sc := range ssoClasses {
+				clean := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(sc.ClassCode, "Kelas"), "kelas"))
+				if clean != "" && !classMap[clean] {
+					rombel = append(rombel, clean)
+					classMap[clean] = true
+				}
+			}
+			sort.Strings(rombel)
+		}
+	}
+	return rombel, nil
 }
 
 func (u *useCase) SyncFromSSO(ctx context.Context) (map[string]int, error) {
