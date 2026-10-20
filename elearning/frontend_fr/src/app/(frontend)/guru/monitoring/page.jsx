@@ -11,7 +11,7 @@ import { tokenStorage } from '@/lib/common/tokenStorage';
 export default function LiveProctoringMonitoringPage() {
   const [user, setUser] = useState(null);
   const [exams, setExams] = useState([]);
-  const [selectedExamId, setSelectedExamId] = useState('cbt-001');
+  const [selectedExamId, setSelectedExamId] = useState('');
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeStudentAudit, setActiveStudentAudit] = useState(null);

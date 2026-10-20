@@ -35,284 +35,52 @@ async function fetchJson(endpoint, options = {}) {
   }
 }
 
-// Fallback initial seeds for preview / initial state
-const INITIAL_MATERIALS = [
-  {
-    id: 'mat-001',
-    title: 'Bab 1: Bilangan Bulat dan Pecahan',
-    subject: 'Matematika',
-    subjectCode: 'MTK',
-    className: '7A',
-    teacherName: 'Budi Santoso, S.Pd.',
-    type: 'PDF',
-    description: 'Modul komprehensif operasi hitung bilangan bulat positif, negatif, dan pecahan serta sifat-sifat komutatif dan distributif.',
-    fileUrl: '/docs/modul-matematika-bab1.pdf',
-    fileName: 'Modul_Bilangan_Bulat_7A.pdf',
-    fileSize: '2.4 MB',
-    createdAt: '2026-10-15T08:00:00Z',
-    viewsCount: 42,
-  },
-  {
-    id: 'mat-002',
-    title: 'Teks Deskripsi dan Kaidah Kebahasaan',
-    subject: 'Bahasa Indonesia',
-    subjectCode: 'BIN',
-    className: '7A',
-    teacherName: 'Siti Rahmawati, M.Pd.',
-    type: 'VIDEO',
-    description: 'Video penjelasan struktur teks deskripsi, identifikasi objek, majas personifikasi, dan contoh penulisan deskripsi alam.',
-    fileUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-    videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    createdAt: '2026-10-16T09:30:00Z',
-    viewsCount: 38,
-  },
-  {
-    id: 'mat-003',
-    title: 'Sistem Klasifikasi Makhluk Hidup 5 Kingdom',
-    subject: 'Ilmu Pengetahuan Alam',
-    subjectCode: 'IPA',
-    className: '7A',
-    teacherName: 'Dra. Endang Wulandari',
-    type: 'SLIDE',
-    description: 'Slide presentasi pengelompokan Monera, Protista, Fungi, Plantae, dan Animalia beserta ciri khas mikroskopisnya.',
-    fileUrl: '/docs/ipa-klasifikasi-makhluk-hidup.pptx',
-    fileName: 'Slide_Klasifikasi_Makhluk_Hidup.pptx',
-    fileSize: '5.1 MB',
-    createdAt: '2026-10-18T10:15:00Z',
-    viewsCount: 29,
-  },
-  {
-    id: 'mat-004',
-    title: 'Grammar Focus: Simple Present Tense & Daily Routine',
-    subject: 'Bahasa Inggris',
-    subjectCode: 'BIG',
-    className: '7A',
-    teacherName: 'Ahmad Fauzi, S.Pd.',
-    type: 'PDF',
-    description: 'Rangkuman pola kalimat verbal dan nominal, time signals, latihan soal dialog deskripsi rutinitas sehari-hari.',
-    fileUrl: '/docs/english-simple-present.pdf',
-    fileName: 'English_Simple_Present_Tense.pdf',
-    fileSize: '1.8 MB',
-    createdAt: '2026-10-19T07:45:00Z',
-    viewsCount: 51,
-  },
-];
+const INITIAL_MATERIALS = [];
 
-const INITIAL_ASSIGNMENTS = [
-  {
-    id: 'tug-001',
-    title: 'Latihan Operasi Campuran Bilangan Bulat',
-    subject: 'Matematika',
-    subjectCode: 'MTK',
-    className: '7A',
-    teacherName: 'Budi Santoso, S.Pd.',
-    dueDate: '2026-10-25T23:59:00Z',
-    maxScore: 100,
-    description: 'Kerjakan 10 soal uraian pada lembar kerja terlampir. Tuliskan langkah pengerjaan dengan rapi, foto/scan ke format PDF, lalu unggah ke sistem.',
-    attachmentUrl: '/docs/tugas-matematika-bilangan.pdf',
-    attachmentName: 'Lembar_Kerja_Operasi_Bilangan.pdf',
-    totalStudents: 32,
-    submittedCount: 24,
-    status: 'ACTIVE',
-  },
-  {
-    id: 'tug-002',
-    title: 'Menulis Teks Deskripsi Objek Wisata Lokal',
-    subject: 'Bahasa Indonesia',
-    subjectCode: 'BIN',
-    className: '7A',
-    teacherName: 'Siti Rahmawati, M.Pd.',
-    dueDate: '2026-10-23T15:00:00Z',
-    maxScore: 100,
-    description: 'Tuliskan teks deskripsi minimal 3 paragraf mengenai tempat wisata atau tempat bersejarah di sekitar wilayah Prambon/Nganjuk/Jawa Timur.',
-    attachmentUrl: null,
-    totalStudents: 32,
-    submittedCount: 28,
-    status: 'ACTIVE',
-  },
-  {
-    id: 'tug-003',
-    title: 'Laporan Pengamatan Struktur Daun & Sel',
-    subject: 'Ilmu Pengetahuan Alam',
-    subjectCode: 'IPA',
-    className: '7A',
-    teacherName: 'Dra. Endang Wulandari',
-    dueDate: '2026-10-18T23:59:00Z',
-    maxScore: 100,
-    description: 'Unggah hasil foto mikroskop dan analisis perbedaan sel stomata pada daun monokotil dan dikotil.',
-    attachmentUrl: null,
-    totalStudents: 32,
-    submittedCount: 31,
-    status: 'COMPLETED',
-  },
-];
+const INITIAL_ASSIGNMENTS = [];
 
-const INITIAL_EXAMS = [
-  {
-    id: 'cbt-001',
-    title: 'Penilaian Tengah Semester (PTS) Matematika 7',
-    subject: 'Matematika',
-    subjectCode: 'MTK',
-    className: '7A',
-    teacherName: 'Budi Santoso, S.Pd.',
-    token: 'MAT7A1',
-    durationMinutes: 60,
-    totalQuestions: 15,
-    maxViolations: 3,
-    startTime: '2026-10-20T07:30:00Z',
-    endTime: '2026-10-25T16:00:00Z',
-    isActive: true,
-    status: 'ACTIVE',
-    description: 'Ujian e-Learning berbasis CBT dengan pengawasan Anti-Cheat proctoring terintegrasi. Buka tab baru atau keluar jendela browser akan dicatat otomatis sebagai pelanggaran!',
-  },
-  {
-    id: 'cbt-002',
-    title: 'Kuis Terjadwal: Klasifikasi Makhluk Hidup',
-    subject: 'Ilmu Pengetahuan Alam',
-    subjectCode: 'IPA',
-    className: '7A',
-    teacherName: 'Dra. Endang Wulandari',
-    token: 'IPA7A2',
-    durationMinutes: 45,
-    totalQuestions: 10,
-    maxViolations: 2,
-    startTime: '2026-10-21T08:00:00Z',
-    endTime: '2026-10-26T17:00:00Z',
-    isActive: true,
-    status: 'ACTIVE',
-    description: 'Kuis pemahaman materi ciri dan taksonomi makhluk hidup. Dilarang berpindah aplikasi saat pengerjaan berlangsung.',
-  },
-  {
-    id: 'cbt-003',
-    title: 'Simulasi CBT Ujian Sekolah Bahasa Inggris',
-    subject: 'Bahasa Inggris',
-    subjectCode: 'BIG',
-    className: '7A',
-    teacherName: 'Ahmad Fauzi, S.Pd.',
-    token: 'BIGSIM',
-    durationMinutes: 30,
-    totalQuestions: 10,
-    maxViolations: 3,
-    startTime: '2026-10-22T08:00:00Z',
-    endTime: '2026-10-28T18:00:00Z',
-    isActive: true,
-    status: 'UPCOMING',
-    description: 'Simulasi ujian digital untuk latihan navigasi soal, ragu-ragu, dan ketahanan sistem proteksi layar ujian.',
-  },
-];
+const INITIAL_EXAMS = [];
 
-const INITIAL_QUESTIONS = {
-  'cbt-001': [
-    {
-      id: 'q-101',
-      questionNumber: 1,
-      type: 'MCQ',
-      questionText: 'Hasil dari operasi hitung (-12) + 25 - (-8) adalah ...',
-      options: [
-        { key: 'A', text: '5' },
-        { key: 'B', text: '21' },
-        { key: 'C', text: '29' },
-        { key: 'D', text: '45' },
-      ],
-      correctOption: 'C',
-    },
-    {
-      id: 'q-102',
-      questionNumber: 2,
-      type: 'MCQ',
-      questionText: 'Suhu di dalam lemari es mula-mula adalah -4°C. Ketika listrik padam selama 3 jam, suhu naik sebesar 2°C setiap 30 menit. Suhu lemari es saat listrik menyala kembali adalah ...',
-      options: [
-        { key: 'A', text: '8°C' },
-        { key: 'B', text: '6°C' },
-        { key: 'C', text: '12°C' },
-        { key: 'D', text: '-2°C' },
-      ],
-      correctOption: 'A',
-    },
-    {
-      id: 'q-103',
-      questionNumber: 3,
-      type: 'MCQ',
-      questionText: 'Bentuk paling sederhana dari pecahan 72 / 108 adalah ...',
-      options: [
-        { key: 'A', text: '1 / 2' },
-        { key: 'B', text: '2 / 3' },
-        { key: 'C', text: '3 / 4' },
-        { key: 'D', text: '4 / 5' },
-      ],
-      correctOption: 'B',
-    },
-    {
-      id: 'q-104',
-      questionNumber: 4,
-      type: 'MCQ',
-      questionText: 'FPB dan KPK dari bilangan 24, 36, dan 48 berturut-turut adalah ...',
-      options: [
-        { key: 'A', text: '12 dan 144' },
-        { key: 'B', text: '6 dan 144' },
-        { key: 'C', text: '12 dan 72' },
-        { key: 'D', text: '24 dan 288' },
-      ],
-      correctOption: 'A',
-    },
-    {
-      id: 'q-105',
-      questionNumber: 5,
-      type: 'MCQ',
-      questionText: 'Jika x = -3 dan y = 5, maka nilai dari 2x² - 3y + 4 adalah ...',
-      options: [
-        { key: 'A', text: '7' },
-        { key: 'B', text: '11' },
-        { key: 'C', text: '15' },
-        { key: 'D', text: '-11' },
-      ],
-      correctOption: 'A',
-    },
-    {
-      id: 'q-106',
-      questionNumber: 6,
-      type: 'ESSAY',
-      questionText: 'Sebuah taman berbentuk persegi panjang memiliki panjang (3x + 4) meter dan lebar (2x - 1) meter. Tuliskan rumus keliling taman tersebut dalam bentuk aljabar dan hitung kelilingnya jika x = 6!',
-      options: [],
-      correctOption: '',
-    },
-  ],
-  'cbt-002': [
-    {
-      id: 'q-201',
-      questionNumber: 1,
-      type: 'MCQ',
-      questionText: 'Organisme yang memiliki dinding sel berupa zat kitin dan tidak berklorofil dikelompokkan ke dalam kingdom ...',
-      options: [
-        { key: 'A', text: 'Monera' },
-        { key: 'B', text: 'Protista' },
-        { key: 'C', text: 'Fungi (Jamur)' },
-        { key: 'D', text: 'Plantae' },
-      ],
-      correctOption: 'C',
-    },
-    {
-      id: 'q-202',
-      questionNumber: 2,
-      type: 'MCQ',
-      questionText: 'Urutan takson tumbuhan dari tingkat tertinggi ke terendah yang benar adalah ...',
-      options: [
-        { key: 'A', text: 'Kingdom - Divisio - Classis - Ordo - Familia - Genus - Species' },
-        { key: 'B', text: 'Kingdom - Phylum - Ordo - Classis - Familia - Genus - Species' },
-        { key: 'C', text: 'Kingdom - Divisio - Ordo - Classis - Genus - Familia - Species' },
-        { key: 'D', text: 'Divisio - Kingdom - Classis - Ordo - Familia - Genus - Species' },
-      ],
-      correctOption: 'A',
-    },
-  ],
-};
+const INITIAL_QUESTIONS = {};
+
+// Filter to completely purge any legacy dummy or demo items from client localStorage
+const DUMMY_IDS = new Set([
+  'mat-001', 'mat-002', 'mat-003', 'mat-004',
+  'tug-001', 'tug-002', 'tug-003',
+  'cbt-001', 'cbt-002', 'cbt-003',
+  'q-101', 'q-102', 'q-103', 'q-104', 'q-105', 'q-106', 'q-201', 'q-202',
+  'ses-101', 'ses-102', 'ses-103', 'ses-104'
+]);
 
 // Local storage key helpers for seamless client offline/preview
 function getLocal(key, fallback) {
   if (typeof window === 'undefined') return fallback;
   try {
     const data = localStorage.getItem(`spenspra_elearning_${key}`);
-    return data ? JSON.parse(data) : fallback;
+    if (!data) return fallback;
+    const parsed = JSON.parse(data);
+    if (Array.isArray(parsed)) {
+      const filtered = parsed.filter((item) => !DUMMY_IDS.has(item?.id) && !DUMMY_IDS.has(item?.sessionId));
+      if (filtered.length !== parsed.length) {
+        localStorage.setItem(`spenspra_elearning_${key}`, JSON.stringify(filtered));
+      }
+      return filtered;
+    }
+    if (parsed && typeof parsed === 'object') {
+      let changed = false;
+      const clean = { ...parsed };
+      for (const k of Object.keys(clean)) {
+        if (DUMMY_IDS.has(k)) {
+          delete clean[k];
+          changed = true;
+        }
+      }
+      if (changed) {
+        localStorage.setItem(`spenspra_elearning_${key}`, JSON.stringify(clean));
+      }
+      return clean;
+    }
+    return parsed;
   } catch {
     return fallback;
   }
@@ -624,70 +392,7 @@ export const elearningApi = {
     const res = await fetchJson(`/exams/${examId}/monitoring`);
     if (res.success && res.data) return res.data;
     const monitorKey = `proctoring_${examId}`;
-    let list = getLocal(monitorKey, []);
-
-    // If empty, generate a realistic active roster for demo
-    if (list.length === 0) {
-      list = [
-        {
-          sessionId: 'ses-101',
-          studentId: 'std-001',
-          studentName: 'Ahmad Raihan Pratama',
-          className: '7A',
-          status: 'IN_PROGRESS',
-          remainingSeconds: 2450,
-          violationsCount: 1,
-          violations: [
-            {
-              type: 'WINDOW_BLUR',
-              description: 'Membuka aplikasi lain di luar browser (jendela kehilangan fokus).',
-              timestamp: new Date(Date.now() - 1000 * 180).toISOString(),
-            },
-          ],
-          answers: { 'q-101': { selectedOption: 'C' }, 'q-102': { selectedOption: 'A' } },
-        },
-        {
-          sessionId: 'ses-102',
-          studentId: 'std-002',
-          studentName: 'Anindya Putri Kirana',
-          className: '7A',
-          status: 'IN_PROGRESS',
-          remainingSeconds: 2890,
-          violationsCount: 0,
-          violations: [],
-          answers: { 'q-101': { selectedOption: 'C' } },
-        },
-        {
-          sessionId: 'ses-103',
-          studentId: 'std-003',
-          studentName: 'Bayu Aditya Nugroho',
-          className: '7A',
-          status: 'LOCKED',
-          remainingSeconds: 2100,
-          violationsCount: 3,
-          violations: [
-            { type: 'TAB_SWITCH', description: 'Membuka tab peramban baru saat ujian.', timestamp: new Date(Date.now() - 1000 * 600).toISOString() },
-            { type: 'FULLSCREEN_EXIT', description: 'Keluar dari mode layar penuh (fullscreen).', timestamp: new Date(Date.now() - 1000 * 420).toISOString() },
-            { type: 'TAB_SWITCH', description: 'Mencoba beralih tab peramban lagi.', timestamp: new Date(Date.now() - 1000 * 120).toISOString() },
-          ],
-          answers: { 'q-101': { selectedOption: 'B' } },
-        },
-        {
-          sessionId: 'ses-104',
-          studentId: 'std-004',
-          studentName: 'Citra Dewi Anggraini',
-          className: '7A',
-          status: 'SUBMITTED',
-          remainingSeconds: 0,
-          score: 85,
-          violationsCount: 0,
-          violations: [],
-          answers: {},
-        },
-      ];
-      setLocal(monitorKey, list);
-    }
-
+    const list = getLocal(monitorKey, []);
     return list;
   },
 
