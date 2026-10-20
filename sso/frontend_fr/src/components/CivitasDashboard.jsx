@@ -13,6 +13,7 @@ export default function CivitasDashboard() {
   const { user } = useAuth();
   const role = getRole(user);
   const isKepalaSekolah = role.includes('KEPALA');
+  const isSiswa = role.includes('SISWA');
 
   const [stats, setStats] = useState({
     teachers: 0,
@@ -262,14 +263,14 @@ export default function CivitasDashboard() {
   // ────────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-12">
-      {/* Banner Sambutan Guru */}
+      {/* Banner Sambutan Guru / Siswa */}
       <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 sm:p-7 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-5">
         <div>
           <div className="inline-flex items-center gap-1.5 rounded-full bg-[#EDEAF5] px-2.5 py-0.5 text-[10px] font-semibold text-[#4B3B78] uppercase tracking-wider mb-2">
-            Portal Civitas Akademika
+            {isSiswa ? 'Portal Peserta Didik' : 'Portal Civitas Akademika'}
           </div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#172033]">
-            Selamat Datang, {user?.fullName || user?.full_name || user?.username || 'Bapak/Ibu Guru'}
+            Selamat Datang, {user?.fullName || user?.full_name || user?.username || (isSiswa ? 'Siswa' : 'Bapak/Ibu Guru')}
           </h1>
           <p className="mt-1 text-sm text-[#667085] font-normal">
             Portal Layanan Digital Terpadu SMP Negeri 1 Prambon
@@ -277,14 +278,14 @@ export default function CivitasDashboard() {
         </div>
         <div className="flex items-center gap-3.5 bg-[#FAF9FD] px-4 py-3 rounded-xl border border-[#EDEAF5] shrink-0 self-start sm:self-auto">
           <div className="w-10 h-10 rounded-full bg-[#EDEAF5] text-[#3D2E66] flex items-center justify-center font-bold text-sm tracking-wide shadow-xs shrink-0">
-            {role?.slice(0, 2).toUpperCase() || 'GU'}
+            {isSiswa ? 'SW' : (role?.slice(0, 2).toUpperCase() || 'GU')}
           </div>
           <div className="text-left">
             <p className="font-bold text-[#172033] text-sm leading-tight">
-              {user?.nimNip || user?.nip || user?.username || 'Akun Aktif'}
+              {user?.nimNip || user?.nip || user?.nisn || user?.username || 'Akun Aktif'}
             </p>
             <span className="inline-block mt-0.5 rounded-full bg-[#EDEAF5] px-2 py-0.5 text-[10px] font-semibold text-[#30264F] uppercase tracking-wider">
-              {role || 'GURU'}
+              {isSiswa ? 'PESERTA DIDIK' : (role || 'GURU')}
             </span>
           </div>
         </div>
@@ -293,7 +294,7 @@ export default function CivitasDashboard() {
       {/* Pilihan Layanan Aplikasi Civitas */}
       <div>
         <h2 className="text-xs font-bold text-[#667085] uppercase tracking-wider mb-4 px-1">
-          Layanan Aplikasi Civitas
+          {isSiswa ? 'Layanan Siswa Terpadu' : 'Layanan Aplikasi Civitas'}
         </h2>
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
           {/* Menu 1: Spenspra Belajar (LMS & CBT) */}
@@ -311,7 +312,9 @@ export default function CivitasDashboard() {
                 </span>
               </div>
               <p className="text-sm text-[#667085] mt-1.5 leading-relaxed">
-                Platform pembelajaran daring, bank materi, penugasan digital, serta ujian CBT anti-cheat.
+                {isSiswa
+                  ? 'Akses materi pelajaran dari guru, kumpulkan tugas online, dan kerjakan ujian CBT.'
+                  : 'Platform pembelajaran daring, bank materi, penugasan digital, serta ujian CBT anti-cheat.'}
               </p>
             </div>
             <div className="mt-6 pt-4 border-t border-[#E5E7EB]">
@@ -337,7 +340,9 @@ export default function CivitasDashboard() {
               </div>
               <h3 className="font-bold text-[#172033] text-lg">e-Rapor Spenspra</h3>
               <p className="text-sm text-[#667085] mt-1.5 leading-relaxed">
-                Penginputan nilai UTS, UAS, monitoring capaian belajar siswa, dan pencetakan rapor oleh wali kelas.
+                {isSiswa
+                  ? 'Lihat capaian nilai harian, nilai sumatif tengah/akhir semester, dan rekapitulasi buku rapor.'
+                  : 'Penginputan nilai UTS, UAS, monitoring capaian belajar siswa, dan pencetakan rapor oleh wali kelas.'}
               </p>
             </div>
             <div className="mt-6 pt-4 border-t border-[#E5E7EB]">
@@ -345,7 +350,7 @@ export default function CivitasDashboard() {
                 href={getRaporLaunchUrl()}
                 className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#4B3B78] hover:bg-[#3D2E66] active:bg-[#30264F] text-white py-2.5 px-4 text-sm font-semibold transition shadow-sm cursor-pointer"
               >
-                <span>Buka Aplikasi e-Rapor</span>
+                <span>{isSiswa ? 'Lihat Nilai & Rapor' : 'Buka Aplikasi e-Rapor'}</span>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                 </svg>
@@ -363,7 +368,9 @@ export default function CivitasDashboard() {
               </div>
               <h3 className="font-bold text-[#172033] text-lg">e-Perpustakaan</h3>
               <p className="text-sm text-[#667085] mt-1.5 leading-relaxed">
-                Katalog pustaka sekolah, sirkulasi peminjaman buku, dan riwayat bacaan civitas sekolah.
+                {isSiswa
+                  ? 'Katalog koleksi buku sekolah, status peminjaman buku, dan riwayat bacaan siswa.'
+                  : 'Katalog pustaka sekolah, sirkulasi peminjaman buku, dan riwayat bacaan civitas sekolah.'}
               </p>
             </div>
             <div className="mt-6 pt-4 border-t border-[#E5E7EB]">
@@ -390,13 +397,15 @@ export default function CivitasDashboard() {
                 </svg>
               </div>
               <div className="flex items-center justify-between">
-                <h3 className="font-bold text-[#172033] text-lg">Presensi Barcode</h3>
+                <h3 className="font-bold text-[#172033] text-lg">{isSiswa ? 'Kartu Barcode & Absensi' : 'Presensi Barcode'}</h3>
                 <span className="text-[10px] font-semibold text-[#1C5038] bg-[#F7FCF9] border border-[#A9D8BC] px-2 py-0.5 rounded-full">
                   Terintegrasi
                 </span>
               </div>
               <p className="text-sm text-[#667085] mt-1.5 leading-relaxed">
-                Pencatatan presensi kehadiran siswa dan kelas berbasis kartu barcode resmi Spenspra.
+                {isSiswa
+                  ? 'Kartu barcode identitas digital resmi Anda untuk absensi harian dan presensi di sekolah.'
+                  : 'Pencatatan presensi kehadiran siswa dan kelas berbasis kartu barcode resmi Spenspra.'}
               </p>
             </div>
             <div className="mt-6 pt-4 border-t border-[#E5E7EB]">

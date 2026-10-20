@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import Image from 'next/image';
 import { schoolPeopleApi } from '@/lib/features/schoolPeopleApi';
 import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApiAdapter';
+import { useAuth } from '@/lib/features/auth/presentation/useAuth';
+import { getRole } from '@/lib/access/portalAccess';
 import Pagination from '@/components/Pagination';
 
 const TYPE_CONFIG = {
@@ -88,8 +90,27 @@ export default function BarcodeMultifungsiPage() {
     return ['ALL', ...Array.from(set).sort()];
   }, [people]);
 
+  const { user } = useAuth();
+  const role = getRole(user);
+  const isSiswa = role === 'SISWA' || role === 'ROLE-SISWA';
+
   // Filter civitas
   const filteredPeople = useMemo(() => {
+    if (isSiswa && user) {
+      const studentNisn = String(user.nisn || user.username?.replace('siswa_', '') || user.nimNip?.replace('NISN. ', '') || '').trim().toLowerCase();
+      const studentId = String(user.id || user.person_id || '').trim();
+      const studentName = String(user.fullName || user.full_name || '').trim().toLowerCase();
+
+      const matched = people.filter((p) => {
+        const pNisn = String(p.nisn || '').trim().toLowerCase();
+        const pId = String(p.id || '').trim();
+        const pName = String(p.full_name || '').trim().toLowerCase();
+        return (studentNisn && pNisn === studentNisn) || (studentId && pId === studentId) || (studentName && pName === studentName);
+      });
+
+      return matched;
+    }
+
     return people.filter((p) => {
       if (roleFilter !== 'ALL' && p.person_type !== roleFilter) return false;
       if (classFilter !== 'ALL' && p.class_name !== classFilter) return false;
@@ -103,7 +124,7 @@ export default function BarcodeMultifungsiPage() {
       const cls = (p.class_name || '').toLowerCase();
       return name.includes(q) || nisn.includes(q) || nip.includes(q) || token.includes(q) || cls.includes(q);
     });
-  }, [people, roleFilter, classFilter, search]);
+  }, [people, roleFilter, classFilter, search, isSiswa, user]);
 
   // Reset nomor halaman ke 1 saat filter atau pencarian berubah
   useEffect(() => {
@@ -156,47 +177,51 @@ export default function BarcodeMultifungsiPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-              Kartu Barcode Multifungsi Civitas
+              {isSiswa ? 'Kartu Barcode & Identitas Saya' : 'Kartu Barcode Multifungsi Civitas'}
             </h1>
             <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-              Siswa • Guru • Tendik
+              {isSiswa ? 'Peserta Didik' : 'Siswa • Guru • Tendik'}
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Master token barcode resmi SMP Negeri 1 Prambon untuk <strong>Presensi Digital</strong>, <strong>Perpustakaan</strong>, dan <strong>Akses Layanan SSO</strong>.
+            {isSiswa
+              ? 'Kartu barcode resmi Anda untuk presensi absensi harian dan peminjaman buku perpustakaan.'
+              : 'Master token barcode resmi SMP Negeri 1 Prambon untuk Presensi Digital, Perpustakaan, dan Akses Layanan SSO.'}
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Tombol Scanner Verifikasi */}
-          <button
-            type="button"
-            onClick={() => {
-              setIsScannerOpen(true);
-              setScanResult(null);
-              setScanError('');
-              setScanInputToken('');
-            }}
-            className="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
-          >
-            <span>🔍</span>
-            <span>Uji / Validasi Token Barcode</span>
-          </button>
+          {/* Tombol Scanner Verifikasi (Hanya Admin / Guru) */}
+          {!isSiswa && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsScannerOpen(true);
+                setScanResult(null);
+                setScanError('');
+                setScanInputToken('');
+              }}
+              className="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>🔍</span>
+              <span>Uji / Validasi Token Barcode</span>
+            </button>
+          )}
 
           {/* Tombol Print Lembar Kartu */}
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handlePrint}
-              title={`Cetak kartu pada halaman aktif (${paginatedPeople.length} kartu)`}
+              title={isSiswa ? 'Cetak kartu barcode saya' : `Cetak kartu pada halaman aktif (${paginatedPeople.length} kartu)`}
               className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
               </svg>
-              <span>Cetak Halaman Ini ({paginatedPeople.length})</span>
+              <span>{isSiswa ? 'Cetak Kartu Saya' : `Cetak Halaman Ini (${paginatedPeople.length})`}</span>
             </button>
-            {filteredPeople.length > pageSize && (
+            {!isSiswa && filteredPeople.length > pageSize && (
               <button
                 type="button"
                 onClick={() => {
@@ -219,29 +244,31 @@ export default function BarcodeMultifungsiPage() {
         </div>
       </div>
 
-      {/* Ringkasan Statistik */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 print:hidden">
-        <div className="bg-white border border-slate-200 p-3.5 rounded-xl shadow-2xs">
-          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total Barcode</p>
-          <p className="text-xl font-bold text-slate-900 mt-1 tabular-nums">{stats.total}</p>
+      {/* Ringkasan Statistik (Hanya untuk Admin / Guru) */}
+      {!isSiswa && (
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 print:hidden">
+          <div className="bg-white border border-slate-200 p-3.5 rounded-xl shadow-2xs">
+            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total Barcode</p>
+            <p className="text-xl font-bold text-slate-900 mt-1 tabular-nums">{stats.total}</p>
+          </div>
+          <div className="bg-white border border-slate-200 p-3.5 rounded-xl shadow-2xs">
+            <p className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">Status Aktif</p>
+            <p className="text-xl font-bold text-emerald-700 mt-1 tabular-nums">{stats.active}</p>
+          </div>
+          <div className="bg-white border border-slate-200 p-3.5 rounded-xl shadow-2xs">
+            <p className="text-[11px] font-semibold text-blue-600 uppercase tracking-wider">Siswa (Pelajar)</p>
+            <p className="text-xl font-bold text-blue-700 mt-1 tabular-nums">{stats.siswa}</p>
+          </div>
+          <div className="bg-white border border-slate-200 p-3.5 rounded-xl shadow-2xs">
+            <p className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">Guru (Pendidik)</p>
+            <p className="text-xl font-bold text-emerald-700 mt-1 tabular-nums">{stats.guru}</p>
+          </div>
+          <div className="bg-white border border-slate-200 p-3.5 rounded-xl shadow-2xs">
+            <p className="text-[11px] font-semibold text-purple-600 uppercase tracking-wider">Tendik & TU</p>
+            <p className="text-xl font-bold text-purple-700 mt-1 tabular-nums">{stats.tendik}</p>
+          </div>
         </div>
-        <div className="bg-white border border-slate-200 p-3.5 rounded-xl shadow-2xs">
-          <p className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">Status Aktif</p>
-          <p className="text-xl font-bold text-emerald-700 mt-1 tabular-nums">{stats.active}</p>
-        </div>
-        <div className="bg-white border border-slate-200 p-3.5 rounded-xl shadow-2xs">
-          <p className="text-[11px] font-semibold text-blue-600 uppercase tracking-wider">Siswa (Pelajar)</p>
-          <p className="text-xl font-bold text-blue-700 mt-1 tabular-nums">{stats.siswa}</p>
-        </div>
-        <div className="bg-white border border-slate-200 p-3.5 rounded-xl shadow-2xs">
-          <p className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">Guru (Pendidik)</p>
-          <p className="text-xl font-bold text-emerald-700 mt-1 tabular-nums">{stats.guru}</p>
-        </div>
-        <div className="bg-white border border-slate-200 p-3.5 rounded-xl shadow-2xs">
-          <p className="text-[11px] font-semibold text-purple-600 uppercase tracking-wider">Tendik & TU</p>
-          <p className="text-xl font-bold text-purple-700 mt-1 tabular-nums">{stats.tendik}</p>
-        </div>
-      </div>
+      )}
 
       {/* Error Banner jika ada */}
       {error && (
@@ -250,71 +277,73 @@ export default function BarcodeMultifungsiPage() {
         </div>
       )}
 
-      {/* Toolbar Filter & Pencarian */}
-      <div className="bg-white border border-slate-200 p-4 rounded-xl space-y-3 shadow-xs print:hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Filter Peran Civitas */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs font-bold text-slate-600 mr-1">Kategori:</span>
-            {[
-              { id: 'ALL', label: 'Semua Civitas' },
-              { id: 'SISWA', label: 'Siswa' },
-              { id: 'GURU', label: 'Guru' },
-              { id: 'TENAGA_KEPENDIDIKAN', label: 'Tendik / TU' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setRoleFilter(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  roleFilter === tab.id
-                    ? 'bg-blue-600 text-white shadow-xs font-bold'
-                    : 'bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+      {/* Toolbar Filter & Pencarian (Hanya untuk Admin / Guru) */}
+      {!isSiswa && (
+        <div className="bg-white border border-slate-200 p-4 rounded-xl space-y-3 shadow-xs print:hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* Filter Peran Civitas */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs font-bold text-slate-600 mr-1">Kategori:</span>
+              {[
+                { id: 'ALL', label: 'Semua Civitas' },
+                { id: 'SISWA', label: 'Siswa' },
+                { id: 'GURU', label: 'Guru' },
+                { id: 'TENAGA_KEPENDIDIKAN', label: 'Tendik / TU' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setRoleFilter(tab.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    roleFilter === tab.id
+                      ? 'bg-blue-600 text-white shadow-xs font-bold'
+                      : 'bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-          {/* Search Box */}
-          <div className="w-full sm:w-72">
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                🔍
-              </span>
-              <input
-                type="text"
-                placeholder="Cari nama, NISN, NIP, token..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+            {/* Search Box */}
+            <div className="w-full sm:w-72">
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  🔍
+                </span>
+                <input
+                  type="text"
+                  placeholder="Cari nama, NISN, NIP, token..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Filter Rombel Siswa jika filter SISWA atau ALL dipilih */}
-        {(roleFilter === 'SISWA' || roleFilter === 'ALL') && classOptions.length > 1 && (
-          <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-100">
-            <span className="text-xs font-bold text-slate-500 mr-1">Rombel Siswa:</span>
-            {classOptions.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setClassFilter(c)}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
-                  classFilter === c
-                    ? 'bg-slate-800 text-white font-bold'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {c === 'ALL' ? 'Semua Kelas' : c}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+          {/* Filter Rombel Siswa jika filter SISWA atau ALL dipilih */}
+          {(roleFilter === 'SISWA' || roleFilter === 'ALL') && classOptions.length > 1 && (
+            <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-100">
+              <span className="text-xs font-bold text-slate-500 mr-1">Rombel Siswa:</span>
+              {classOptions.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setClassFilter(c)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                    classFilter === c
+                      ? 'bg-slate-800 text-white font-bold'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {c === 'ALL' ? 'Semua Kelas' : c}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Grid Kartu Barcode Multifungsi */}
       {loading ? (
@@ -324,13 +353,15 @@ export default function BarcodeMultifungsiPage() {
         </div>
       ) : filteredPeople.length === 0 ? (
         <div className="py-16 text-center text-slate-400 text-xs bg-white rounded-2xl border border-slate-200">
-          {search || roleFilter !== 'ALL' || classFilter !== 'ALL'
+          {isSiswa
+            ? 'Belum ada kartu barcode yang ditautkan ke akun Anda. Silakan hubungi admin sekolah untuk menerbitkan barcode.'
+            : search || roleFilter !== 'ALL' || classFilter !== 'ALL'
             ? 'Tidak ada data civitas yang cocok dengan filter atau pencarian saat ini.'
             : 'Belum ada data identitas civitas dengan barcode. Tambahkan civitas baru di menu Master Data.'}
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="barcode-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className={isSiswa ? "max-w-md mx-auto" : "barcode-cards-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"}>
             {paginatedPeople.map((person) => {
               const config = TYPE_CONFIG[person.person_type] || TYPE_CONFIG.SISWA;
               const isActive = person.barcode_status === 'ACTIVE' && person.is_active;
