@@ -6,25 +6,39 @@ import { schoolPeopleApi } from '@/lib/features/schoolPeopleApi';
 
 const APPS = [
   {
+    id: 'elearning',
+    code: 'elearning',
+    name: 'Spenspra Belajar (LMS & CBT)',
+    status: 'ACTIVE',
+    badge: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    statusLabel: 'Rilis Aktif',
+    roles: [
+      { code: 'ADMIN', label: 'Admin Belajar / CBT' },
+      { code: 'GURU', label: 'Guru (Materi & CBT)' },
+      { code: 'SISWA', label: 'Siswa (Belajar & Ujian CBT)' },
+    ],
+  },
+  {
     id: 'erapor',
     code: 'erapor',
     name: 'e-Rapor SMPN 1 Prambon',
     status: 'ACTIVE',
     badge: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-    statusLabel: 'Rilis Saat Ini (Aktif)',
+    statusLabel: 'Rilis Aktif',
     roles: [
       { code: 'ADMIN', label: 'Admin e-Rapor' },
       { code: 'GURU', label: 'Guru (Mapel/Walas)' },
       { code: 'KEPALA_SEKOLAH', label: 'Kepala Sekolah (Pantau)' },
+      { code: 'SISWA', label: 'Siswa (Lihat Rapor)' },
     ],
   },
   {
     id: 'eperpus',
     code: 'eperpus',
     name: 'Perpustakaan Digital Spenspra',
-    status: 'INACTIVE',
-    badge: 'bg-slate-100 text-slate-600 border-slate-200',
-    statusLabel: 'Fase Berikutnya',
+    status: 'ACTIVE',
+    badge: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    statusLabel: 'Rilis Aktif',
     roles: [
       { code: 'ADMIN', label: 'Admin Perpustakaan (Pustakawan)' },
       { code: 'GURU', label: 'Guru (Peminjaman)' },
@@ -35,12 +49,13 @@ const APPS = [
     id: 'presensi',
     code: 'presensi',
     name: 'Presensi QR Kelas & Guru',
-    status: 'INACTIVE',
-    badge: 'bg-slate-100 text-slate-600 border-slate-200',
-    statusLabel: 'Fase Berikutnya',
+    status: 'ACTIVE',
+    badge: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    statusLabel: 'Terintegrasi',
     roles: [
       { code: 'ADMIN', label: 'Admin Presensi' },
       { code: 'GURU', label: 'Guru (Buka Sesi & Scan)' },
+      { code: 'SISWA', label: 'Siswa (Kartu Barcode)' },
     ],
   },
 ];
@@ -150,11 +165,18 @@ export default function AppAccessMatrixPage() {
         else if (role.includes('GURU') || role.includes('WALI_KELAS')) ssoRole = 'GURU';
         else ssoRole = role || 'GURU';
 
+        // Tentukan peran Belajar (LMS & CBT)
+        let elearningVal = 'NONE';
+        if (role === 'SUPER_ADMIN') elearningVal = 'ADMIN';
+        else if (role.includes('GURU') || role.includes('WALI_KELAS')) elearningVal = 'GURU';
+        else if (role.includes('SISWA')) elearningVal = 'SISWA';
+
         // Tentukan peran e-Rapor
         let eraporVal = 'NONE';
         if (role === 'ADMIN_RAPOR' || role === 'SUPER_ADMIN') eraporVal = 'ADMIN';
         else if (role.includes('KEPALA')) eraporVal = 'KEPALA_SEKOLAH';
         else if (role.includes('GURU') || role.includes('WALI_KELAS')) eraporVal = 'GURU';
+        else if (role.includes('SISWA')) eraporVal = 'SISWA';
 
         // Tentukan peran e-Perpus
         let eperpusVal = 'NONE';
@@ -166,9 +188,11 @@ export default function AppAccessMatrixPage() {
         let presensiVal = 'NONE';
         if (role === 'ADMIN_ABSENSI' || role === 'SUPER_ADMIN') presensiVal = 'ADMIN';
         else if (role.includes('GURU') || role.includes('WALI_KELAS')) presensiVal = 'GURU';
+        else if (role.includes('SISWA')) presensiVal = 'SISWA';
 
         initialMap[u.id] = {
           ssoRole,
+          elearning: elearningVal,
           erapor: eraporVal,
           eperpus: eperpusVal,
           presensi: presensiVal,
@@ -195,6 +219,7 @@ export default function AppAccessMatrixPage() {
       // Sinkronisasi otomatis antar dropdown agar konsisten
       if (key === 'ssoRole') {
         if (newRole === 'SUPER_ADMIN') {
+          updated.elearning = 'ADMIN';
           updated.erapor = 'ADMIN';
           updated.eperpus = 'ADMIN';
           updated.presensi = 'ADMIN';
@@ -207,13 +232,15 @@ export default function AppAccessMatrixPage() {
         } else if (newRole === 'KEPALA_SEKOLAH') {
           updated.erapor = 'KEPALA_SEKOLAH';
         } else if (newRole === 'GURU') {
+          if (updated.elearning === 'ADMIN') updated.elearning = 'GURU';
           if (updated.erapor === 'ADMIN') updated.erapor = 'GURU';
           if (updated.eperpus === 'ADMIN') updated.eperpus = 'GURU';
           if (updated.presensi === 'ADMIN') updated.presensi = 'GURU';
         } else if (newRole === 'SISWA') {
-          updated.erapor = 'NONE';
+          updated.elearning = 'SISWA';
+          updated.erapor = 'SISWA';
           updated.eperpus = 'SISWA';
-          updated.presensi = 'NONE';
+          updated.presensi = 'SISWA';
         }
       } else if (key === 'erapor') {
         if (newRole === 'ADMIN' && updated.ssoRole !== 'SUPER_ADMIN') {
@@ -548,22 +575,23 @@ export default function AppAccessMatrixPage() {
               <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-bold uppercase tracking-wider">
                 <th className="py-3 px-4">Nama Pengguna & NIP/NISN</th>
                 <th className="py-3 px-4">Peran Utama SSO</th>
-                <th className="py-3 px-4">Otorisasi e-Rapor</th>
-                <th className="py-3 px-4">Otorisasi e-Perpus</th>
-                <th className="py-3 px-4">Otorisasi Presensi</th>
+                <th className="py-3 px-4">Belajar & CBT</th>
+                <th className="py-3 px-4">e-Rapor</th>
+                <th className="py-3 px-4">e-Perpus</th>
+                <th className="py-3 px-4">Presensi</th>
                 <th className="py-3 px-4 text-center">Aksi & Kredensial</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="py-8 text-center text-slate-400">
+                  <td colSpan="7" className="py-8 text-center text-slate-400">
                     Memuat sinkronisasi data master dan akun dari database...
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="py-8 text-center text-slate-400">
+                  <td colSpan="7" className="py-8 text-center text-slate-400">
                     Tidak ada pengguna dalam kategori ini. Tambahkan data di menu Data Master.
                   </td>
                 </tr>
@@ -571,6 +599,7 @@ export default function AppAccessMatrixPage() {
                 filteredUsers.map((u) => {
                   const userAccess = accessMap[u.id] || {
                     ssoRole: 'GURU',
+                    elearning: 'NONE',
                     erapor: 'NONE',
                     eperpus: 'NONE',
                     presensi: 'NONE',
@@ -622,7 +651,21 @@ export default function AppAccessMatrixPage() {
                         </div>
                       </td>
 
-                      {/* Kolom 3: Otorisasi e-Rapor */}
+                      {/* Kolom 3: Otorisasi Spenspra Belajar (LMS & CBT) */}
+                      <td className="py-3 px-4">
+                        <select
+                          value={userAccess.elearning || 'NONE'}
+                          onChange={(e) => handleRoleChange(u.id, 'elearning', e.target.value)}
+                          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium"
+                        >
+                          <option value="NONE">Tanpa Akses</option>
+                          <option value="ADMIN">Admin Belajar / CBT</option>
+                          <option value="GURU">Guru (Materi & CBT)</option>
+                          <option value="SISWA">Siswa (Belajar & Ujian)</option>
+                        </select>
+                      </td>
+
+                      {/* Kolom 4: Otorisasi e-Rapor */}
                       <td className="py-3 px-4">
                         <select
                           value={userAccess.erapor || 'NONE'}
@@ -633,10 +676,11 @@ export default function AppAccessMatrixPage() {
                           <option value="ADMIN">Admin e-Rapor</option>
                           <option value="GURU">Guru (Mapel/Walas)</option>
                           <option value="KEPALA_SEKOLAH">Kepala Sekolah (Pantau)</option>
+                          <option value="SISWA">Siswa (Lihat Rapor)</option>
                         </select>
                       </td>
 
-                      {/* Kolom 4: Otorisasi e-Perpus */}
+                      {/* Kolom 5: Otorisasi e-Perpus */}
                       <td className="py-3 px-4">
                         <select
                           value={userAccess.eperpus || 'NONE'}
@@ -650,7 +694,7 @@ export default function AppAccessMatrixPage() {
                         </select>
                       </td>
 
-                      {/* Kolom 5: Otorisasi Presensi (Absen) */}
+                      {/* Kolom 6: Otorisasi Presensi (Absen) */}
                       <td className="py-3 px-4">
                         <select
                           value={userAccess.presensi || 'NONE'}
@@ -660,6 +704,7 @@ export default function AppAccessMatrixPage() {
                           <option value="NONE">Tanpa Akses</option>
                           <option value="ADMIN">Admin Presensi</option>
                           <option value="GURU">Guru (Buka Sesi & Scan)</option>
+                          <option value="SISWA">Siswa (Kartu Barcode)</option>
                         </select>
                       </td>
 
