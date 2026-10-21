@@ -300,7 +300,7 @@ export default function TeacherExamsManagementPage() {
         onClose={() => !isSubmitting && setIsCreateModalOpen(false)}
         title="Buat Jadwal & Sesi e-Ujian Baru"
         subtitle="Ujian akan menggunakan browser lockdown anti-cheat secara otomatis."
-        size="md"
+        size="lg"
       >
         <form onSubmit={handleCreateExam} className="space-y-4">
           <div className="space-y-1">
@@ -314,7 +314,7 @@ export default function TeacherExamsManagementPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-bold text-neutral-800">Mata Pelajaran</label>
               <select
@@ -324,7 +324,7 @@ export default function TeacherExamsManagementPage() {
                   const matched = subjects.find((s) => s.name === e.target.value);
                   setSubjectCode(matched?.code || 'MAPEL');
                 }}
-                className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
               >
                 {subjects.map((s) => (
                   <option key={s.id || s.code} value={s.name}>
@@ -339,7 +339,7 @@ export default function TeacherExamsManagementPage() {
               <select
                 value={className}
                 onChange={(e) => setClassName(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
               >
                 {classes.map((cls) => (
                   <option key={cls.id || cls.name} value={cls.name}>
@@ -350,7 +350,7 @@ export default function TeacherExamsManagementPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-bold text-neutral-800">Token Ujian</label>
               <Input
@@ -380,11 +380,11 @@ export default function TeacherExamsManagementPage() {
               <select
                 value={maxViolations}
                 onChange={(e) => setMaxViolations(Number(e.target.value))}
-                className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white font-medium"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium truncate"
               >
-                <option value={1}>1x (Zero Tolerance - Standar Ketat)</option>
+                <option value={1}>1x (Zero Tolerance - Ketat)</option>
                 <option value={2}>2x Pelanggaran</option>
-                <option value={3}>3x Pelanggaran (Toleransi Standar)</option>
+                <option value={3}>3x Pelanggaran (Standar)</option>
               </select>
             </div>
           </div>
@@ -410,11 +410,12 @@ export default function TeacherExamsManagementPage() {
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-neutral-100">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-neutral-100">
             <Button
               type="button"
               variant="outline"
               size="md"
+              className="w-full sm:w-auto min-h-[42px]"
               disabled={isSubmitting}
               onClick={() => setIsCreateModalOpen(false)}
             >
@@ -424,6 +425,7 @@ export default function TeacherExamsManagementPage() {
               type="submit"
               variant="primary"
               size="md"
+              className="w-full sm:w-auto min-h-[42px] font-bold"
               loading={isSubmitting}
             >
               Terbitkan Jadwal Ujian
@@ -438,11 +440,11 @@ export default function TeacherExamsManagementPage() {
         onClose={() => setActiveQuestionEditorExam(null)}
         title="Kelola Butir Soal Ujian"
         subtitle={activeQuestionEditorExam ? `${activeQuestionEditorExam.title} (${activeQuestionEditorExam.subject})` : ''}
-        size="lg"
+        size="xl"
       >
-        <div className="space-y-5">
+        <div className="space-y-4 sm:space-y-5">
           {/* Question List Preview */}
-          <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+          <div className="space-y-3 max-h-52 sm:max-h-64 overflow-y-auto pr-1">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold uppercase text-neutral-500 tracking-wider">
                 Daftar Soal Tersimpan ({examQuestions.length} Butir)
@@ -451,12 +453,12 @@ export default function TeacherExamsManagementPage() {
             </div>
 
             {examQuestions.length === 0 ? (
-              <div className="p-4 rounded-[8px] bg-neutral-50 border border-neutral-200 text-center text-xs text-neutral-400">
+              <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200 text-center text-xs text-neutral-400">
                 Belum ada butir soal pada ujian ini. Silakan tambahkan soal melalui formulir di bawah.
               </div>
             ) : (
               examQuestions.map((q, idx) => (
-                <div key={q.id || idx} className="p-3.5 rounded-[8px] border border-neutral-200 bg-neutral-50/50 space-y-2 text-xs">
+                <div key={q.id || idx} className="p-3.5 rounded-xl border border-neutral-200 bg-neutral-50/50 space-y-2 text-xs">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-primary-600">Soal #{idx + 1} ({q.type})</span>
                     <div className="flex items-center gap-2">
@@ -477,9 +479,9 @@ export default function TeacherExamsManagementPage() {
                   </div>
                   <p className="text-neutral-800 font-medium whitespace-pre-wrap">{q.questionText}</p>
                   {q.type === 'MCQ' && (
-                    <div className="grid grid-cols-2 gap-2 text-[11px] text-neutral-600 pt-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-neutral-600 pt-1">
                       {q.options?.map((opt) => (
-                        <span key={opt.key} className={opt.key === q.correctOption ? 'font-bold text-success-700 bg-success-50/60 p-1 rounded' : 'p-1'}>
+                        <span key={opt.key} className={opt.key === q.correctOption ? 'font-bold text-success-700 bg-success-50/60 p-1.5 rounded border border-success-200' : 'p-1.5 rounded bg-white border border-neutral-200'}>
                           {opt.key}. {opt.text}
                         </span>
                       ))}
@@ -491,16 +493,16 @@ export default function TeacherExamsManagementPage() {
           </div>
 
           {/* Form Tambah Butir Soal Baru */}
-          <form onSubmit={handleAddQuestion} className="p-4 rounded-[8px] bg-neutral-50 border border-neutral-200 space-y-3">
+          <form onSubmit={handleAddQuestion} className="p-3.5 sm:p-4 rounded-xl bg-neutral-50 border border-neutral-200 space-y-3">
             <h4 className="text-xs font-bold text-neutral-900">+ Tambah Butir Soal Baru</h4>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-bold text-neutral-700">Tipe Soal</label>
                 <select
                   value={newQuestionType}
                   onChange={(e) => setNewQuestionType(e.target.value)}
-                  className="w-full text-xs p-2 rounded-[6px] border border-neutral-300 bg-white"
+                  className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
                 >
                   <option value="MCQ">Pilihan Ganda (A, B, C, D)</option>
                   <option value="ESSAY">Uraian / Esai</option>
@@ -513,7 +515,7 @@ export default function TeacherExamsManagementPage() {
                   <select
                     value={correctOption}
                     onChange={(e) => setCorrectOption(e.target.value)}
-                    className="w-full text-xs p-2 rounded-[6px] border border-neutral-300 bg-white font-bold"
+                    className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-bold"
                   >
                     <option value="A">Opsi A</option>
                     <option value="B">Opsi B</option>
@@ -531,13 +533,13 @@ export default function TeacherExamsManagementPage() {
                 placeholder="Tuliskan teks pertanyaan soal di sini..."
                 value={newQuestionText}
                 onChange={(e) => setNewQuestionText(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300"
                 required
               />
             </div>
 
             {newQuestionType === 'MCQ' && (
-              <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                 <Input placeholder="Teks Opsi A" value={optA} onChange={(e) => setOptA(e.target.value)} required />
                 <Input placeholder="Teks Opsi B" value={optB} onChange={(e) => setOptB(e.target.value)} required />
                 <Input placeholder="Teks Opsi C" value={optC} onChange={(e) => setOptC(e.target.value)} required />
@@ -546,7 +548,7 @@ export default function TeacherExamsManagementPage() {
             )}
 
             <div className="flex justify-end pt-2">
-              <Button type="submit" variant="primary" size="sm" loading={isSavingQuestion}>
+              <Button type="submit" variant="primary" size="md" className="w-full sm:w-auto font-bold" loading={isSavingQuestion}>
                 + Simpan Soal Ini
               </Button>
             </div>
@@ -555,7 +557,8 @@ export default function TeacherExamsManagementPage() {
           <div className="flex justify-end pt-2 border-t border-neutral-100">
             <Button
               variant="outline"
-              size="sm"
+              size="md"
+              className="w-full sm:w-auto"
               onClick={() => setActiveQuestionEditorExam(null)}
             >
               Selesai & Tutup

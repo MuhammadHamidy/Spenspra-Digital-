@@ -220,17 +220,17 @@ export default function StudentExamsHubPage() {
 
       {/* Fullscreen Kiosk Preparation View (Solusi 2: Terlock Sejak Memilih Ujian) */}
       {selectedExam && (
-        <div className="fixed inset-0 z-50 bg-neutral-950/95 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 select-none">
-          <div className="max-w-lg w-full bg-white rounded-2xl p-5 sm:p-7 space-y-4 shadow-2xl border-2 border-emerald-600 animate-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-neutral-950/95 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 select-none overflow-y-auto">
+          <div className="max-w-lg w-full max-h-[92dvh] flex flex-col my-auto bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 space-y-3.5 sm:space-y-4 shadow-2xl border-2 border-emerald-600 animate-in zoom-in-95 overflow-y-auto">
             <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-xs shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm sm:text-base shadow-xs shrink-0">
                   🔒
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h2 className="text-sm sm:text-base font-bold text-neutral-900 tracking-tight">Mode Persiapan Ujian</h2>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                    <h2 className="text-sm sm:text-base font-bold text-neutral-900 tracking-tight truncate">Mode Persiapan Ujian</h2>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold shrink-0">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
                       Layar Terkunci
                     </span>
@@ -243,12 +243,12 @@ export default function StudentExamsHubPage() {
             </div>
 
             {/* Peringatan Sistem Anti-Cheat */}
-            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1.5">
+            <div className="p-3 sm:p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
               <p className="font-bold flex items-center gap-1.5 text-amber-950">
                 <span>🛡️</span>
                 <span>Peraturan Pengawasan Anti-Cheat CBT:</span>
               </p>
-              <ul className="list-disc list-inside space-y-1 text-[11px] text-amber-800 leading-relaxed">
+              <ul className="list-disc list-inside space-y-0.5 text-[11px] text-amber-800 leading-relaxed">
                 <li>Layar peramban telah dikunci ke mode <strong>Layar Penuh (Kiosk)</strong>.</li>
                 <li><strong>Dilarang menarik bilah notifikasi HP</strong>, menekan tombol Home, atau membuka aplikasi lain.</li>
                 <li>Jika Anda keluar layar, ujian akan <strong>langsung terkunci</strong> dan membutuhkan PIN Pengawas untuk membukanya.</li>
@@ -257,20 +257,20 @@ export default function StudentExamsHubPage() {
 
             {/* Peringatan jika terdeteksi blur / notif ditarik */}
             {prepWarning && (
-              <div className="p-3 rounded-xl bg-danger-50 border border-danger-200 text-danger-700 text-xs font-semibold flex items-center gap-2 animate-bounce">
+              <div className="p-2.5 sm:p-3 rounded-xl bg-danger-50 border border-danger-200 text-danger-700 text-xs font-semibold flex items-center gap-2 animate-bounce">
                 <span className="text-base shrink-0">🚨</span>
                 <span className="leading-snug">{prepWarning}</span>
               </div>
             )}
 
             {/* Form Input Token */}
-            <form onSubmit={handleStartExam} className="space-y-4 pt-1">
-              <div className="space-y-1.5">
+            <form onSubmit={handleStartExam} className="space-y-3.5 pt-1">
+              <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-neutral-800">
                     Token Ujian
                   </label>
-                  <span className="text-[11px] text-neutral-500">Minta token dari pengawas di ruangan</span>
+                  <span className="text-[11px] text-neutral-500">Minta token dari pengawas</span>
                 </div>
                 <Input
                   type="text"
@@ -289,7 +289,7 @@ export default function StudentExamsHubPage() {
                 )}
               </div>
 
-              <div className="flex items-center gap-2 pt-2 border-t border-neutral-100">
+              <div className="flex flex-col-reverse sm:flex-row items-center gap-2 pt-2 border-t border-neutral-100">
                 <Button
                   type="button"
                   variant="outline"
@@ -303,7 +303,7 @@ export default function StudentExamsHubPage() {
                       }
                     }
                   }}
-                  className="w-1/3 min-h-[44px]"
+                  className="w-full sm:w-1/3 min-h-[44px]"
                 >
                   Batal
                 </Button>
@@ -312,7 +312,7 @@ export default function StudentExamsHubPage() {
                   variant="accent"
                   size="md"
                   loading={isVerifying}
-                  className="w-2/3 font-bold min-h-[44px]"
+                  className="w-full sm:w-2/3 font-bold min-h-[44px]"
                 >
                   🚀 Mulai Ujian Sekarang
                 </Button>

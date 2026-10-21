@@ -1151,7 +1151,7 @@ export default function MaterialsAndSubjectHubPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-bold text-neutral-800">Mata Pelajaran</label>
               <select
@@ -1161,7 +1161,7 @@ export default function MaterialsAndSubjectHubPage() {
                   const matched = subjects.find((s) => s.name === e.target.value);
                   setMatSubjectCode(matched?.code || 'MAPEL');
                 }}
-                className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
               >
                 {subjects.map((s) => (
                   <option key={s.id || s.code} value={s.name}>
@@ -1176,7 +1176,7 @@ export default function MaterialsAndSubjectHubPage() {
               <select
                 value={matClass}
                 onChange={(e) => setMatClass(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
               >
                 <option value="Semua">Semua Kelas</option>
                 {classes.map((cls) => (
@@ -1188,13 +1188,13 @@ export default function MaterialsAndSubjectHubPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-bold text-neutral-800">Format Materi</label>
               <select
                 value={matType}
                 onChange={(e) => setMatType(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
               >
                 <option value="PDF">Dokumen PDF / Modul</option>
                 <option value="SLIDE">Slide Presentasi PPT</option>
@@ -1220,15 +1220,16 @@ export default function MaterialsAndSubjectHubPage() {
               placeholder="Jelaskan ringkasan materi, capaian pembelajaran, atau instruksi bagi siswa..."
               value={matDescription}
               onChange={(e) => setMatDescription(e.target.value)}
-              className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300"
+              className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300"
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-neutral-100">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-neutral-100">
             <Button
               type="button"
               variant="outline"
-              size="sm"
+              size="md"
+              className="w-full sm:w-auto min-h-[42px]"
               disabled={isSavingMaterial}
               onClick={() => setIsCreateMaterialOpen(false)}
             >
@@ -1237,7 +1238,8 @@ export default function MaterialsAndSubjectHubPage() {
             <Button
               type="submit"
               variant="primary"
-              size="sm"
+              size="md"
+              className="w-full sm:w-auto min-h-[42px] font-bold"
               loading={isSavingMaterial}
             >
               Terbitkan Materi
@@ -1266,7 +1268,7 @@ export default function MaterialsAndSubjectHubPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-bold text-neutral-800">Mata Pelajaran</label>
               <select
@@ -1276,7 +1278,7 @@ export default function MaterialsAndSubjectHubPage() {
                   const matched = subjects.find((s) => s.name === e.target.value);
                   setTugSubjectCode(matched?.code || 'MAPEL');
                 }}
-                className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
               >
                 {subjects.map((s) => (
                   <option key={s.id || s.code} value={s.name}>
@@ -1291,7 +1293,7 @@ export default function MaterialsAndSubjectHubPage() {
               <select
                 value={tugClass}
                 onChange={(e) => setTugClass(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
               >
                 {classes.map((cls) => (
                   <option key={cls.id || cls.name} value={cls.name}>
@@ -1302,7 +1304,7 @@ export default function MaterialsAndSubjectHubPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-bold text-neutral-800">Tenggat Waktu (Deadline)</label>
               <Input
@@ -1333,15 +1335,16 @@ export default function MaterialsAndSubjectHubPage() {
               placeholder="Tuliskan instruksi langkah pengerjaan, format berkas yang diterima, atau ketentuan lainnya..."
               value={tugDescription}
               onChange={(e) => setTugDescription(e.target.value)}
-              className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300"
+              className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300"
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-neutral-100">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-neutral-100">
             <Button
               type="button"
               variant="outline"
-              size="sm"
+              size="md"
+              className="w-full sm:w-auto min-h-[42px]"
               disabled={isSavingAssignment}
               onClick={() => setIsCreateAssignmentOpen(false)}
             >
@@ -1350,7 +1353,8 @@ export default function MaterialsAndSubjectHubPage() {
             <Button
               type="submit"
               variant="primary"
-              size="sm"
+              size="md"
+              className="w-full sm:w-auto min-h-[42px] font-bold"
               loading={isSavingAssignment}
             >
               Terbitkan Tugas
@@ -1379,7 +1383,7 @@ export default function MaterialsAndSubjectHubPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-bold text-neutral-800">Mata Pelajaran</label>
               <select
@@ -1389,7 +1393,7 @@ export default function MaterialsAndSubjectHubPage() {
                   const matched = subjects.find((s) => s.name === e.target.value);
                   setExSubjectCode(matched?.code || 'MAPEL');
                 }}
-                className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
               >
                 {subjects.map((s) => (
                   <option key={s.id || s.code} value={s.name}>
@@ -1404,7 +1408,7 @@ export default function MaterialsAndSubjectHubPage() {
               <select
                 value={exClass}
                 onChange={(e) => setExClass(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
               >
                 {classes.map((cls) => (
                   <option key={cls.id || cls.name} value={cls.name}>
@@ -1415,7 +1419,7 @@ export default function MaterialsAndSubjectHubPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-bold text-neutral-800">Token Ujian</label>
               <Input
@@ -1460,15 +1464,16 @@ export default function MaterialsAndSubjectHubPage() {
               placeholder="Catatan tambahan untuk siswa yang akan mengikuti ujian..."
               value={exDescription}
               onChange={(e) => setExDescription(e.target.value)}
-              className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300"
+              className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300"
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-neutral-100">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-neutral-100">
             <Button
               type="button"
               variant="outline"
-              size="sm"
+              size="md"
+              className="w-full sm:w-auto min-h-[42px]"
               disabled={isSavingExam}
               onClick={() => setIsCreateExamOpen(false)}
             >
@@ -1477,7 +1482,8 @@ export default function MaterialsAndSubjectHubPage() {
             <Button
               type="submit"
               variant="primary"
-              size="sm"
+              size="md"
+              className="w-full sm:w-auto min-h-[42px] font-bold"
               loading={isSavingExam}
             >
               Jadwalkan & Terbitkan

@@ -207,7 +207,7 @@ export default function TeacherMaterialsManagementPage() {
         isOpen={isModalOpen}
         onClose={() => !isSubmitting && setIsModalOpen(false)}
         title="Tambah Materi Pembelajaran"
-        size="md"
+        size="lg"
       >
         <form onSubmit={handleSaveMaterial} className="space-y-4">
           <div className="space-y-1">
@@ -221,7 +221,7 @@ export default function TeacherMaterialsManagementPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-bold text-neutral-800">Mata Pelajaran</label>
               <select
@@ -231,7 +231,7 @@ export default function TeacherMaterialsManagementPage() {
                   const matched = subjects.find((s) => s.name === e.target.value);
                   setSubjectCode(matched?.code || 'MAPEL');
                 }}
-                className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
               >
                 {subjects.map((s) => (
                   <option key={s.id || s.code} value={s.name}>
@@ -246,7 +246,7 @@ export default function TeacherMaterialsManagementPage() {
               <select
                 value={className}
                 onChange={(e) => setClassName(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
               >
                 <option value="Semua">Semua Kelas</option>
                 {classes.map((cls) => (
@@ -258,13 +258,13 @@ export default function TeacherMaterialsManagementPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-bold text-neutral-800">Tipe Berkas / Format</label>
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
               >
                 <option value="PDF">Dokumen Modul (PDF)</option>
                 <option value="VIDEO">Video Pembelajaran (YouTube/Link)</option>
@@ -290,15 +290,16 @@ export default function TeacherMaterialsManagementPage() {
               placeholder="Jelaskan ringkasan materi atau arahan belajar siswa..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 focus:outline-hidden focus:border-primary-500"
+              className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 focus:outline-hidden focus:border-primary-500"
             />
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-100">
+          <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2 pt-3 border-t border-neutral-100">
             <Button
               type="button"
               variant="outline"
               size="md"
+              className="w-full sm:w-auto min-h-[42px]"
               disabled={isSubmitting}
               onClick={() => setIsModalOpen(false)}
             >
@@ -308,6 +309,7 @@ export default function TeacherMaterialsManagementPage() {
               type="submit"
               variant="primary"
               size="md"
+              className="w-full sm:w-auto min-h-[42px] font-bold"
               loading={isSubmitting}
             >
               Simpan & Terbitkan

@@ -2,23 +2,35 @@
 
 import React, { useEffect, useRef } from 'react';
 
+/**
+ * Komponen Modal Responsive untuk seluruh sistem e-Learning Spenspra
+ * - Mendukung semua ukuran layar (Mobile 320px+ hingga Desktop 4K)
+ * - Anti-cut: Header dan Footer tetap terlihat, konten tengah (body) otomatis scroll jika melebihi tinggi layar (max-h 92dvh)
+ * - Mendukung prop size ('sm', 'md', 'lg', 'xl', '2xl', 'full') dan subtitle
+ */
 export default function Modal({
   isOpen,
   onClose,
   title,
+  subtitle,
   children,
-  maxWidth = 'max-w-md',
+  maxWidth,
+  size = 'md',
   footerActions,
+  noPadding = false,
 }) {
   const modalRef = useRef(null);
 
-  // Keyboard trap Tab & Escape
+  // Keyboard trap & background scroll lock
   useEffect(() => {
     if (!isOpen) return;
 
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        onClose();
+        onClose?.();
         return;
       }
 
@@ -46,14 +58,43 @@ export default function Modal({
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
+  // Resolve responsive width by size
+  let resolvedWidth = maxWidth;
+  if (!resolvedWidth) {
+    switch (size) {
+      case 'sm':
+        resolvedWidth = 'max-w-sm';
+        break;
+      case 'lg':
+        resolvedWidth = 'max-w-2xl';
+        break;
+      case 'xl':
+        resolvedWidth = 'max-w-4xl';
+        break;
+      case '2xl':
+        resolvedWidth = 'max-w-5xl';
+        break;
+      case 'full':
+        resolvedWidth = 'max-w-full m-2 sm:m-4';
+        break;
+      case 'md':
+      default:
+        resolvedWidth = 'max-w-lg';
+        break;
+    }
+  }
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--color-neutral-1000,#172033)]/50 backdrop-blur-xs"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 md:p-6 bg-neutral-950/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
@@ -62,29 +103,51 @@ export default function Modal({
         aria-modal="true"
         aria-labelledby="modal-title"
         onClick={(e) => e.stopPropagation()}
-        className={`w-full ${maxWidth} bg-[var(--color-neutral-50,#FFFFFF)] border border-[var(--color-neutral-300,#E5E7EB)] rounded-[16px] shadow-[var(--shadow-lg,0_12px_24px_rgba(23,32,51,0.12))] overflow-hidden transition-all`}
+        className={`w-full ${resolvedWidth} max-h-[92dvh] sm:max-h-[88vh] flex flex-col bg-white border border-neutral-200 rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden my-auto transition-all`}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-neutral-300,#E5E7EB)]">
-          <h3 id="modal-title" className="text-[18px] sm:text-[20px] font-bold text-[var(--color-neutral-1000,#172033)]">
-            {title}
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Tutup"
-            className="w-8 h-8 flex items-center justify-center rounded-[8px] text-[var(--color-neutral-500,#98A2B3)] hover:text-[var(--color-neutral-1000,#172033)] hover:bg-[var(--color-neutral-100,#F8F9FC)] transition-colors cursor-pointer text-base"
-          >
-            ✕
-          </button>
+        {/* Header - Tetap terlihat di bagian atas */}
+        {(title || onClose) && (
+          <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-neutral-200 shrink-0 bg-white">
+            <div className="min-w-0 pr-2">
+              {title && (
+                <h3
+                  id="modal-title"
+                  className="text-base sm:text-lg font-bold text-neutral-900 truncate leading-snug"
+                >
+                  {title}
+                </h3>
+              )}
+              {subtitle && (
+                <p className="text-xs text-neutral-500 truncate mt-0.5 font-normal">
+                  {subtitle}
+                </p>
+              )}
+            </div>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Tutup"
+                className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors cursor-pointer text-lg font-semibold"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Body - Scrollable di dalam tanpa terpotong */}
+        <div
+          className={`flex-1 overflow-y-auto overscroll-contain min-h-0 text-neutral-800 ${
+            noPadding ? '' : 'p-3.5 sm:p-6'
+          }`}
+        >
+          {children}
         </div>
 
-        {/* Body */}
-        <div className="p-6 text-[15px] sm:text-base text-[var(--color-neutral-1000,#172033)]">{children}</div>
-
-        {/* Footer Actions */}
+        {/* Footer Actions (Jika ada) */}
         {footerActions && (
-          <div className="px-6 py-3.5 bg-[var(--color-neutral-100,#F8F9FC)] border-t border-[var(--color-neutral-300,#E5E7EB)] flex items-center justify-end gap-2.5">
+          <div className="px-4 py-3 sm:px-6 sm:py-3.5 bg-neutral-50 border-t border-neutral-200 flex flex-col-reverse sm:flex-row items-center justify-end gap-2 shrink-0">
             {footerActions}
           </div>
         )}

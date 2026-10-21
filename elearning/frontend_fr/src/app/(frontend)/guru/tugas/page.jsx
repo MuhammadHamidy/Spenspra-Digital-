@@ -267,7 +267,7 @@ export default function TeacherAssignmentsManagementPage() {
         isOpen={isCreateModalOpen}
         onClose={() => !isSubmitting && setIsCreateModalOpen(false)}
         title="Buat Penugasan Baru"
-        size="md"
+        size="lg"
       >
         <form onSubmit={handleCreateAssignment} className="space-y-4">
           <div className="space-y-1">
@@ -281,7 +281,7 @@ export default function TeacherAssignmentsManagementPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-bold text-neutral-800">Mata Pelajaran</label>
               <select
@@ -291,7 +291,7 @@ export default function TeacherAssignmentsManagementPage() {
                   const matched = subjects.find((s) => s.name === e.target.value);
                   setSubjectCode(matched?.code || 'MAPEL');
                 }}
-                className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
               >
                 {subjects.map((s) => (
                   <option key={s.id || s.code} value={s.name}>
@@ -306,7 +306,7 @@ export default function TeacherAssignmentsManagementPage() {
               <select
                 value={className}
                 onChange={(e) => setClassName(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
               >
                 {classes.map((cls) => (
                   <option key={cls.id || cls.name} value={cls.name}>
@@ -317,7 +317,7 @@ export default function TeacherAssignmentsManagementPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-bold text-neutral-800">Tenggat Waktu</label>
               <Input
@@ -346,15 +346,16 @@ export default function TeacherAssignmentsManagementPage() {
               placeholder="Jelaskan petunjuk pengerjaan dan format berkas yang diminta..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 focus:outline-hidden focus:border-primary-500"
+              className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 focus:outline-hidden focus:border-primary-500"
             />
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-100">
+          <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2 pt-3 border-t border-neutral-100">
             <Button
               type="button"
               variant="outline"
               size="md"
+              className="w-full sm:w-auto min-h-[42px]"
               disabled={isSubmitting}
               onClick={() => setIsCreateModalOpen(false)}
             >
@@ -364,6 +365,7 @@ export default function TeacherAssignmentsManagementPage() {
               type="submit"
               variant="primary"
               size="md"
+              className="w-full sm:w-auto min-h-[42px] font-bold"
               loading={isSubmitting}
             >
               Simpan & Terbitkan Tugas
@@ -449,7 +451,7 @@ export default function TeacherAssignmentsManagementPage() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-neutral-700">Skor / Nilai (0-100)</label>
                   <Input
@@ -473,8 +475,8 @@ export default function TeacherAssignmentsManagementPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2">
-                <Button type="submit" variant="primary" size="sm">
+              <div className="flex justify-end gap-2 pt-1">
+                <Button type="submit" variant="primary" size="md" className="w-full sm:w-auto font-bold">
                   Simpan Nilai Siswa
                 </Button>
               </div>
