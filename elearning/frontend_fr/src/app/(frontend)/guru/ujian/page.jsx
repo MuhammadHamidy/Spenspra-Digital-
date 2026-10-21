@@ -32,6 +32,8 @@ export default function TeacherExamsManagementPage() {
   // Question Editor State
   const [examQuestions, setExamQuestions] = useState([]);
   const [newQuestionType, setNewQuestionType] = useState('MCQ');
+  const [stimulusText, setStimulusText] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
   const [newQuestionText, setNewQuestionText] = useState('');
   const [optA, setOptA] = useState('');
   const [optB, setOptB] = useState('');
@@ -129,12 +131,28 @@ export default function TeacherExamsManagementPage() {
     const qs = await elearningApi.getExamQuestions(exam.id);
     setExamQuestions(qs || []);
     // Reset question form
+    setStimulusText('');
+    setImageUrl('');
     setNewQuestionText('');
     setOptA('');
     setOptB('');
     setOptC('');
     setOptD('');
     setCorrectOption('A');
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Ukuran berkas gambar maksimal 2MB!');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setImageUrl(reader.result);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleAddQuestion = async (e) => {
@@ -151,6 +169,8 @@ export default function TeacherExamsManagementPage() {
         questionNumber: examQuestions.length + 1,
         type: newQuestionType,
         questionText: newQuestionText,
+        stimulusText: stimulusText.trim() || undefined,
+        imageUrl: imageUrl.trim() || undefined,
         options:
           newQuestionType === 'MCQ'
             ? [
@@ -170,6 +190,8 @@ export default function TeacherExamsManagementPage() {
         await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, updated);
       }
 
+      setStimulusText('');
+      setImageUrl('');
       setNewQuestionText('');
       setOptA('');
       setOptB('');
@@ -460,7 +482,19 @@ export default function TeacherExamsManagementPage() {
               examQuestions.map((q, idx) => (
                 <div key={q.id || idx} className="p-3.5 rounded-xl border border-neutral-200 bg-neutral-50/50 space-y-2 text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-primary-600">Soal #{idx + 1} ({q.type})</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-primary-600">Soal #{idx + 1} ({q.type})</span>
+                      {q.stimulusText && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                          + Stimulus Teks
+                        </span>
+                      )}
+                      {q.imageUrl && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800">
+                          + Gambar
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       {q.type === 'MCQ' && (
                         <span className="font-bold text-success-600 bg-success-50 px-2 py-0.5 rounded border border-success-200">
@@ -477,6 +511,26 @@ export default function TeacherExamsManagementPage() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Stimulus Snippet if exists */}
+                  {q.stimulusText && (
+                    <div className="p-2.5 rounded-lg bg-amber-50/70 border border-amber-200 text-amber-950 font-mono text-[11px] whitespace-pre-wrap leading-relaxed max-h-24 overflow-y-auto">
+                      <span className="font-bold block text-amber-900 not-italic">📑 Stimulus Kasus/Wacana:</span>
+                      {q.stimulusText}
+                    </div>
+                  )}
+
+                  {/* Image Preview if exists */}
+                  {q.imageUrl && (
+                    <div className="pt-1">
+                      <img
+                        src={q.imageUrl}
+                        alt="Gambar Soal"
+                        className="max-h-28 rounded-lg border border-neutral-200 object-contain bg-white p-1"
+                      />
+                    </div>
+                  )}
+
                   <p className="text-neutral-800 font-medium whitespace-pre-wrap">{q.questionText}</p>
                   {q.type === 'MCQ' && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-neutral-600 pt-1">
@@ -493,7 +547,7 @@ export default function TeacherExamsManagementPage() {
           </div>
 
           {/* Form Tambah Butir Soal Baru */}
-          <form onSubmit={handleAddQuestion} className="p-3.5 sm:p-4 rounded-xl bg-neutral-50 border border-neutral-200 space-y-3">
+          <form onSubmit={handleAddQuestion} className="p-3.5 sm:p-4 rounded-xl bg-neutral-50 border border-neutral-200 space-y-3.5">
             <h4 className="text-xs font-bold text-neutral-900">+ Tambah Butir Soal Baru</h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -505,7 +559,7 @@ export default function TeacherExamsManagementPage() {
                   className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
                 >
                   <option value="MCQ">Pilihan Ganda (A, B, C, D)</option>
-                  <option value="ESSAY">Uraian / Esai</option>
+                  <option value="ESSAY">Uraian / Esai / Sub-Soal (a, b, c)</option>
                 </select>
               </div>
 
@@ -526,14 +580,78 @@ export default function TeacherExamsManagementPage() {
               )}
             </div>
 
+            {/* Field 1: Wacana / Teks Kasus / Stimulus (Opsional) */}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-neutral-700">Isi Pertanyaan / Soal</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-neutral-800 flex items-center gap-1.5">
+                  <span>📑</span>
+                  <span>Wacana / Stimulus Kasus / Cuplikan Kode (Opsional)</span>
+                </label>
+                <span className="text-[10px] text-neutral-400">Untuk soal AKM, literasi, atau studi kasus</span>
+              </div>
               <textarea
-                rows={2}
-                placeholder="Tuliskan teks pertanyaan soal di sini..."
+                rows={3}
+                placeholder="Contoh: Denda Buku Perpustakaan&#10;Perpustakaan sekolah ingin siswa mengembalikan buku tepat waktu...&#10;&#10;Pseudocode yang harus dilengkapi:&#10;MULAI&#10;  BACA hari&#10;  ..."
+                value={stimulusText}
+                onChange={(e) => setStimulusText(e.target.value)}
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 font-mono bg-white"
+              />
+            </div>
+
+            {/* Field 2: Gambar Soal / Diagram / Grafik (Opsional) */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-neutral-800 flex items-center gap-1.5">
+                <span>🖼️</span>
+                <span>Gambar / Diagram / Flowchart Soal (Opsional)</span>
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="text-xs text-neutral-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 cursor-pointer"
+                />
+                <Input
+                  type="text"
+                  placeholder="Atau tempel URL gambar (https://...)"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  className="text-xs"
+                />
+              </div>
+              {imageUrl && (
+                <div className="relative mt-2 inline-block">
+                  <img
+                    src={imageUrl}
+                    alt="Preview Soal"
+                    className="max-h-40 rounded-lg border border-neutral-200 object-contain bg-white p-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setImageUrl('')}
+                    className="absolute -top-2 -right-2 bg-danger-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold cursor-pointer shadow-xs"
+                    title="Hapus Gambar"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Field 3: Teks Pertanyaan / Sub-Soal */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-neutral-700">
+                  Pertanyaan / Sub-Pertanyaan Soal
+                </label>
+                <span className="text-[10px] text-neutral-400">Dapat berisi poin pertanyaan a, b, c</span>
+              </div>
+              <textarea
+                rows={3}
+                placeholder="Tuliskan pertanyaan di sini. Jika memiliki sub-soal, gunakan format:&#10;a. Berdasarkan teks di atas, berapa denda...?&#10;b. Lengkapilah pseudocode di atas dengan...?&#10;c. Gambarlah algoritma program dalam bentuk flowchart!"
                 value={newQuestionText}
                 onChange={(e) => setNewQuestionText(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 font-sans leading-relaxed"
                 required
               />
             </div>

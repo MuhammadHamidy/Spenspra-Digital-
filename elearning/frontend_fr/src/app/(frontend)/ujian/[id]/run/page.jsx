@@ -456,11 +456,39 @@ export default function CBTExamRunnerPage({ params }) {
               </button>
             </div>
 
-            {/* Question Text */}
+            {/* Question Content */}
             <div className="space-y-4">
-              <p className="text-sm sm:text-base text-neutral-800 leading-relaxed font-medium">
+              {/* 1. Stimulus Kasus / Wacana / Teks Bacaan (Jika ada) */}
+              {currentQ?.stimulusText && (
+                <div className="p-4 sm:p-5 rounded-xl bg-amber-50/70 border border-amber-200 text-amber-950 space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-900 border-b border-amber-200 pb-2">
+                    <span>📑</span>
+                    <span>Wacana / Stimulus Kasus</span>
+                  </div>
+                  <div className="text-xs sm:text-sm font-sans whitespace-pre-wrap leading-relaxed text-amber-950">
+                    {currentQ.stimulusText}
+                  </div>
+                </div>
+              )}
+
+              {/* 2. Gambar / Diagram / Flowchart Soal (Jika ada) */}
+              {currentQ?.imageUrl && (
+                <div className="p-3 sm:p-4 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-col items-center justify-center">
+                  <img
+                    src={currentQ.imageUrl}
+                    alt={`Gambar Soal No. ${currentIndex + 1}`}
+                    className="max-h-72 sm:max-h-96 w-auto max-w-full rounded-lg object-contain bg-white shadow-xs p-1.5"
+                  />
+                  <span className="text-[11px] text-neutral-400 mt-1 italic">
+                    Gambar Pendukung Soal No. {currentIndex + 1}
+                  </span>
+                </div>
+              )}
+
+              {/* 3. Teks Pertanyaan (Mendukung Sub-Soal a, b, c) */}
+              <div className="text-sm sm:text-base text-neutral-900 leading-relaxed font-semibold whitespace-pre-wrap">
                 {currentQ?.questionText}
-              </p>
+              </div>
 
               {/* Multiple Choice Options */}
               {currentQ?.type === 'MCQ' && (
@@ -496,18 +524,23 @@ export default function CBTExamRunnerPage({ params }) {
                 </div>
               )}
 
-              {/* Essay Textarea */}
+              {/* Essay Textarea (Mendukung jawaban per sub-poin a, b, c) */}
               {currentQ?.type === 'ESSAY' && (
                 <div className="space-y-2 pt-2">
-                  <label className="text-xs font-bold text-neutral-700">
-                    Tuliskan Jawaban Uraian Anda:
-                  </label>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs text-neutral-600">
+                    <label className="font-bold text-neutral-800">
+                      Lembar Jawaban Uraian / Esai:
+                    </label>
+                    <span className="text-[11px] text-neutral-500">
+                      Tuliskan jawaban per poin (misal: a. ..., b. ..., c. ...)
+                    </span>
+                  </div>
                   <textarea
-                    rows={6}
-                    placeholder="Ketik jawaban lengkap di sini..."
+                    rows={7}
+                    placeholder="Tuliskan uraian jawaban Anda di sini secara lengkap dan terstruktur...&#10;Contoh:&#10;a. Berdasarkan teks di atas...&#10;b. Titik-titik pseudocode: (1) ... (2) ...&#10;c. Langkah algoritma flowchart..."
                     value={answers[currentQ.id]?.essayAnswer || ''}
                     onChange={(e) => handleEssayChange(e.target.value)}
-                    className="w-full text-xs sm:text-sm p-3.5 rounded-[8px] border border-neutral-300 focus:outline-hidden focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                    className="w-full text-xs sm:text-sm p-3.5 rounded-xl border border-neutral-300 focus:outline-hidden focus:border-primary-500 focus:ring-1 focus:ring-primary-500 font-sans leading-relaxed"
                   />
                 </div>
               )}
