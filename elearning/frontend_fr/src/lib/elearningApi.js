@@ -35,6 +35,43 @@ async function fetchJson(endpoint, options = {}) {
   }
 }
 
+export function getSsoApiBase() {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host.includes('spenspra.com')) return 'https://sso.spenspra.com/api';
+    if (host.includes('spenspra.sch.id')) return 'https://sso.spenspra.sch.id/api';
+    if (host.includes('localhost') || host === '127.0.0.1') return 'http://localhost:8080/api';
+  }
+  return process.env.NEXT_PUBLIC_SSO_API_URL || 'https://sso.spenspra.com/api';
+}
+
+async function fetchSsoJson(endpoint, options = {}) {
+  const ssoBase = getSsoApiBase();
+  const url = `${ssoBase}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const currentUser = tokenStorage.getUser();
+  const userId = currentUser?.id || 'user-elearning-default';
+  const token = tokenStorage.getToken();
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-User-Id': userId,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers || {}),
+  };
+
+  try {
+    const res = await fetch(url, { ...options, headers });
+    if (!res.ok) {
+      return { success: false, status: res.status };
+    }
+    const json = await res.json();
+    return json;
+  } catch (err) {
+    console.warn(`[SSO Client] Endpoint ${url} fallback:`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 const INITIAL_MATERIALS = [];
 
 const INITIAL_ASSIGNMENTS = [];
@@ -42,6 +79,33 @@ const INITIAL_ASSIGNMENTS = [];
 const INITIAL_EXAMS = [];
 
 const INITIAL_QUESTIONS = {};
+
+export const DEFAULT_CLASSES = [
+  { id: 'cls-7a', name: '7A', level: 7, academicYear: '2026/2027' },
+  { id: 'cls-7b', name: '7B', level: 7, academicYear: '2026/2027' },
+  { id: 'cls-7c', name: '7C', level: 7, academicYear: '2026/2027' },
+  { id: 'cls-7d', name: '7D', level: 7, academicYear: '2026/2027' },
+  { id: 'cls-7e', name: '7E', level: 7, academicYear: '2026/2027' },
+  { id: 'cls-7f', name: '7F', level: 7, academicYear: '2026/2027' },
+  { id: 'cls-7g', name: '7G', level: 7, academicYear: '2026/2027' },
+  { id: 'cls-7h', name: '7H', level: 7, academicYear: '2026/2027' },
+  { id: 'cls-8a', name: '8A', level: 8, academicYear: '2026/2027' },
+  { id: 'cls-8b', name: '8B', level: 8, academicYear: '2026/2027' },
+  { id: 'cls-8c', name: '8C', level: 8, academicYear: '2026/2027' },
+  { id: 'cls-8d', name: '8D', level: 8, academicYear: '2026/2027' },
+  { id: 'cls-8e', name: '8E', level: 8, academicYear: '2026/2027' },
+  { id: 'cls-8f', name: '8F', level: 8, academicYear: '2026/2027' },
+  { id: 'cls-8g', name: '8G', level: 8, academicYear: '2026/2027' },
+  { id: 'cls-8h', name: '8H', level: 8, academicYear: '2026/2027' },
+  { id: 'cls-9a', name: '9A', level: 9, academicYear: '2026/2027' },
+  { id: 'cls-9b', name: '9B', level: 9, academicYear: '2026/2027' },
+  { id: 'cls-9c', name: '9C', level: 9, academicYear: '2026/2027' },
+  { id: 'cls-9d', name: '9D', level: 9, academicYear: '2026/2027' },
+  { id: 'cls-9e', name: '9E', level: 9, academicYear: '2026/2027' },
+  { id: 'cls-9f', name: '9F', level: 9, academicYear: '2026/2027' },
+  { id: 'cls-9g', name: '9G', level: 9, academicYear: '2026/2027' },
+  { id: 'cls-9h', name: '9H', level: 9, academicYear: '2026/2027' },
+];
 
 export const OFFICIAL_SUBJECTS = [
   { id: 'crs-mtk', code: 'MAT', name: 'Matematika', category: 'Umum', color: 'indigo', icon: '📐', description: 'Pembelajaran Matematika Kurikulum Merdeka' },
@@ -286,44 +350,62 @@ export const elearningApi = {
     return questions;
   },
 
-  // =================== MATA PELAJARAN (SUBJECTS) ===================
+  // =================== MATA PELAJARAN (COURSES / SUBJECTS) ===================
   getSubjects: async () => {
-    const res = await fetchJson('/school/courses').catch(() => null);
-    const backendCourses = (res && res.success && Array.isArray(res.data)) ? res.data : [];
-    const customSubjects = getLocal('custom_subjects', []);
+    // 1. Ambil dari SSO master courses & backend
+    const [ssoRes1, ssoRes2, beRes] = await Promise.all([
+      fetchSsoJson('/school/courses').catch(() => null),
+      fetchSsoJson('/courses').catch(() => null),
+      fetchJson('/school/courses').catch(() => null),
+    ]);
 
+    const rawCourses = [];
+    if (ssoRes1?.success && Array.isArray(ssoRes1.data)) rawCourses.push(...ssoRes1.data);
+    else if (Array.isArray(ssoRes1)) rawCourses.push(...ssoRes1);
+
+    if (ssoRes2?.success && Array.isArray(ssoRes2.data)) rawCourses.push(...ssoRes2.data);
+    else if (Array.isArray(ssoRes2?.data?.courses)) rawCourses.push(...ssoRes2.data.courses);
+
+    if (beRes?.success && Array.isArray(beRes.data)) rawCourses.push(...beRes.data);
+
+    const customSubjects = getLocal('custom_subjects', []);
     const mergedMap = new Map();
+
+    // Official 12 Spenspra standard subjects as baseline
     OFFICIAL_SUBJECTS.forEach((s) => mergedMap.set(s.code.toUpperCase(), { ...s }));
 
-    backendCourses.forEach((c) => {
-      const code = (c.code || c.id || '').toUpperCase();
-      if (code) {
-        mergedMap.set(code, {
-          id: c.id || `crs-${code.toLowerCase()}`,
-          code: c.code || code,
-          name: c.name || c.title || code,
-          category: c.category || 'Umum',
-          color: c.color || 'indigo',
-          icon: c.icon || '📚',
-          description: c.description || `Mata Pelajaran ${c.name || code}`,
-        });
-      }
+    // Merge SSO subjects & custom subjects
+    [...rawCourses, ...customSubjects].forEach((c) => {
+      if (!c) return;
+      const code = (c.code || c.course_code || c.id || '').toUpperCase();
+      const name = c.name || c.course_name || c.title || code;
+      if (!code && !name) return;
+
+      const effectiveCode = code || name.slice(0, 3).toUpperCase();
+      const existing = mergedMap.get(effectiveCode) || {};
+
+      mergedMap.set(effectiveCode, {
+        id: c.id || `crs-${effectiveCode.toLowerCase()}`,
+        code: effectiveCode,
+        name: name,
+        category: c.category || existing.category || 'Umum',
+        color: c.color || existing.color || 'indigo',
+        icon: c.icon || existing.icon || '📚',
+        description: c.description || existing.description || `Mata Pelajaran ${name}`,
+      });
     });
 
-    customSubjects.forEach((c) => {
-      const code = (c.code || c.id || '').toUpperCase();
-      if (code) {
-        mergedMap.set(code, {
-          ...c,
-          code,
-        });
-      }
-    });
-
-    return Array.from(mergedMap.values());
+    const result = Array.from(mergedMap.values());
+    setLocal('subjects', result);
+    return result;
   },
 
   createSubject: async (payload) => {
+    await fetchSsoJson('/school/courses', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+
     const list = getLocal('custom_subjects', []);
     const newSubject = {
       id: `crs-${Date.now()}`,
@@ -337,6 +419,81 @@ export const elearningApi = {
     };
     setLocal('custom_subjects', [...list, newSubject]);
     return newSubject;
+  },
+
+  // =================== KELAS / ROMBEL (CLASSES) ===================
+  getClasses: async () => {
+    // 1. Ambil dari SSO master classes & backend
+    const [ssoRes1, ssoRes2, beRes] = await Promise.all([
+      fetchSsoJson('/school/classes').catch(() => null),
+      fetchSsoJson('/classes').catch(() => null),
+      fetchJson('/school/classes').catch(() => null),
+    ]);
+
+    const rawList = [];
+    if (ssoRes1?.success && Array.isArray(ssoRes1.data)) rawList.push(...ssoRes1.data);
+    else if (Array.isArray(ssoRes1?.data?.classes)) rawList.push(...ssoRes1.data.classes);
+    else if (Array.isArray(ssoRes1)) rawList.push(...ssoRes1);
+
+    if (ssoRes2?.success && Array.isArray(ssoRes2.data)) rawList.push(...ssoRes2.data);
+    else if (Array.isArray(ssoRes2?.data?.classes)) rawList.push(...ssoRes2.data.classes);
+
+    if (beRes?.success && Array.isArray(beRes.data)) rawList.push(...beRes.data);
+
+    const customClasses = getLocal('custom_classes', []);
+    const mergedMap = new Map();
+
+    // Default Spenspra classes (7A-7H, 8A-8H, 9A-9H) as foundation
+    DEFAULT_CLASSES.forEach((c) => mergedMap.set(c.name.toUpperCase(), { ...c }));
+
+    // Merge SSO classes
+    [...rawList, ...customClasses].forEach((c) => {
+      if (!c) return;
+      const rawName = typeof c === 'string' ? c : (c.name || c.class_name || c.class_code || '');
+      const cleanName = rawName.replace(/^Kelas\s*/i, '').trim().toUpperCase();
+      if (!cleanName) return;
+
+      const levelNum = Number(c.level) || (cleanName.startsWith('7') ? 7 : cleanName.startsWith('8') ? 8 : cleanName.startsWith('9') ? 9 : 7);
+
+      mergedMap.set(cleanName, {
+        id: c.id || `cls-${cleanName.toLowerCase()}`,
+        name: cleanName,
+        level: levelNum,
+        academicYear: c.academic_year || c.academicYear || '2026/2027',
+        teacherId: c.teacher_id || c.dosen_id || null,
+        teacherName: c.teacher_name || null,
+        courseId: c.course_id || null,
+        courseName: c.course_name || null,
+        courseCode: c.course_code || null,
+      });
+    });
+
+    const result = Array.from(mergedMap.values()).sort((a, b) => {
+      if (a.level !== b.level) return a.level - b.level;
+      return a.name.localeCompare(b.name, undefined, { numeric: true });
+    });
+
+    setLocal('classes', result);
+    return result;
+  },
+
+  createClass: async (payload) => {
+    await fetchSsoJson('/school/classes', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+
+    const list = getLocal('custom_classes', []);
+    const cleanName = (payload.name || payload.className || '7A').replace(/^Kelas\s*/i, '').trim().toUpperCase();
+    const newClass = {
+      id: `cls-${Date.now()}`,
+      name: cleanName,
+      level: Number(payload.level) || 7,
+      academicYear: payload.academicYear || '2026/2027',
+      ...payload,
+    };
+    setLocal('custom_classes', [...list, newClass]);
+    return newClass;
   },
 
   startExamSession: async (examId, token, student) => {

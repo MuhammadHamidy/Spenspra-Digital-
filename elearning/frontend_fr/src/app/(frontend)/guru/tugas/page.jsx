@@ -16,6 +16,7 @@ export default function TeacherAssignmentsManagementPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [activeGradingAssignment, setActiveGradingAssignment] = useState(null);
   const [subjects, setSubjects] = useState([]);
+  const [classes, setClasses] = useState([]);
 
   // Form State Create Assignment
   const [title, setTitle] = useState('');
@@ -42,15 +43,20 @@ export default function TeacherAssignmentsManagementPage() {
   const loadInitialData = async () => {
     setLoading(true);
     try {
-      const [assData, subjData] = await Promise.all([
+      const [assData, subjData, clsData] = await Promise.all([
         elearningApi.getAssignments(),
         elearningApi.getSubjects(),
+        elearningApi.getClasses(),
       ]);
       setAssignments(assData || []);
       setSubjects(subjData || []);
+      setClasses(clsData || []);
       if (subjData && subjData.length > 0) {
         setSubject(subjData[0].name);
         setSubjectCode(subjData[0].code);
+      }
+      if (clsData && clsData.length > 0) {
+        setClassName(clsData[0].name);
       }
     } catch (e) {
       console.error(e);
@@ -302,11 +308,11 @@ export default function TeacherAssignmentsManagementPage() {
                 onChange={(e) => setClassName(e.target.value)}
                 className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
               >
-                <option value="7A">Kelas 7A</option>
-                <option value="7B">Kelas 7B</option>
-                <option value="8A">Kelas 8A</option>
-                <option value="8B">Kelas 8B</option>
-                <option value="9A">Kelas 9A</option>
+                {classes.map((cls) => (
+                  <option key={cls.id || cls.name} value={cls.name}>
+                    Kelas {cls.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

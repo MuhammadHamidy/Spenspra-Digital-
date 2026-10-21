@@ -14,6 +14,7 @@ export default function TeacherMaterialsManagementPage() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [subjects, setSubjects] = useState([]);
+  const [classes, setClasses] = useState([]);
 
   // Form State
   const [title, setTitle] = useState('');
@@ -33,15 +34,20 @@ export default function TeacherMaterialsManagementPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [matData, subjData] = await Promise.all([
+      const [matData, subjData, clsData] = await Promise.all([
         elearningApi.getMaterials(),
         elearningApi.getSubjects(),
+        elearningApi.getClasses(),
       ]);
       setMaterials(matData || []);
       setSubjects(subjData || []);
+      setClasses(clsData || []);
       if (subjData && subjData.length > 0) {
         setSubject(subjData[0].name);
         setSubjectCode(subjData[0].code);
+      }
+      if (clsData && clsData.length > 0) {
+        setClassName(clsData[0].name);
       }
     } catch (e) {
       console.error(e);
@@ -242,11 +248,12 @@ export default function TeacherMaterialsManagementPage() {
                 onChange={(e) => setClassName(e.target.value)}
                 className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
               >
-                <option value="7A">Kelas 7A</option>
-                <option value="7B">Kelas 7B</option>
-                <option value="8A">Kelas 8A</option>
-                <option value="8B">Kelas 8B</option>
-                <option value="9A">Kelas 9A</option>
+                <option value="Semua">Semua Kelas</option>
+                {classes.map((cls) => (
+                  <option key={cls.id || cls.name} value={cls.name}>
+                    Kelas {cls.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

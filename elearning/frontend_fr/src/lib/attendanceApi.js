@@ -29,12 +29,24 @@ async function fetchJson(endpoint, options = {}) {
 }
 
 export const attendanceApi = {
-  // Master Data Kelas & Mapel
+  // Master Data Kelas & Mapel (Terintegrasi SSO)
   getClasses: async () => {
-    return fetchJson('/school/classes');
+    try {
+      const { elearningApi } = await import('./elearningApi');
+      const list = await elearningApi.getClasses();
+      return { success: true, data: list };
+    } catch {
+      return fetchJson('/school/classes');
+    }
   },
   getCourses: async () => {
-    return fetchJson('/school/courses');
+    try {
+      const { elearningApi } = await import('./elearningApi');
+      const list = await elearningApi.getSubjects();
+      return { success: true, data: list };
+    } catch {
+      return fetchJson('/school/courses');
+    }
   },
 
   // Sesi Kelas

@@ -14,6 +14,7 @@ export default function MaterialsAndSubjectHubPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [subjects, setSubjects] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [materials, setMaterials] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [exams, setExams] = useState([]);
@@ -81,16 +82,18 @@ export default function MaterialsAndSubjectHubPage() {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [subjList, matList, assList, exmList] = await Promise.all([
+      const [subjList, matList, assList, exmList, clsList] = await Promise.all([
         elearningApi.getSubjects(),
         elearningApi.getMaterials(),
         elearningApi.getAssignments(),
         elearningApi.getExams(),
+        elearningApi.getClasses(),
       ]);
       setSubjects(subjList || []);
       setMaterials(matList || []);
       setAssignments(assList || []);
       setExams(exmList || []);
+      setClasses(clsList || []);
     } catch (err) {
       console.error('Failed to load learning data:', err);
     } finally {
@@ -1175,12 +1178,12 @@ export default function MaterialsAndSubjectHubPage() {
                 onChange={(e) => setMatClass(e.target.value)}
                 className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
               >
-                <option value="7A">Kelas 7A</option>
-                <option value="7B">Kelas 7B</option>
-                <option value="8A">Kelas 8A</option>
-                <option value="8B">Kelas 8B</option>
-                <option value="9A">Kelas 9A</option>
                 <option value="Semua">Semua Kelas</option>
+                {classes.map((cls) => (
+                  <option key={cls.id || cls.name} value={cls.name}>
+                    Kelas {cls.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -1290,11 +1293,11 @@ export default function MaterialsAndSubjectHubPage() {
                 onChange={(e) => setTugClass(e.target.value)}
                 className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
               >
-                <option value="7A">Kelas 7A</option>
-                <option value="7B">Kelas 7B</option>
-                <option value="8A">Kelas 8A</option>
-                <option value="8B">Kelas 8B</option>
-                <option value="9A">Kelas 9A</option>
+                {classes.map((cls) => (
+                  <option key={cls.id || cls.name} value={cls.name}>
+                    Kelas {cls.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -1403,11 +1406,11 @@ export default function MaterialsAndSubjectHubPage() {
                 onChange={(e) => setExClass(e.target.value)}
                 className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
               >
-                <option value="7A">Kelas 7A</option>
-                <option value="7B">Kelas 7B</option>
-                <option value="8A">Kelas 8A</option>
-                <option value="8B">Kelas 8B</option>
-                <option value="9A">Kelas 9A</option>
+                {classes.map((cls) => (
+                  <option key={cls.id || cls.name} value={cls.name}>
+                    Kelas {cls.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
