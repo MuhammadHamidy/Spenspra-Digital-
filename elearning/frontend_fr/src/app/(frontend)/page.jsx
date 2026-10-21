@@ -306,6 +306,7 @@ export default function LMSDashboardPage() {
                 </Card>
               ))
             )}
+          </div>
         </div>
 
         {/* Right: Tugas & Materi Cepat (1 Col) */}
