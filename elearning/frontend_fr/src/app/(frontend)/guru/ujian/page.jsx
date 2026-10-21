@@ -25,7 +25,7 @@ export default function TeacherExamsManagementPage() {
   const [className, setClassName] = useState('7A');
   const [token, setToken] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(60);
-  const [maxViolations, setMaxViolations] = useState(3);
+  const [maxViolations, setMaxViolations] = useState(1);
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -87,7 +87,7 @@ export default function TeacherExamsManagementPage() {
     setClassName('7A');
     setToken(Math.random().toString(36).substring(2, 8).toUpperCase());
     setDurationMinutes(60);
-    setMaxViolations(3);
+    setMaxViolations(1);
     setDescription('');
     setIsCreateModalOpen(true);
   };
@@ -376,16 +376,27 @@ export default function TeacherExamsManagementPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-neutral-800">Batas Toleransi</label>
-              <Input
-                type="number"
-                min="1"
-                max="10"
+              <label className="text-xs font-bold text-neutral-800">Toleransi Anti-Cheat</label>
+              <select
                 value={maxViolations}
-                onChange={(e) => setMaxViolations(e.target.value)}
-                required
-              />
+                onChange={(e) => setMaxViolations(Number(e.target.value))}
+                className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white font-medium"
+              >
+                <option value={1}>1x (Zero Tolerance - Standar Ketat)</option>
+                <option value={2}>2x Pelanggaran</option>
+                <option value={3}>3x Pelanggaran (Toleransi Standar)</option>
+              </select>
             </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-[11px] space-y-1">
+            <p className="font-bold flex items-center gap-1.5">
+              <span>🔐</span>
+              <span>PIN Buka Kunci Pengawas:</span>
+            </p>
+            <p className="text-emerald-800 leading-relaxed">
+              Jika layar siswa terkunci karena membuka notifikasi atau keluar jendela, Pengawas dapat membukanya langsung di HP siswa dengan memasukkan <strong>Token Ujian ({token || '...'})</strong> atau PIN Master <strong>SPENSPRA</strong>.
+            </p>
           </div>
 
           <div className="space-y-1">

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, Suspense } from 'react';
+import { usePathname } from 'next/navigation';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 import { useInactivityTimeout } from '@/hooks/useInactivityTimeout';
@@ -10,6 +11,19 @@ export default function AppLayoutWrapper({ children }) {
   useInactivityTimeout();
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const pathname = usePathname() || '';
+
+  // Mode Ujian Kiosk (/ujian/[id]/run):
+  // Sembunyikan Sidebar & Navbar secara total agar siswa tidak bisa mengakses Home, Notif, maupun navigasi lain
+  const isCBTExamRunning = pathname.includes('/ujian/') && pathname.includes('/run');
+
+  if (isCBTExamRunning) {
+    return (
+      <div className="min-h-screen w-full bg-neutral-900 flex flex-col font-sans select-none overflow-x-hidden">
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex bg-slate-50 text-slate-800 font-sans relative">

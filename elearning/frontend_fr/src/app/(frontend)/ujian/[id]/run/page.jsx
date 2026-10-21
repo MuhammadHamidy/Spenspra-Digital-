@@ -30,6 +30,11 @@ export default function CBTExamRunnerPage({ params }) {
   const [isFinishing, setIsFinishing] = useState(false);
   const [finishResult, setFinishResult] = useState(null);
 
+  // Solusi 2: Supervisor Unlock PIN State
+  const [supervisorPinInput, setSupervisorPinInput] = useState('');
+  const [supervisorPinError, setSupervisorPinError] = useState('');
+  const [isUnlocking, setIsUnlocking] = useState(false);
+
   // Load Exam and Student Session
   useEffect(() => {
     const currentUser = tokenStorage.getUser();
@@ -90,7 +95,7 @@ export default function CBTExamRunnerPage({ params }) {
     }
   }, [session, examId, user]);
 
-  // Connect Proctoring Engine
+  // Connect Proctoring Engine (Solusi 2: Zero Tolerance & Kiosk Auto-Lock)
   const {
     violationsCount,
     isLocked,
@@ -98,13 +103,55 @@ export default function CBTExamRunnerPage({ params }) {
     warningMessage,
     dismissWarning,
     requestFullscreen,
+    unlockSession,
+    wakeLockActive,
   } = useProctoring({
     examId,
-    maxViolations: exam?.maxViolations || 3,
+    maxViolations: 1, // Solusi 2: Zero-Tolerance (1x pelanggaran langsung terkunci)
+    zeroTolerance: true,
+    enabled: !loading && !finishResult && Boolean(session),
+    unlockPin: exam?.token || 'SPENSPRA',
+    altUnlockPins: [exam?.token, exam?.supervisorPin, 'SPENSPRA', 'GURU123', 'ADMINCBT'].filter(Boolean),
     onLock: handleLockSession,
     onViolation: handleViolationRecorded,
-    enabled: !loading && !finishResult && Boolean(session),
+    onUnlock: async (unlockInfo) => {
+      if (session && user) {
+        await elearningApi.recordViolationLog(session.sessionId, examId, user.id, {
+          type: 'SUPERVISOR_UNLOCK',
+          description: `Kunci ujian berhasil dibuka kembali oleh pengawas dengan PIN resmi (${unlockInfo.pin}).`,
+          timestamp: new Date().toISOString(),
+        });
+      }
+      setSupervisorPinInput('');
+      setSupervisorPinError('');
+    },
   });
+
+  // Auto-request fullscreen saat sesi ujian aktif
+  useEffect(() => {
+    if (!loading && session && !isLocked) {
+      requestFullscreen();
+    }
+  }, [loading, session, isLocked, requestFullscreen]);
+
+  // Handler Buka Kunci oleh Pengawas Ruangan
+  const handleSupervisorUnlockSubmit = (e) => {
+    e.preventDefault();
+    if (!supervisorPinInput.trim()) {
+      setSupervisorPinError('Harap masukkan PIN Pengawas!');
+      return;
+    }
+    setIsUnlocking(true);
+    setSupervisorPinError('');
+    const res = unlockSession(supervisorPinInput);
+    if (!res.success) {
+      setSupervisorPinError(res.message || 'PIN Pengawas tidak cocok!');
+    } else {
+      setSupervisorPinInput('');
+      setSupervisorPinError('');
+    }
+    setIsUnlocking(false);
+  };
 
   // Countdown Timer
   useEffect(() => {
@@ -601,36 +648,71 @@ export default function CBTExamRunnerPage({ params }) {
         </div>
       </Modal>
 
-      {/* 4. FULLSCREEN SCREEN LOCK MODAL (LOCKED BY SYSTEM) */}
+      {/* 4. FULLSCREEN SCREEN LOCK MODAL (LOCKED BY SYSTEM - SOLUSI 2) */}
       {isLocked && (
-        <div className="fixed inset-0 z-50 bg-neutral-950/90 backdrop-blur-md flex items-center justify-center p-4 select-none">
-          <div className="max-w-md w-full bg-white rounded-[16px] p-6 sm:p-8 text-center space-y-5 shadow-2xl animate-in zoom-in-95">
-            <div className="w-16 h-16 rounded-full bg-danger-100 text-danger-600 mx-auto flex items-center justify-center">
+        <div className="fixed inset-0 z-50 bg-neutral-950/95 backdrop-blur-md flex items-center justify-center p-4 select-none">
+          <div className="max-w-md w-full bg-white rounded-2xl p-6 sm:p-8 text-center space-y-5 shadow-2xl border-2 border-danger-500 animate-in zoom-in-95">
+            <div className="w-16 h-16 rounded-full bg-danger-100 text-danger-600 mx-auto flex items-center justify-center shadow-inner">
               <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
             </div>
 
-            <div className="space-y-2">
-              <h3 className="text-xl font-bold text-danger-600">
-                Ujian Ini Telah Terkunci!
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-danger-100 text-danger-800 text-[11px] font-bold uppercase tracking-wider">
+                <span className="w-2 h-2 rounded-full bg-danger-600 animate-ping"></span>
+                <span>Anti-Cheat Terkunci</span>
+              </div>
+              <h3 className="text-xl font-black text-neutral-900 tracking-tight">
+                Lembar Ujian Terkunci!
               </h3>
               <p className="text-xs text-neutral-600 leading-relaxed">
-                Anda telah melampaui batas toleransi pelanggaran sistem pengawasan CBT ({exam?.maxViolations || 3} kali keluar jendela/tab).
+                {warningMessage || 'Terdeteksi menarik panel notifikasi HP, menekan tombol Home, berpindah tab, atau keluar dari peramban ujian.'}
               </p>
-              <div className="p-3 rounded-[8px] bg-neutral-100 border border-neutral-200 text-[11px] text-neutral-700 font-medium">
-                Silakan hubungi <strong>Bapak/Ibu Pengawas Ujian</strong> di kelas untuk melakukan verifikasi dan membuka kembali kunci lembar ujian Anda.
-              </div>
             </div>
 
-            <Button
-              variant="outline"
-              size="md"
-              className="w-full"
-              onClick={() => router.push('/ujian')}
-            >
-              Kembali ke Menu Utama
-            </Button>
+            {/* Kotak Pengawas Ruangan */}
+            <form onSubmit={handleSupervisorUnlockSubmit} className="pt-2 border-t border-neutral-100 space-y-3 text-left">
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] space-y-1">
+                <p className="font-bold flex items-center gap-1">
+                  <span>👨‍🏫</span>
+                  <span>Petunjuk Pengawas Ruangan:</span>
+                </p>
+                <p className="text-amber-800 leading-relaxed">
+                  Masukkan PIN Pengawas atau Token Ujian di bawah ini untuk memverifikasi dan membuka kembali lembar ujian siswa.
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-neutral-800">
+                  PIN Buka Kunci Pengawas
+                </label>
+                <input
+                  type="password"
+                  placeholder="Masukkan PIN Pengawas / Token"
+                  value={supervisorPinInput}
+                  onChange={(e) => {
+                    setSupervisorPinInput(e.target.value.toUpperCase());
+                    setSupervisorPinError('');
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-center tracking-widest text-sm font-bold uppercase text-neutral-900 bg-neutral-50"
+                  autoFocus
+                />
+                {supervisorPinError && (
+                  <p className="text-[11px] text-danger-600 font-semibold">{supervisorPinError}</p>
+                )}
+              </div>
+
+              <Button
+                type="submit"
+                variant="accent"
+                size="md"
+                loading={isUnlocking}
+                className="w-full font-bold shadow-xs min-h-[44px]"
+              >
+                🔓 Buka Kunci Lembar Ujian
+              </Button>
+            </form>
           </div>
         </div>
       )}

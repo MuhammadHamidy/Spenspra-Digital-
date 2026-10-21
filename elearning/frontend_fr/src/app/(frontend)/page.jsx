@@ -56,27 +56,12 @@ export default function LMSDashboardPage() {
   const isGuru = !isAdmin && !isSiswa;
 
   const handleOpenExamModal = (exam) => {
-    setSelectedExam(exam);
-    setExamToken('');
-    setTokenError('');
+    router.push('/ujian');
   };
 
   const handleStartExam = async (e) => {
     e.preventDefault();
-    if (!examToken.trim()) {
-      setTokenError('Harap masukkan token ujian!');
-      return;
-    }
-
-    setIsStartingExam(true);
-    setTokenError('');
-    try {
-      await elearningApi.startExamSession(selectedExam.id, examToken, user);
-      router.push(`/ujian/${selectedExam.id}/run`);
-    } catch (err) {
-      setTokenError(err.message || 'Token ujian tidak valid!');
-      setIsStartingExam(false);
-    }
+    router.push('/ujian');
   };
 
   return (
