@@ -125,10 +125,15 @@ export default function MaterialsAndSubjectHubPage() {
   // Compute counters per subject
   const subjectStats = useMemo(() => {
     const stats = {};
-    subjects.forEach((subj) => {
-      const matCount = materials.filter((m) => matchesSubject(m, subj)).length;
-      const assCount = assignments.filter((a) => matchesSubject(a, subj)).length;
-      const exmCount = exams.filter((e) => matchesSubject(e, subj)).length;
+    const safeSubjs = Array.isArray(subjects) ? subjects : [];
+    const safeMats = Array.isArray(materials) ? materials : [];
+    const safeAss = Array.isArray(assignments) ? assignments : [];
+    const safeExms = Array.isArray(exams) ? exams : [];
+
+    safeSubjs.forEach((subj) => {
+      const matCount = safeMats.filter((m) => matchesSubject(m, subj)).length;
+      const assCount = safeAss.filter((a) => matchesSubject(a, subj)).length;
+      const exmCount = safeExms.filter((e) => matchesSubject(e, subj)).length;
       stats[subj.code] = { matCount, assCount, exmCount };
     });
     return stats;
@@ -136,13 +141,15 @@ export default function MaterialsAndSubjectHubPage() {
 
   // Filtered Subject Cards
   const filteredSubjects = useMemo(() => {
-    return subjects.filter((s) => {
+    const safeSubjs = Array.isArray(subjects) ? subjects : [];
+    return safeSubjs.filter((s) => {
       const matchCat = categoryFilter === 'ALL' || s.category === categoryFilter;
       const q = searchMapel.toLowerCase();
       const matchQuery =
         s.name.toLowerCase().includes(q) ||
         s.code.toLowerCase().includes(q) ||
         (s.description && s.description.toLowerCase().includes(q));
+
       return matchCat && matchQuery;
     });
   }, [subjects, categoryFilter, searchMapel]);
@@ -150,17 +157,20 @@ export default function MaterialsAndSubjectHubPage() {
   // Selected Subject Data
   const currentSubjectMaterials = useMemo(() => {
     if (!selectedSubject) return [];
-    return materials.filter((m) => matchesSubject(m, selectedSubject));
+    const safeMats = Array.isArray(materials) ? materials : [];
+    return safeMats.filter((m) => matchesSubject(m, selectedSubject));
   }, [selectedSubject, materials]);
 
   const currentSubjectAssignments = useMemo(() => {
     if (!selectedSubject) return [];
-    return assignments.filter((a) => matchesSubject(a, selectedSubject));
+    const safeAss = Array.isArray(assignments) ? assignments : [];
+    return safeAss.filter((a) => matchesSubject(a, selectedSubject));
   }, [selectedSubject, assignments]);
 
   const currentSubjectExams = useMemo(() => {
     if (!selectedSubject) return [];
-    return exams.filter((e) => matchesSubject(e, selectedSubject));
+    const safeExms = Array.isArray(exams) ? exams : [];
+    return safeExms.filter((e) => matchesSubject(e, selectedSubject));
   }, [selectedSubject, exams]);
 
   // Form open helpers for Guru

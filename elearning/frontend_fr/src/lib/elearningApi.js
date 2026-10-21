@@ -353,18 +353,15 @@ export const elearningApi = {
   // =================== MATA PELAJARAN (COURSES / SUBJECTS) ===================
   getSubjects: async () => {
     // 1. Ambil dari SSO master courses & backend
-    const [ssoRes1, ssoRes2, beRes] = await Promise.all([
+    const [ssoRes, beRes] = await Promise.all([
       fetchSsoJson('/school/courses').catch(() => null),
-      fetchSsoJson('/courses').catch(() => null),
       fetchJson('/school/courses').catch(() => null),
     ]);
 
     const rawCourses = [];
-    if (ssoRes1?.success && Array.isArray(ssoRes1.data)) rawCourses.push(...ssoRes1.data);
-    else if (Array.isArray(ssoRes1)) rawCourses.push(...ssoRes1);
-
-    if (ssoRes2?.success && Array.isArray(ssoRes2.data)) rawCourses.push(...ssoRes2.data);
-    else if (Array.isArray(ssoRes2?.data?.courses)) rawCourses.push(...ssoRes2.data.courses);
+    if (ssoRes?.success && Array.isArray(ssoRes.data)) rawCourses.push(...ssoRes.data);
+    else if (Array.isArray(ssoRes)) rawCourses.push(...ssoRes);
+    else if (Array.isArray(ssoRes?.data?.courses)) rawCourses.push(...ssoRes.data.courses);
 
     if (beRes?.success && Array.isArray(beRes.data)) rawCourses.push(...beRes.data);
 
@@ -424,19 +421,15 @@ export const elearningApi = {
   // =================== KELAS / ROMBEL (CLASSES) ===================
   getClasses: async () => {
     // 1. Ambil dari SSO master classes & backend
-    const [ssoRes1, ssoRes2, beRes] = await Promise.all([
+    const [ssoRes, beRes] = await Promise.all([
       fetchSsoJson('/school/classes').catch(() => null),
-      fetchSsoJson('/classes').catch(() => null),
       fetchJson('/school/classes').catch(() => null),
     ]);
 
     const rawList = [];
-    if (ssoRes1?.success && Array.isArray(ssoRes1.data)) rawList.push(...ssoRes1.data);
-    else if (Array.isArray(ssoRes1?.data?.classes)) rawList.push(...ssoRes1.data.classes);
-    else if (Array.isArray(ssoRes1)) rawList.push(...ssoRes1);
-
-    if (ssoRes2?.success && Array.isArray(ssoRes2.data)) rawList.push(...ssoRes2.data);
-    else if (Array.isArray(ssoRes2?.data?.classes)) rawList.push(...ssoRes2.data.classes);
+    if (ssoRes?.success && Array.isArray(ssoRes.data)) rawList.push(...ssoRes.data);
+    else if (Array.isArray(ssoRes?.data?.classes)) rawList.push(...ssoRes.data.classes);
+    else if (Array.isArray(ssoRes)) rawList.push(...ssoRes);
 
     if (beRes?.success && Array.isArray(beRes.data)) rawList.push(...beRes.data);
 
@@ -635,10 +628,13 @@ export const elearningApi = {
   // =================== PROCTORING MONITOR (GURU) ===================
   getLiveProctoringData: async (examId) => {
     const res = await fetchJson(`/exams/${examId}/monitoring`);
-    if (res.success && res.data) return res.data;
+    if (res.success && res.data) {
+      if (Array.isArray(res.data)) return res.data;
+      if (Array.isArray(res.data.sessions)) return res.data.sessions;
+    }
     const monitorKey = `proctoring_${examId}`;
     const list = getLocal(monitorKey, []);
-    return list;
+    return Array.isArray(list) ? list : [];
   },
 
   unlockStudentSession: async (examId, sessionId) => {

@@ -38,9 +38,11 @@ export default function LiveProctoringMonitoringPage() {
     if (!selectedExamId) return;
     try {
       const liveData = await elearningApi.getLiveProctoringData(selectedExamId);
-      setSessions(liveData || []);
+      const list = Array.isArray(liveData) ? liveData : (liveData?.sessions || []);
+      setSessions(Array.isArray(list) ? list : []);
     } catch (e) {
-      console.error(e);
+      console.error('Failed to load proctoring data:', e);
+      setSessions([]);
     } finally {
       setLoading(false);
     }
@@ -69,19 +71,20 @@ export default function LiveProctoringMonitoringPage() {
     }
   };
 
-  const selectedExam = exams.find((e) => e.id === selectedExamId) || exams[0];
+  const selectedExam = (Array.isArray(exams) ? exams : []).find((e) => e.id === selectedExamId) || (Array.isArray(exams) ? exams[0] : null);
 
-  const filteredSessions = sessions.filter((s) =>
-    s.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  const safeSessions = Array.isArray(sessions) ? sessions : [];
+  const filteredSessions = safeSessions.filter((s) =>
+    (s.studentName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (s.className && s.className.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   // Statistics
-  const totalStudents = sessions.length;
-  const inProgressCount = sessions.filter((s) => s.status === 'IN_PROGRESS').length;
-  const lockedCount = sessions.filter((s) => s.status === 'LOCKED').length;
-  const submittedCount = sessions.filter((s) => s.status === 'SUBMITTED').length;
-  const totalViolations = sessions.reduce((acc, curr) => acc + (curr.violationsCount || 0), 0);
+  const totalStudents = safeSessions.length;
+  const inProgressCount = safeSessions.filter((s) => s.status === 'IN_PROGRESS').length;
+  const lockedCount = safeSessions.filter((s) => s.status === 'LOCKED').length;
+  const submittedCount = safeSessions.filter((s) => s.status === 'SUBMITTED').length;
+  const totalViolations = safeSessions.reduce((acc, curr) => acc + (curr.violationsCount || 0), 0);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
