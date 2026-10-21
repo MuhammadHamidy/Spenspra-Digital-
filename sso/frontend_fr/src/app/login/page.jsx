@@ -55,6 +55,13 @@ function LoginForm() {
         return;
       }
 
+      // Siswa selalu masuk ke portal /dashboard (Layanan Siswa Terpadu) untuk memilih menu
+      // (Spenspra Belajar, e-Rapor, atau e-Perpustakaan). Abaikan redirect_uri otomatis dari satelit.
+      if (roleName === 'SISWA' || roleName === 'ROLE-SISWA' || roleName === 'MAHASISWA') {
+        window.location.href = '/dashboard';
+        return;
+      }
+
       // Validasi ketat redirect_uri jika ada
       const targetUrl = redirectTarget || searchParams.get('redirect_uri');
       if (targetUrl) {

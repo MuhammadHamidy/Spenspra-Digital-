@@ -115,9 +115,20 @@ export default function Navbar({ onToggleMobileSidebar = () => {} }) {
   };
 
   const handleLogout = () => {
-    tokenStorage.clear();
+    try {
+      tokenStorage.clear();
+      sessionStorage.clear();
+      localStorage.clear();
+    } catch (e) {}
     setIsDropdownOpen(false);
-    router.push('/sso/login');
+    const isProd = typeof window !== 'undefined' && window.location.hostname.includes('spenspra.com');
+    const isSch = typeof window !== 'undefined' && window.location.hostname.includes('spenspra.sch.id');
+    const targetLogin = isProd
+      ? 'https://sso.spenspra.com/login'
+      : isSch
+      ? 'https://sso.spenspra.sch.id/login'
+      : (process.env.NEXT_PUBLIC_SSO_LOGIN_URL || 'http://sso.localhost/login');
+    window.location.href = targetLogin;
   };
 
   return (
