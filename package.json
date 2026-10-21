@@ -6,12 +6,14 @@
   "workspaces": [
     "sso/frontend_fr",
     "rapor/frontend_fr",
-    "perpus/frontend_fr"
+    "perpus/frontend_fr",
+    "elearning/frontend_fr"
   ],
   "scripts": {
     "dev:sso": "npm run dev --workspace=sso-frontend",
     "dev:rapor": "npm run dev --workspace=rapor-frontend",
     "dev:perpus": "npm run dev --workspace=perpus-frontend",
+    "dev:elearning": "npm run dev --workspace=elearning-frontend",
     "sync:assets": "node shared/sync-assets.mjs",
     "docker:up": "docker compose --env-file .env.docker up -d",
     "docker:down": "docker compose --env-file .env.docker down",
@@ -20,10 +22,12 @@
     "build:sso": "docker compose --env-file .env.docker build sso-frontend",
     "build:rapor": "docker compose --env-file .env.docker build rapor-frontend",
     "build:perpus": "docker compose --env-file .env.docker build perpus-frontend",
-    "build:api": "docker compose --env-file .env.docker build sso-api rapor-api perpus-api",
+    "build:elearning": "docker compose --env-file .env.docker build elearning-frontend",
+    "build:api": "docker compose --env-file .env.docker build sso-api rapor-api perpus-api elearning-api",
     "deploy:sso": "docker compose --env-file .env.docker up -d --no-deps sso-frontend",
     "deploy:rapor": "docker compose --env-file .env.docker up -d --no-deps rapor-frontend",
-    "deploy:perpus": "docker compose --env-file .env.docker up -d --no-deps perpus-frontend"
+    "deploy:perpus": "docker compose --env-file .env.docker up -d --no-deps perpus-frontend",
+    "deploy:elearning": "docker compose --env-file .env.docker up -d --no-deps elearning-frontend"
   },
   "keywords": [
     "spenspra",
