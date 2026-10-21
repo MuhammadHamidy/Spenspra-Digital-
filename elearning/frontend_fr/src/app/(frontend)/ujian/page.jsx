@@ -64,74 +64,65 @@ export default function StudentExamsHubPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto px-2 sm:px-0">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
-            Portal e-Ujian (CBT Online)
+          <h1 className="text-lg sm:text-2xl font-bold text-neutral-900 tracking-tight">
+            Daftar Ujian Siswa
           </h1>
           <p className="text-xs sm:text-sm text-neutral-500 mt-0.5">
-            Sistem evaluasi digital terproteksi dengan pengawasan proctoring anti-cheat real-time.
+            Pilih ujian aktif kelas Anda dan masukkan token dari pengawas.
           </p>
         </div>
       </div>
 
-      {/* Proctoring Rules Alert */}
-      <div className="p-4 sm:p-5 rounded-[12px] bg-primary-50 border border-primary-200 text-primary-900 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-accent-500 animate-ping"></span>
-            <h3 className="text-xs sm:text-sm font-bold text-primary-900">
-              Protokol Integritas & Anti-Kecurangan (Anti-Cheat Engine)
-            </h3>
-          </div>
-          <p className="text-xs text-primary-800/80 leading-relaxed max-w-3xl">
-            Sistem memantau seluruh aktivitas jendela browser. Membuka tab lain, keluar dari fullscreen, menekan pintasan inspeksi (F12/Ctrl+Shift+I), atau meminimalkan browser akan otomatis terekam dalam audit pengawas dan dapat mengunci lembar ujian Anda.
+      {/* Petunjuk Pengerjaan */}
+      <div className="p-3.5 sm:p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center gap-3 shadow-2xs">
+        <span className="text-xl sm:text-2xl shrink-0">📝</span>
+        <div>
+          <p className="text-xs sm:text-sm font-bold text-emerald-900">Petunjuk Pengerjaan Ujian</p>
+          <p className="text-[11px] sm:text-xs text-emerald-800 leading-relaxed mt-0.5">
+            Pastikan koneksi internet stabil. Kerjakan secara mandiri dan jangan menutup peramban selama ujian berlangsung.
           </p>
-        </div>
-        <div className="shrink-0 flex items-center gap-2">
-          <span className="px-3 py-1 rounded-[999px] bg-white text-primary-700 text-xs font-bold border border-primary-200 shadow-2xs">
-            🛡️ Proteksi Aktif
-          </span>
         </div>
       </div>
 
       {/* Exam Cards Grid */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-44 bg-neutral-100 rounded-[12px] animate-pulse" />
+            <div key={i} className="h-44 bg-neutral-100 rounded-xl animate-pulse" />
           ))}
         </div>
       ) : exams.length === 0 ? (
-        <Card noPadding className="p-12 text-center">
-          <p className="text-sm font-bold text-neutral-700">Belum ada jadwal ujian</p>
-          <p className="text-xs text-neutral-500 mt-1">Ujian akan muncul jika guru telah mempublikasikan jadwal ujian untuk kelas Anda.</p>
+        <Card noPadding className="p-10 text-center">
+          <p className="text-sm font-bold text-neutral-700">Belum Ada Jadwal Ujian</p>
+          <p className="text-xs text-neutral-500 mt-1">Ujian akan muncul di sini saat guru mempublikasikan jadwal untuk kelas Anda.</p>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
           {exams.map((exam) => (
             <Card
               key={exam.id}
               noPadding
-              className="p-5 flex flex-col justify-between hover:border-primary-400 hover:shadow-md transition-all group"
+              className="p-4 sm:p-5 flex flex-col justify-between hover:border-emerald-400 hover:shadow-md transition-all group rounded-2xl"
             >
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-0.5 rounded-[999px] bg-primary-100 text-primary-700 text-[10px] font-bold">
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
                       {exam.subject}
                     </span>
-                    <span className="px-2 py-0.5 rounded-[999px] bg-neutral-100 text-neutral-600 text-[10px] font-semibold">
+                    <span className="px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 text-[10px] font-semibold">
                       Kelas {exam.className}
                     </span>
                   </div>
-                  <StatusBadge status={exam.status} label={exam.status === 'ACTIVE' ? 'Sedang Berlangsung' : 'Akan Datang'} />
+                  <StatusBadge status={exam.status} label={exam.status === 'ACTIVE' ? 'Aktif' : 'Akan Datang'} />
                 </div>
 
                 <div>
-                  <h3 className="text-base font-bold text-neutral-900 group-hover:text-primary-600 transition-colors">
+                  <h3 className="text-sm sm:text-base font-bold text-neutral-900 group-hover:text-emerald-700 transition-colors">
                     {exam.title}
                   </h3>
                   <p className="text-xs text-neutral-500 mt-1 line-clamp-2 leading-relaxed">
@@ -139,7 +130,7 @@ export default function StudentExamsHubPage() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 p-2.5 rounded-[8px] bg-neutral-50 border border-neutral-100 text-center">
+                <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-neutral-50 border border-neutral-100 text-center">
                   <div>
                     <p className="text-[10px] font-medium text-neutral-400">Durasi</p>
                     <p className="text-xs font-bold text-neutral-800">{exam.durationMinutes} Menit</p>
@@ -149,28 +140,28 @@ export default function StudentExamsHubPage() {
                     <p className="text-xs font-bold text-neutral-800">{exam.totalQuestions} Butir</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-medium text-neutral-400">Toleransi</p>
-                    <p className="text-xs font-bold text-danger-600">{exam.maxViolations}x Keluar</p>
+                    <p className="text-[10px] font-medium text-neutral-400">Sifat</p>
+                    <p className="text-xs font-bold text-emerald-700">Mandiri</p>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-neutral-400 pt-1">
+                <div className="flex items-center justify-between text-[11px] text-neutral-500 pt-1 border-t border-neutral-100">
                   <span>Guru: {exam.teacherName}</span>
-                  <span>Jadwal: {new Date(exam.startTime).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}</span>
+                  <span>{new Date(exam.startTime).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}</span>
                 </div>
               </div>
 
-              <div className="pt-4 mt-2">
+              <div className="pt-3 sm:pt-4 mt-2">
                 <Button
-                  variant="primary"
+                  variant="accent"
                   size="md"
-                  className="w-full"
+                  className="w-full min-h-[44px] font-bold shadow-xs cursor-pointer"
                   onClick={() => handleOpenTokenModal(exam)}
                 >
                   <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                   </svg>
-                  Masukkan Token Ujian
+                  Mulai Kerjakan Ujian
                 </Button>
               </div>
             </Card>
@@ -183,21 +174,19 @@ export default function StudentExamsHubPage() {
         isOpen={Boolean(selectedExam)}
         onClose={() => !isVerifying && setSelectedExam(null)}
         title="Konfirmasi Token Ujian"
-        subtitle={selectedExam ? `${selectedExam.title} - ${selectedExam.subject}` : ''}
+        subtitle={selectedExam ? `${selectedExam.title} • ${selectedExam.subject}` : ''}
         size="md"
       >
         <form onSubmit={handleStartExam} className="space-y-4">
-          <div className="p-3.5 rounded-[8px] bg-danger-50 border border-danger-200 text-danger-800 text-xs space-y-1.5">
-            <p className="font-bold flex items-center gap-1.5 text-danger-900">
-              <svg className="w-4 h-4 text-danger-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              Peringatan Pengawasan Otomatis
+          <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
+            <p className="font-bold flex items-center gap-1.5">
+              <span>💡</span>
+              <span>Petunjuk Pengerjaan:</span>
             </p>
-            <ul className="list-disc list-inside space-y-0.5 text-[11px] text-danger-700">
-              <li>Saat menekan <strong>Mulai Ujian</strong>, layar akan otomatis beralih ke Fullscreen.</li>
-              <li>Jangan berpindah aplikasi, membuka tab lain, atau keluar dari layar penuh.</li>
-              <li>Batas toleransi pelanggaran: <strong>{selectedExam?.maxViolations || 3} kali</strong>. Melebihi batas = Ujian TERKUNCI.</li>
+            <ul className="list-disc list-inside space-y-1 text-[11px] text-amber-800">
+              <li>Pastikan koneksi internet stabil.</li>
+              <li>Kerjakan ujian secara jujur dan mandiri.</li>
+              <li>Jangan berpindah ke aplikasi lain agar lembar ujian tidak terkunci.</li>
             </ul>
           </div>
 

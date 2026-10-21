@@ -273,161 +273,189 @@ export default function CivitasDashboard() {
   // TAMPILAN GURU & CIVITAS BIASA
   // ────────────────────────────────────────────────────────────
   return (
-    <div className="mx-auto max-w-5xl space-y-6 pb-12">
+    <div className="mx-auto max-w-4xl space-y-4 sm:space-y-6 pb-12 px-2 sm:px-0">
       {/* Banner Sambutan Guru / Siswa */}
-      <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 sm:p-7 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-5">
-        <div>
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#EDEAF5] px-2.5 py-0.5 text-[10px] font-semibold text-[#4B3B78] uppercase tracking-wider mb-2">
-            {isSiswa ? 'Portal Peserta Didik' : 'Portal Civitas Akademika'}
+      {isSiswa ? (
+        <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50/50 to-indigo-50/30 p-4 sm:p-6 shadow-xs">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-[#4B3B78] text-white flex items-center justify-center font-bold text-base sm:text-lg shadow-sm shrink-0">
+              {(user?.fullName || user?.full_name || 'S').charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="inline-block px-2 py-0.5 rounded-md bg-[#EDEAF5] text-[#4B3B78] text-[10px] font-bold uppercase tracking-wider mb-1">
+                Peserta Didik
+              </span>
+              <h1 className="text-base sm:text-xl font-bold tracking-tight text-slate-900 truncate">
+                {user?.fullName || user?.full_name || user?.username || 'Siswa Spenspra'}
+              </h1>
+              <p className="text-xs text-slate-500 truncate mt-0.5">
+                {user?.className || user?.class_name ? `Kelas ${user?.className || user?.class_name} • ` : ''}
+                {user?.nimNip || user?.nisn ? `NISN: ${user?.nimNip || user?.nisn}` : 'SMP Negeri 1 Prambon'}
+              </p>
+            </div>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#172033]">
-            Selamat Datang, {user?.fullName || user?.full_name || user?.username || (isSiswa ? 'Siswa' : 'Bapak/Ibu Guru')}
-          </h1>
-          <p className="mt-1 text-sm text-[#667085] font-normal">
-            Portal Layanan Digital Terpadu SMP Negeri 1 Prambon
-          </p>
         </div>
-        <div className="flex items-center gap-3.5 bg-[#FAF9FD] px-4 py-3 rounded-xl border border-[#EDEAF5] shrink-0 self-start sm:self-auto">
-          <div className="w-10 h-10 rounded-full bg-[#EDEAF5] text-[#3D2E66] flex items-center justify-center font-bold text-sm tracking-wide shadow-xs shrink-0">
-            {isSiswa ? 'SW' : (role?.slice(0, 2).toUpperCase() || 'GU')}
-          </div>
-          <div className="text-left">
-            <p className="font-bold text-[#172033] text-sm leading-tight">
-              {user?.nimNip || user?.nip || user?.nisn || user?.username || 'Akun Aktif'}
+      ) : (
+        <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 sm:p-7 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+          <div>
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-[#EDEAF5] px-2.5 py-0.5 text-[10px] font-semibold text-[#4B3B78] uppercase tracking-wider mb-2">
+              Portal Civitas Akademika
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#172033]">
+              Selamat Datang, {user?.fullName || user?.full_name || user?.username || 'Bapak/Ibu Guru'}
+            </h1>
+            <p className="mt-1 text-sm text-[#667085] font-normal">
+              Portal Layanan Digital Terpadu SMP Negeri 1 Prambon
             </p>
-            <span className="inline-block mt-0.5 rounded-full bg-[#EDEAF5] px-2 py-0.5 text-[10px] font-semibold text-[#30264F] uppercase tracking-wider">
-              {isSiswa ? 'PESERTA DIDIK' : (role || 'GURU')}
-            </span>
+          </div>
+          <div className="flex items-center gap-3.5 bg-[#FAF9FD] px-4 py-3 rounded-xl border border-[#EDEAF5] shrink-0 self-start sm:self-auto">
+            <div className="w-10 h-10 rounded-full bg-[#EDEAF5] text-[#3D2E66] flex items-center justify-center font-bold text-sm tracking-wide shadow-xs shrink-0">
+              {role?.slice(0, 2).toUpperCase() || 'GU'}
+            </div>
+            <div className="text-left">
+              <p className="font-bold text-[#172033] text-sm leading-tight">
+                {user?.nimNip || user?.nip || user?.username || 'Akun Aktif'}
+              </p>
+              <span className="inline-block mt-0.5 rounded-full bg-[#EDEAF5] px-2 py-0.5 text-[10px] font-semibold text-[#30264F] uppercase tracking-wider">
+                {role || 'GURU'}
+              </span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Pilihan Layanan Aplikasi Civitas */}
       <div>
-        <h2 className="text-xs font-bold text-[#667085] uppercase tracking-wider mb-4 px-1">
-          {isSiswa ? 'Layanan Siswa Terpadu' : 'Layanan Aplikasi Civitas'}
+        <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">
+          {isSiswa ? 'Pilih Layanan Siswa' : 'Layanan Aplikasi Civitas'}
         </h2>
 
         {isSiswa ? (
-          <div className="space-y-4">
-            {/* Baris 1: Spenspra Belajar (LMS & CBT) */}
-            <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-[#F2C94C] transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-[#FEF9E7] text-[#9A7B00] flex items-center justify-center shrink-0 shadow-2xs">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="space-y-3 sm:space-y-4">
+            {/* 1. Spenspra Belajar (LMS & Ujian) */}
+            <div className="group rounded-2xl border border-slate-200 hover:border-emerald-500/60 bg-white p-4 sm:p-5 shadow-xs hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3.5 sm:gap-4 min-w-0">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-100">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                   </svg>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-[#172033] text-base sm:text-lg">Spenspra Belajar</h3>
-                    <span className="text-[10px] font-semibold text-[#8B6E00] bg-[#FFFBEA] border border-[#F2C94C] px-2 py-0.5 rounded-full">
-                      LMS & CBT
+                    <h3 className="font-bold text-slate-900 text-sm sm:text-base">Spenspra Belajar</h3>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                      Materi & Ujian
                     </span>
                   </div>
-                  <p className="text-xs sm:text-sm text-[#667085] mt-1 max-w-2xl leading-relaxed">
-                    Akses materi pelajaran dari guru, kumpulkan tugas online, dan kerjakan ujian CBT dengan sistem anti-curang terpadu.
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    Materi pelajaran, pengumpulan tugas sekolah, dan pelaksanaan ujian online.
                   </p>
                 </div>
               </div>
-              <div className="shrink-0 self-end sm:self-center w-full sm:w-auto">
+              <div className="shrink-0 w-full sm:w-auto pt-2 sm:pt-0 border-t border-slate-100 sm:border-0">
                 <a
                   href={getBelajarLaunchUrl()}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[#2E7D5B] hover:bg-[#236348] active:bg-[#1A4C36] text-white py-2.5 px-5 text-sm font-semibold transition shadow-xs cursor-pointer"
+                  className="w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white px-5 py-2.5 text-xs sm:text-sm font-bold transition shadow-xs cursor-pointer"
                 >
-                  <span>Buka Belajar & CBT</span>
+                  <span>Buka Belajar</span>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                   </svg>
                 </a>
               </div>
             </div>
 
-            {/* Baris 2: e-Rapor Spenspra */}
-            <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-[#B9B0D2] transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-[#EDEAF5] text-[#4B3B78] flex items-center justify-center shrink-0 shadow-2xs">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {/* 2. e-Rapor Spenspra */}
+            <div className="group rounded-2xl border border-slate-200 hover:border-[#4B3B78]/60 bg-white p-4 sm:p-5 shadow-xs hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3.5 sm:gap-4 min-w-0">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-[#EDEAF5] text-[#4B3B78] flex items-center justify-center shrink-0 border border-[#DDD7ED]">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 </div>
-                <div>
-                  <h3 className="font-bold text-[#172033] text-base sm:text-lg">e-Rapor Spenspra</h3>
-                  <p className="text-xs sm:text-sm text-[#667085] mt-1 max-w-2xl leading-relaxed">
-                    Lihat capaian nilai harian, nilai sumatif tengah semester (PTS), sumatif akhir semester (PAS/UAS), dan rekapitulasi buku rapor digital.
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-slate-900 text-sm sm:text-base">e-Rapor Spenspra</h3>
+                    <span className="text-[10px] font-bold text-[#4B3B78] bg-[#EDEAF5] border border-[#DDD7ED] px-2 py-0.5 rounded-full">
+                      Nilai Rapor
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    Lihat nilai tugas, ulangan harian, nilai PTS, PAS, serta buku rapor semester.
                   </p>
                 </div>
               </div>
-              <div className="shrink-0 self-end sm:self-center w-full sm:w-auto">
+              <div className="shrink-0 w-full sm:w-auto pt-2 sm:pt-0 border-t border-slate-100 sm:border-0">
                 <a
                   href={getRaporLaunchUrl()}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[#4B3B78] hover:bg-[#3D2E66] active:bg-[#30264F] text-white py-2.5 px-5 text-sm font-semibold transition shadow-xs cursor-pointer"
+                  className="w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center gap-2 rounded-xl bg-[#4B3B78] hover:bg-[#3D2E66] active:bg-[#30264F] text-white px-5 py-2.5 text-xs sm:text-sm font-bold transition shadow-xs cursor-pointer"
                 >
-                  <span>Lihat Nilai & Rapor</span>
+                  <span>Lihat Rapor</span>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                   </svg>
                 </a>
               </div>
             </div>
 
-            {/* Baris 3: e-Perpustakaan */}
-            <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-[#A8CBDD] transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-[#E4F1F8] text-[#4F8FBB] flex items-center justify-center shrink-0 shadow-2xs">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {/* 3. e-Perpustakaan */}
+            <div className="group rounded-2xl border border-slate-200 hover:border-sky-500/60 bg-white p-4 sm:p-5 shadow-xs hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3.5 sm:gap-4 min-w-0">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center shrink-0 border border-sky-100">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                   </svg>
                 </div>
-                <div>
-                  <h3 className="font-bold text-[#172033] text-base sm:text-lg">e-Perpustakaan Digital</h3>
-                  <p className="text-xs sm:text-sm text-[#667085] mt-1 max-w-2xl leading-relaxed">
-                    Katalog koleksi buku perpustakaan sekolah, ringkasan peminjaman aktif, batas waktu pengembalian buku, dan riwayat literasi bacaan siswa.
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-slate-900 text-sm sm:text-base">e-Perpustakaan</h3>
+                    <span className="text-[10px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-full">
+                      Katalog Buku
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    Daftar buku bacaan, cek status peminjaman, dan riwayat membaca di perpustakaan.
                   </p>
                 </div>
               </div>
-              <div className="shrink-0 self-end sm:self-center w-full sm:w-auto">
+              <div className="shrink-0 w-full sm:w-auto pt-2 sm:pt-0 border-t border-slate-100 sm:border-0">
                 <a
                   href={getPerpusLaunchUrl()}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[#4F8FBB] hover:bg-[#397394] active:bg-[#2E607C] text-white py-2.5 px-5 text-sm font-semibold transition shadow-xs cursor-pointer"
+                  className="w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center gap-2 rounded-xl bg-sky-700 hover:bg-sky-800 active:bg-sky-900 text-white px-5 py-2.5 text-xs sm:text-sm font-bold transition shadow-xs cursor-pointer"
                 >
                   <span>Buka Perpustakaan</span>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                   </svg>
                 </a>
               </div>
             </div>
 
-            {/* Banner Khusus Kartu Barcode Siswa di Bawah */}
-            <div className="mt-6 rounded-2xl border border-amber-200/80 bg-gradient-to-r from-[#FFFDF5] via-white to-[#F7FAF8] p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-5">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-[#FFF6D6] text-[#A97E0D] flex items-center justify-center shrink-0 shadow-2xs">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {/* 4. Banner Barcode Siswa */}
+            <div className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50/70 via-white to-amber-50/30 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3.5 sm:gap-4 min-w-0">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-amber-100/80 text-amber-800 flex items-center justify-center shrink-0 border border-amber-200">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                   </svg>
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-[#172033] text-base sm:text-lg">Kartu Barcode & Absensi Terpadu</h3>
-                    <span className="text-[10px] font-semibold text-[#1C5038] bg-[#F7FCF9] border border-[#A9D8BC] px-2 py-0.5 rounded-full">
-                      Terintegrasi
-                    </span>
-                  </div>
-                  <p className="text-xs sm:text-sm text-[#667085] mt-1 max-w-2xl leading-relaxed">
-                    Identitas barcode digital resmi peserta didik SMPN 1 Prambon. Gunakan untuk absensi presensi harian di sekolah dan peminjaman buku perpustakaan secara otomatis.
+                <div className="min-w-0">
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base">Kartu Barcode Siswa</h3>
+                  <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                    Tunjukkan barcode ini untuk absensi harian sekolah dan pinjam buku di perpus.
                   </p>
                 </div>
               </div>
-              <div className="shrink-0 self-end sm:self-center w-full sm:w-auto">
+              <div className="shrink-0 w-full sm:w-auto pt-2 sm:pt-0 border-t border-amber-100 sm:border-0">
                 <Link
                   href="/students"
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-[#172033] py-2.5 px-5 text-sm font-semibold transition shadow-xs cursor-pointer"
+                  className="w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center gap-2 rounded-xl bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-300 text-slate-800 px-5 py-2.5 text-xs sm:text-sm font-bold transition shadow-xs cursor-pointer"
                 >
                   <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                   </svg>
-                  <span>Lihat & Cetak Kartu Saya</span>
+                  <span>Lihat Barcode Saya</span>
                 </Link>
               </div>
             </div>

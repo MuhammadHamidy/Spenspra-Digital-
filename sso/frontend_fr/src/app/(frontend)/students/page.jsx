@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { schoolPeopleApi } from '@/lib/features/schoolPeopleApi';
 import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApiAdapter';
 import { useAuth } from '@/lib/features/auth/presentation/useAuth';
@@ -171,13 +172,21 @@ export default function BarcodeMultifungsiPage() {
   }, [people]);
 
   return (
-    <div className="students-print-page max-w-7xl mx-auto space-y-6">
+    <div className="students-print-page max-w-7xl mx-auto space-y-4 sm:space-y-6 px-2 sm:px-0">
       {/* Header Utama */}
-      <div className="border-b border-slate-200 pb-4 flex flex-wrap items-center justify-between gap-4 print:hidden">
+      <div className="border-b border-slate-200 pb-3 sm:pb-4 flex flex-wrap items-center justify-between gap-3 sm:gap-4 print:hidden">
         <div>
+          {isSiswa && (
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 px-3 py-1.5 rounded-lg mb-2 shadow-2xs cursor-pointer"
+            >
+              ← Kembali ke Menu
+            </Link>
+          )}
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-              {isSiswa ? 'Kartu Barcode & Identitas Saya' : 'Kartu Barcode Multifungsi Civitas'}
+            <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+              {isSiswa ? 'Kartu Barcode Saya' : 'Kartu Barcode Multifungsi Civitas'}
             </h1>
             <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
               {isSiswa ? 'Peserta Didik' : 'Siswa • Guru • Tendik'}
@@ -185,7 +194,7 @@ export default function BarcodeMultifungsiPage() {
           </div>
           <p className="text-xs text-slate-500 mt-1">
             {isSiswa
-              ? 'Kartu barcode resmi Anda untuk presensi absensi harian dan peminjaman buku perpustakaan.'
+              ? 'Tunjukkan barcode ini kepada petugas sekolah atau pustakawan.'
               : 'Master token barcode resmi SMP Negeri 1 Prambon untuk Presensi Digital, Perpustakaan, dan Akses Layanan SSO.'}
           </p>
         </div>
@@ -441,31 +450,43 @@ export default function BarcodeMultifungsiPage() {
                     </div>
                   </div>
 
-                  {/* Tag Fungsi Multifungsi (Hanya Layar) */}
-                  <div className="bg-slate-50 rounded-lg p-2 border border-slate-100 print:hidden">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                      Cakupan Layanan Terintegrasi:
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {config.functions.map((fn, idx) => (
-                        <span key={idx} className="text-[10px] bg-white border border-slate-200 px-1.5 py-0.5 rounded text-slate-600">
-                          ✓ {fn}
-                        </span>
-                      ))}
+                  {/* Tag Fungsi & Keterangan (Hanya Layar) */}
+                  {isSiswa ? (
+                    <div className="bg-blue-50/70 rounded-xl p-3 border border-blue-100 text-center print:hidden">
+                      <p className="text-xs font-semibold text-blue-900">
+                        Absensi Harian & Perpustakaan
+                      </p>
+                      <p className="text-[11px] text-blue-600 mt-0.5">
+                        Tingkatkan kecerahan layar HP saat discan oleh petugas
+                      </p>
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="bg-slate-50 rounded-lg p-2 border border-slate-100 print:hidden">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                          Cakupan Layanan Terintegrasi:
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {config.functions.map((fn, idx) => (
+                            <span key={idx} className="text-[10px] bg-white border border-slate-200 px-1.5 py-0.5 rounded text-slate-600">
+                              ✓ {fn}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
 
-                  {/* Footer Kartu & Aksi (Hanya Layar) */}
-                  <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 print:hidden">
-                    <span className="text-[11px] text-slate-400 font-medium">{config.label}</span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCardForModal(person)}
-                      className="text-blue-600 hover:text-blue-800 font-semibold cursor-pointer text-[11px]"
-                    >
-                      Detail Token →
-                    </button>
-                  </div>
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 print:hidden">
+                        <span className="text-[11px] text-slate-400 font-medium">{config.label}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCardForModal(person)}
+                          className="text-blue-600 hover:text-blue-800 font-semibold cursor-pointer text-[11px]"
+                        >
+                          Detail Token →
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </article>
               );
             })}
