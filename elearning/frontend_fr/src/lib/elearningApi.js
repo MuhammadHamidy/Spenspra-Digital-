@@ -43,6 +43,21 @@ const INITIAL_EXAMS = [];
 
 const INITIAL_QUESTIONS = {};
 
+export const OFFICIAL_SUBJECTS = [
+  { id: 'crs-mtk', code: 'MAT', name: 'Matematika', category: 'Umum', color: 'indigo', icon: '📐', description: 'Pembelajaran Matematika Kurikulum Merdeka' },
+  { id: 'crs-bin', code: 'BIN', name: 'Bahasa Indonesia', category: 'Umum', color: 'emerald', icon: '📖', description: 'Literasi dan Bahasa Indonesia' },
+  { id: 'crs-ipa', code: 'IPA', name: 'Ilmu Pengetahuan Alam', category: 'Umum', color: 'teal', icon: '🔬', description: 'Eksperimen & Pengetahuan Alam Terpadu' },
+  { id: 'crs-ips', code: 'IPS', name: 'Ilmu Pengetahuan Sosial', category: 'Umum', color: 'amber', icon: '🌍', description: 'Studi Sosial, Geografi, dan Sejarah' },
+  { id: 'crs-big', code: 'BIG', name: 'Bahasa Inggris', category: 'Umum', color: 'purple', icon: '💬', description: 'English Communication & Literacy' },
+  { id: 'crs-pp',  code: 'PP',  name: 'Pendidikan Pancasila', category: 'Umum', color: 'rose', icon: '🏛️', description: 'Pendidikan Pancasila dan Kewarganegaraan' },
+  { id: 'crs-inf', code: 'INF', name: 'Informatika', category: 'Umum', color: 'sky', icon: '💻', description: 'Teknologi Informasi & Berpikir Komputasional' },
+  { id: 'crs-pai', code: 'PAI', name: 'Pendidikan Agama Islam', category: 'Umum', color: 'green', icon: '🕌', description: 'Pendidikan Agama Islam dan Budi Pekerti' },
+  { id: 'crs-pjok', code: 'PJOK', name: 'Pendidikan Jasmani', category: 'Umum', color: 'orange', icon: '⚽', description: 'Olahraga, Kebugaran Jasmani, dan Kesehatan' },
+  { id: 'crs-sbd', code: 'SBP', name: 'Seni Budaya & Prakarya', category: 'Umum', color: 'pink', icon: '🎨', description: 'Seni Rupa, Musik, Tari, dan Kriya Prakarya' },
+  { id: 'crs-bj',  code: 'BJ',  name: 'Bahasa Jawa', category: 'Muatan Lokal', color: 'yellow', icon: '📜', description: 'Muatan Lokal Bahasa dan Sastra Jawa' },
+  { id: 'crs-btq', code: 'BTQ', name: 'Baca Tulis Al-Qur\'an', category: 'Muatan Lokal', color: 'cyan', icon: '✨', description: 'Muatan Lokal BTQ & Keagamaan' },
+];
+
 // Filter to completely purge any legacy dummy or demo items from client localStorage
 const DUMMY_IDS = new Set([
   'mat-001', 'mat-002', 'mat-003', 'mat-004',
@@ -248,7 +263,80 @@ export const elearningApi = {
     const res = await fetchJson(`/exams/${examId}/questions`);
     if (res.success && res.data) return res.data;
     const allQuestions = getLocal('questions', INITIAL_QUESTIONS);
-    return allQuestions[examId] || INITIAL_QUESTIONS['cbt-001'] || [];
+    return allQuestions[examId] || [];
+  },
+
+  saveExamQuestions: async (examId, questions) => {
+    const allQuestions = getLocal('questions', INITIAL_QUESTIONS);
+    allQuestions[examId] = questions;
+    setLocal('questions', allQuestions);
+
+    const exams = getLocal('exams', INITIAL_EXAMS);
+    const idx = exams.findIndex((e) => e.id === examId);
+    if (idx >= 0) {
+      exams[idx].totalQuestions = questions.length;
+      setLocal('exams', exams);
+    }
+
+    fetchJson(`/exams/${examId}/questions`, {
+      method: 'PUT',
+      body: JSON.stringify({ questions }),
+    }).catch(() => {});
+
+    return questions;
+  },
+
+  // =================== MATA PELAJARAN (SUBJECTS) ===================
+  getSubjects: async () => {
+    const res = await fetchJson('/school/courses').catch(() => null);
+    const backendCourses = (res && res.success && Array.isArray(res.data)) ? res.data : [];
+    const customSubjects = getLocal('custom_subjects', []);
+
+    const mergedMap = new Map();
+    OFFICIAL_SUBJECTS.forEach((s) => mergedMap.set(s.code.toUpperCase(), { ...s }));
+
+    backendCourses.forEach((c) => {
+      const code = (c.code || c.id || '').toUpperCase();
+      if (code) {
+        mergedMap.set(code, {
+          id: c.id || `crs-${code.toLowerCase()}`,
+          code: c.code || code,
+          name: c.name || c.title || code,
+          category: c.category || 'Umum',
+          color: c.color || 'indigo',
+          icon: c.icon || '📚',
+          description: c.description || `Mata Pelajaran ${c.name || code}`,
+        });
+      }
+    });
+
+    customSubjects.forEach((c) => {
+      const code = (c.code || c.id || '').toUpperCase();
+      if (code) {
+        mergedMap.set(code, {
+          ...c,
+          code,
+        });
+      }
+    });
+
+    return Array.from(mergedMap.values());
+  },
+
+  createSubject: async (payload) => {
+    const list = getLocal('custom_subjects', []);
+    const newSubject = {
+      id: `crs-${Date.now()}`,
+      code: (payload.code || 'MAPEL').toUpperCase(),
+      name: payload.name || 'Mata Pelajaran Baru',
+      category: payload.category || 'Umum',
+      color: payload.color || 'indigo',
+      icon: payload.icon || '📚',
+      description: payload.description || '',
+      ...payload,
+    };
+    setLocal('custom_subjects', [...list, newSubject]);
+    return newSubject;
   },
 
   startExamSession: async (examId, token, student) => {

@@ -15,11 +15,12 @@ export default function TeacherAssignmentsManagementPage() {
   const [loading, setLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [activeGradingAssignment, setActiveGradingAssignment] = useState(null);
+  const [subjects, setSubjects] = useState([]);
 
   // Form State Create Assignment
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('Matematika');
-  const [subjectCode, setSubjectCode] = useState('MTK');
+  const [subjectCode, setSubjectCode] = useState('MAT');
   const [className, setClassName] = useState('7A');
   const [dueDate, setDueDate] = useState('');
   const [maxScore, setMaxScore] = useState(100);
@@ -35,14 +36,22 @@ export default function TeacherAssignmentsManagementPage() {
 
   useEffect(() => {
     setUser(tokenStorage.getUser());
-    loadAssignments();
+    loadInitialData();
   }, []);
 
-  const loadAssignments = async () => {
+  const loadInitialData = async () => {
     setLoading(true);
     try {
-      const data = await elearningApi.getAssignments();
-      setAssignments(data || []);
+      const [assData, subjData] = await Promise.all([
+        elearningApi.getAssignments(),
+        elearningApi.getSubjects(),
+      ]);
+      setAssignments(assData || []);
+      setSubjects(subjData || []);
+      if (subjData && subjData.length > 0) {
+        setSubject(subjData[0].name);
+        setSubjectCode(subjData[0].code);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -50,10 +59,20 @@ export default function TeacherAssignmentsManagementPage() {
     }
   };
 
+  const loadAssignments = async () => {
+    try {
+      const data = await elearningApi.getAssignments();
+      setAssignments(data || []);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleOpenCreateModal = () => {
+    const defaultSubj = subjects[0] || { name: 'Matematika', code: 'MAT' };
     setTitle('');
-    setSubject('Matematika');
-    setSubjectCode('MTK');
+    setSubject(defaultSubj.name);
+    setSubjectCode(defaultSubj.code);
     setClassName('7A');
     setDueDate(new Date(Date.now() + 1000 * 60 * 60 * 24 * 5).toISOString().slice(0, 16));
     setMaxScore(100);
@@ -263,22 +282,16 @@ export default function TeacherAssignmentsManagementPage() {
                 value={subject}
                 onChange={(e) => {
                   setSubject(e.target.value);
-                  const codeMap = {
-                    'Matematika': 'MTK',
-                    'Bahasa Indonesia': 'BIN',
-                    'Ilmu Pengetahuan Alam': 'IPA',
-                    'Bahasa Inggris': 'BIG',
-                    'Pendidikan Pancasila': 'PKN',
-                  };
-                  setSubjectCode(codeMap[e.target.value] || 'MAPEL');
+                  const matched = subjects.find((s) => s.name === e.target.value);
+                  setSubjectCode(matched?.code || 'MAPEL');
                 }}
                 className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300 bg-white"
               >
-                <option value="Matematika">Matematika (MTK)</option>
-                <option value="Bahasa Indonesia">Bahasa Indonesia (BIN)</option>
-                <option value="Ilmu Pengetahuan Alam">IPA (IPA)</option>
-                <option value="Bahasa Inggris">Bahasa Inggris (BIG)</option>
-                <option value="Pendidikan Pancasila">Pendidikan Pancasila (PKN)</option>
+                {subjects.map((s) => (
+                  <option key={s.id || s.code} value={s.name}>
+                    {s.name} ({s.code})
+                  </option>
+                ))}
               </select>
             </div>
 
