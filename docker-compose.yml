@@ -120,6 +120,8 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
       APP_PORTAL_URL: ${APP_PORTAL_URL:-https://sso.spenspra.com/login}
+    ports:
+      - "${SSO_PORT:-3000}:3000"
     command: ["node", "server.js"]
     depends_on: [sso-api]
     deploy:
@@ -213,6 +215,8 @@ services:
       DATABASE_URL: postgresql://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${RAPOR_DB_NAME:-presdig_rapor}?schema=public
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env.docker}
       WA_API_KEY: ${WA_API_KEY:-}
+    ports:
+      - "${RAPOR_PORT:-3001}:3000"
     command: ["node", "server.js"]
     depends_on: [rapor-api]
     deploy:
@@ -306,6 +310,8 @@ services:
       DATABASE_URL: postgresql://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${PERPUS_DB_NAME:-perpusdig}?schema=public
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env.docker}
       WA_API_KEY: ${WA_API_KEY:-}
+    ports:
+      - "${PERPUS_PORT:-3002}:3000"
     command: ["node", "server.js"]
     depends_on:
       perpus-api:
@@ -439,6 +445,9 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
       - ./shared/assets:/var/www/shared/assets:ro
+    depends_on:
+      - sso-frontend
+      - elearning-frontend
     deploy:
       resources:
         limits:
