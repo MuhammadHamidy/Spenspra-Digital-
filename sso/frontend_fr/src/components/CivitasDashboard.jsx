@@ -338,134 +338,130 @@ export default function CivitasDashboard() {
         {isSiswa ? (
           <div className="grid gap-5 grid-cols-1 sm:grid-cols-2">
             {/* 1. Spenspra Belajar (LMS & Ujian) */}
-            <div className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-emerald-400 transition-all duration-200 flex flex-col justify-between group">
+            <div className="rounded-[12px] border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-[#2E7D5B]/50 transition-all duration-200 flex flex-col justify-between group">
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-100 group-hover:scale-105 transition-transform">
+                  <div className="w-12 h-12 rounded-[12px] bg-[#E8F5E9] text-[#2E7D5B] flex items-center justify-center border border-[#C8E6C9] group-hover:scale-105 transition-transform">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                     </svg>
                   </div>
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
-                    Materi & Ujian
+                  <span className="text-[10px] font-semibold text-[#2E7D5B] bg-[#E8F5E9] border border-[#C8E6C9] px-2.5 py-1 rounded-[999px]">
+                    LMS & CBT
                   </span>
                 </div>
-                <h3 className="font-bold text-slate-900 text-lg group-hover:text-emerald-700 transition-colors">
+                <h3 className="font-bold text-[#172033] text-lg group-hover:text-[#2E7D5B] transition-colors">
                   Spenspra Belajar
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-600 mt-1.5 leading-relaxed">
-                  Akses modul pelajaran daring, pengumpulan tugas mandiri, serta pelaksanaan ujian CBT terawasi.
+                <p className="text-xs sm:text-sm text-[#667085] mt-1.5 leading-relaxed">
+                  Platform pembelajaran daring, bank materi, penugasan digital, serta ujian CBT anti-cheat.
                 </p>
               </div>
-              <div className="mt-6 pt-4 border-t border-slate-100">
+              <div className="mt-6 pt-4 border-t border-[#F2F4F7]">
                 <a
                   href={getBelajarLaunchUrl()}
-                  className="w-full min-h-[44px] inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white px-5 py-2.5 text-sm font-bold transition shadow-xs cursor-pointer"
+                  className="w-full min-h-[42px] inline-flex items-center justify-center gap-2 rounded-[8px] bg-[#2E7D5B] hover:bg-[#236348] active:bg-[#1A4C36] text-white px-5 py-2.5 text-sm font-semibold transition shadow-xs cursor-pointer"
                 >
-                  <span>Buka Belajar</span>
+                  <span>Buka Belajar & CBT</span>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
                 </a>
               </div>
             </div>
 
             {/* 2. e-Rapor Spenspra */}
-            <div className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-[#4B3B78]/50 transition-all duration-200 flex flex-col justify-between group">
+            <div className="rounded-[12px] border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-[#4B3B78]/50 transition-all duration-200 flex flex-col justify-between group">
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-[#EDEAF5] text-[#4B3B78] flex items-center justify-center border border-[#DDD7ED] group-hover:scale-105 transition-transform">
+                  <div className="w-12 h-12 rounded-[12px] bg-[#EDEAF5] text-[#4B3B78] flex items-center justify-center border border-[#DDD7ED] group-hover:scale-105 transition-transform">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                   </div>
-                  <span className="text-[10px] font-bold text-[#4B3B78] bg-[#EDEAF5] border border-[#DDD7ED] px-2.5 py-1 rounded-full">
+                  <span className="text-[10px] font-semibold text-[#4B3B78] bg-[#EDEAF5] border border-[#DDD7ED] px-2.5 py-1 rounded-[999px]">
                     Nilai Rapor
                   </span>
                 </div>
-                <h3 className="font-bold text-slate-900 text-lg group-hover:text-[#4B3B78] transition-colors">
+                <h3 className="font-bold text-[#172033] text-lg group-hover:text-[#4B3B78] transition-colors">
                   e-Rapor Spenspra
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-600 mt-1.5 leading-relaxed">
-                  Lihat nilai tugas, capaian penilaian harian, PTS, PAS, dan cetak lembar buku rapor resmi.
+                <p className="text-xs sm:text-sm text-[#667085] mt-1.5 leading-relaxed">
+                  Penginputan nilai UTS, UAS, monitoring capaian belajar siswa, dan pencetakan rapor oleh wali kelas.
                 </p>
               </div>
-              <div className="mt-6 pt-4 border-t border-slate-100">
+              <div className="mt-6 pt-4 border-t border-[#F2F4F7]">
                 <a
                   href={getRaporLaunchUrl()}
-                  className="w-full min-h-[44px] inline-flex items-center justify-center gap-2 rounded-xl bg-[#4B3B78] hover:bg-[#3D2E66] active:bg-[#30264F] text-white px-5 py-2.5 text-sm font-bold transition shadow-xs cursor-pointer"
+                  className="w-full min-h-[42px] inline-flex items-center justify-center gap-2 rounded-[8px] bg-[#4B3B78] hover:bg-[#3D2E66] active:bg-[#30264F] text-white px-5 py-2.5 text-sm font-semibold transition shadow-xs cursor-pointer"
                 >
-                  <span>Lihat Rapor</span>
+                  <span>Buka Aplikasi e-Rapor</span>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
                 </a>
               </div>
             </div>
 
             {/* 3. e-Perpustakaan */}
-            <div className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-sky-400 transition-all duration-200 flex flex-col justify-between group">
+            <div className="rounded-[12px] border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-[#4F8FBB]/50 transition-all duration-200 flex flex-col justify-between group">
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center border border-sky-100 group-hover:scale-105 transition-transform">
+                  <div className="w-12 h-12 rounded-[12px] bg-[#E4F1F8] text-[#4F8FBB] flex items-center justify-center border border-[#CDE5F1] group-hover:scale-105 transition-transform">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                     </svg>
                   </div>
-                  <span className="text-[10px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-1 rounded-full">
-                    Katalog Buku
+                  <span className="text-[10px] font-semibold text-[#4F8FBB] bg-[#E4F1F8] border border-[#CDE5F1] px-2.5 py-1 rounded-[999px]">
+                    Katalog Pustaka
                   </span>
                 </div>
-                <h3 className="font-bold text-slate-900 text-lg group-hover:text-sky-700 transition-colors">
+                <h3 className="font-bold text-[#172033] text-lg group-hover:text-[#4F8FBB] transition-colors">
                   e-Perpustakaan
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-600 mt-1.5 leading-relaxed">
-                  Cari judul buku bacaan, periksa ketersediaan koleksi pustaka, dan riwayat peminjaman siswa.
+                <p className="text-xs sm:text-sm text-[#667085] mt-1.5 leading-relaxed">
+                  Katalog pustaka sekolah, sirkulasi peminjaman buku, dan riwayat bacaan civitas sekolah.
                 </p>
               </div>
-              <div className="mt-6 pt-4 border-t border-slate-100">
+              <div className="mt-6 pt-4 border-t border-[#F2F4F7]">
                 <a
                   href={getPerpusLaunchUrl()}
-                  className="w-full min-h-[44px] inline-flex items-center justify-center gap-2 rounded-xl bg-sky-700 hover:bg-sky-800 active:bg-sky-900 text-white px-5 py-2.5 text-sm font-bold transition shadow-xs cursor-pointer"
+                  className="w-full min-h-[42px] inline-flex items-center justify-center gap-2 rounded-[8px] bg-[#4F8FBB] hover:bg-[#3D749B] active:bg-[#315D7C] text-white px-5 py-2.5 text-sm font-semibold transition shadow-xs cursor-pointer"
                 >
                   <span>Buka Perpustakaan</span>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
                 </a>
               </div>
             </div>
 
             {/* 4. Kartu Barcode Siswa */}
-            <div className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-amber-400 transition-all duration-200 flex flex-col justify-between group">
+            <div className="rounded-[12px] border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-[#F2C94C]/80 transition-all duration-200 flex flex-col justify-between group">
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center border border-amber-200 group-hover:scale-105 transition-transform">
+                  <div className="w-12 h-12 rounded-[12px] bg-[#FEF9E7] text-[#9A7B00] flex items-center justify-center border border-[#F2C94C]/40 group-hover:scale-105 transition-transform">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                     </svg>
                   </div>
-                  <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
-                    Identitas Siswa
+                  <span className="text-[10px] font-semibold text-[#8B6E00] bg-[#FFFBEA] border border-[#F2C94C] px-2.5 py-1 rounded-[999px]">
+                    Terintegrasi
                   </span>
                 </div>
-                <h3 className="font-bold text-slate-900 text-lg group-hover:text-amber-800 transition-colors">
-                  Kartu Barcode Siswa
+                <h3 className="font-bold text-[#172033] text-lg group-hover:text-[#9A7B00] transition-colors">
+                  Presensi Barcode
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-600 mt-1.5 leading-relaxed">
-                  Tampilkan barcode digital untuk absensi harian dan transaksi peminjaman buku perpustakaan.
+                <p className="text-xs sm:text-sm text-[#667085] mt-1.5 leading-relaxed">
+                  Pencatatan presensi kehadiran siswa dan kelas berbasis kartu barcode resmi Spenspra.
                 </p>
               </div>
-              <div className="mt-6 pt-4 border-t border-slate-100">
+              <div className="mt-6 pt-4 border-t border-[#F2F4F7]">
                 <Link
                   href="/students"
-                  className="w-full min-h-[44px] inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white px-5 py-2.5 text-sm font-bold transition shadow-xs cursor-pointer"
+                  className="w-full min-h-[42px] inline-flex items-center justify-center gap-2 rounded-[8px] border border-[#E5E7EB] bg-white hover:bg-slate-50 active:bg-slate-100 text-[#172033] px-5 py-2.5 text-sm font-semibold transition shadow-xs cursor-pointer"
                 >
-                  <svg className="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                  <span>Lihat Barcode Saya</span>
+                  <span>Lihat Barcode Presensi</span>
                 </Link>
               </div>
             </div>

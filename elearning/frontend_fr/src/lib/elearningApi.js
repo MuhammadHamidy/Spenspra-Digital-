@@ -323,6 +323,46 @@ export const elearningApi = {
     return res.success ? res.data : newExam;
   },
 
+  updateExam: async (id, payload) => {
+    fetchJson(`/exams/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+    const local = getLocal('exams', INITIAL_EXAMS);
+    const updated = local.map((e) => (e.id === id ? { ...e, ...payload } : e));
+    setLocal('exams', updated);
+    return updated.find((e) => e.id === id) || null;
+  },
+
+  deleteExam: async (id) => {
+    fetchJson(`/exams/${id}`, { method: 'DELETE' }).catch(() => {});
+    const local = getLocal('exams', INITIAL_EXAMS);
+    const filtered = local.filter((e) => e.id !== id);
+    setLocal('exams', filtered);
+    const allQuestions = getLocal('questions', INITIAL_QUESTIONS);
+    delete allQuestions[id];
+    setLocal('questions', allQuestions);
+    return true;
+  },
+
+  getStudentsByClass: async (className = '') => {
+    try {
+      const { accountApiAdapter } = await import('@/lib/features/auth/infrastructure/accountApiAdapter');
+      const list = await accountApiAdapter.getStudents(className);
+      if (Array.isArray(list) && list.length > 0) {
+        if (!className) return list;
+        return list.filter((s) => {
+          const sClass = (s.className || s.class_name || s.rombel || '').trim().toLowerCase();
+          const target = className.trim().toLowerCase();
+          return sClass === target || sClass.replace(/[^a-z0-9]/g, '') === target.replace(/[^a-z0-9]/g, '');
+        });
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  },
+
   getExamQuestions: async (examId) => {
     const res = await fetchJson(`/exams/${examId}/questions`);
     if (res.success && res.data) return res.data;
@@ -487,6 +527,11 @@ export const elearningApi = {
     };
     setLocal('custom_classes', [...list, newClass]);
     return newClass;
+  },
+
+  getStudentExamSession: (examId, studentId) => {
+    const sessionKey = `exam_session_${examId}_${studentId || 'demo'}`;
+    return getLocal(sessionKey, null);
   },
 
   startExamSession: async (examId, token, student) => {

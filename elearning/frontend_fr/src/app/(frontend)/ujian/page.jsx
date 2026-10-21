@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Card from '@/components/Card';
 import Button from '@/components/Button';
 import StatusBadge from '@/components/StatusBadge';
-import Modal from '@/components/Modal';
 import Input from '@/components/Input';
 import { elearningApi } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
@@ -14,6 +13,7 @@ export default function StudentExamsHubPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [exams, setExams] = useState([]);
+  const [examSessions, setExamSessions] = useState({});
   const [loading, setLoading] = useState(true);
 
   // Modal Token & Kiosk Prep Lock
@@ -24,23 +24,66 @@ export default function StudentExamsHubPage() {
   const [prepWarning, setPrepWarning] = useState('');
 
   useEffect(() => {
-    setUser(tokenStorage.getUser());
-    loadExams();
+    const currentUser = tokenStorage.getUser();
+    setUser(currentUser);
+    loadExams(currentUser);
   }, []);
 
-  const loadExams = async () => {
+  const loadExams = async (currentUser) => {
     setLoading(true);
     try {
       const data = await elearningApi.getExams();
       setExams(data || []);
+
+      const u = currentUser || tokenStorage.getUser();
+      if (u && data) {
+        const uId = u.id || u.nisn || 'guest';
+        const sessionMap = {};
+        for (const ex of data) {
+          const sess = await elearningApi.getStudentExamSession(ex.id, uId);
+          if (sess) {
+            sessionMap[ex.id] = sess;
+          }
+        }
+        setExamSessions(sessionMap);
+      }
     } catch (e) {
-      console.error(e);
+      console.error('Failed to load exams:', e);
     } finally {
       setLoading(false);
     }
   };
 
-  // Kunci Layar sejak siswa memilih ujian (Solusi 2)
+  // Normalizer for class comparison (e.g., "Kelas 7A" -> "7a", "VII-A" -> "7a")
+  const normalizeClass = (c) => {
+    if (!c) return '';
+    let norm = String(c).toLowerCase().trim()
+      .replace(/^kelas\s*/, '')
+      .replace(/^rombel\s*/, '')
+      .replace(/[^a-z0-9]/g, '');
+
+    // Roman numeral normalization
+    norm = norm.replace(/^viii/, '8').replace(/^vii/, '7').replace(/^ix/, '9');
+    return norm;
+  };
+
+  // Filter exams strictly to student's enrolled class (Requirement 9)
+  const studentClass = user?.className || user?.class_name || user?.rombel || '';
+  const studentClassNorm = normalizeClass(studentClass);
+
+  const filteredExams = useMemo(() => {
+    if (!studentClassNorm) return exams; // Fallback if no class in profile
+    return exams.filter((ex) => {
+      const examClassNorm = normalizeClass(ex.className);
+      return (
+        examClassNorm === studentClassNorm ||
+        examClassNorm.startsWith(studentClassNorm) ||
+        studentClassNorm.startsWith(examClassNorm)
+      );
+    });
+  }, [exams, studentClassNorm]);
+
+  // Kunci Layar sejak siswa memilih ujian
   const handleOpenTokenModal = async (exam) => {
     setSelectedExam(exam);
     setExamToken('');
@@ -71,7 +114,7 @@ export default function StudentExamsHubPage() {
     }
   };
 
-  // Pantau fokus layar selama persiapan ujian (deteksi tarikan notif / tombol home)
+  // Pantau fokus layar selama persiapan ujian
   useEffect(() => {
     if (!selectedExam) return;
 
@@ -113,151 +156,249 @@ export default function StudentExamsHubPage() {
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto px-2 sm:px-0">
+    <div className="space-y-5 max-w-7xl mx-auto px-2 sm:px-0 pb-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-        <div>
-          <h1 className="text-lg sm:text-2xl font-bold text-neutral-900 tracking-tight">
-            Daftar Ujian Siswa
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-[12px] border border-neutral-200">
+        <div className="space-y-1">
+          <h1 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
+            Jadwal e-Ujian & Penilaian CBT
           </h1>
-          <p className="text-xs sm:text-sm text-neutral-500 mt-0.5">
-            Pilih ujian aktif kelas Anda dan masukkan token dari pengawas.
+          <p className="text-xs sm:text-sm text-neutral-500">
+            Berikut jadwal ujian aktif khusus untuk <strong>Kelas {studentClass || 'Anda'}</strong>. Masukkan token pengawas untuk mulai.
           </p>
         </div>
+
+        {studentClass && (
+          <div className="self-start sm:self-center px-3 py-1.5 rounded-[999px] bg-primary-50 border border-primary-200 text-primary-800 text-xs font-bold flex items-center gap-1.5">
+            <span>🎓</span>
+            <span>Rombel: Kelas {studentClass}</span>
+          </div>
+        )}
       </div>
 
-      {/* Petunjuk Pengerjaan */}
-      <div className="p-3.5 sm:p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center gap-3 shadow-2xs">
-        <span className="text-xl sm:text-2xl shrink-0">📝</span>
-        <div>
-          <p className="text-xs sm:text-sm font-bold text-emerald-900">Petunjuk Pengerjaan Ujian</p>
-          <p className="text-[11px] sm:text-xs text-emerald-800 leading-relaxed mt-0.5">
-            Pastikan koneksi internet stabil. Kerjakan secara mandiri dan jangan menutup peramban selama ujian berlangsung.
+      {/* Petunjuk Anti-Cheat */}
+      <div className="p-4 rounded-[12px] bg-emerald-50/80 border border-emerald-200 text-emerald-950 flex items-start gap-3">
+        <span className="text-2xl shrink-0 mt-0.5">🛡️</span>
+        <div className="space-y-1">
+          <p className="text-xs sm:text-sm font-bold text-emerald-950">
+            Petunjuk Keamanan Ujian Daring (Kiosk Anti-Cheat)
+          </p>
+          <p className="text-[11px] sm:text-xs text-emerald-800 leading-relaxed">
+            Sistem dilengkapi pengawas otomatis. Dilarang membuka tab lain, berpindah aplikasi, atau menarik bilah notifikasi. Pelanggaran melebihi batas toleransi akan langsung mengunci layar ujian.
           </p>
         </div>
       </div>
 
       {/* Exam Cards Grid */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-44 bg-neutral-100 rounded-xl animate-pulse" />
+            <div key={i} className="h-48 bg-neutral-100 rounded-[12px] animate-pulse border border-neutral-200" />
           ))}
         </div>
-      ) : exams.length === 0 ? (
-        <Card noPadding className="p-10 text-center">
-          <p className="text-sm font-bold text-neutral-700">Belum Ada Jadwal Ujian</p>
-          <p className="text-xs text-neutral-500 mt-1">Ujian akan muncul di sini saat guru mempublikasikan jadwal untuk kelas Anda.</p>
+      ) : filteredExams.length === 0 ? (
+        <Card noPadding className="p-12 text-center rounded-[12px] bg-white border border-neutral-200">
+          <span className="text-3xl">📅</span>
+          <p className="text-sm font-bold text-neutral-800 mt-2">Tidak Ada Jadwal Ujian untuk Kelas Anda</p>
+          <p className="text-xs text-neutral-500 mt-1 max-w-md mx-auto">
+            {studentClass
+              ? `Saat ini belum ada jadwal ujian CBT yang diterbitkan untuk Kelas ${studentClass}.`
+              : 'Akun Anda belum memiliki penugasan rombel kelas aktif.'}
+          </p>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-          {exams.map((exam) => (
-            <Card
-              key={exam.id}
-              noPadding
-              className="p-4 sm:p-5 flex flex-col justify-between hover:border-emerald-400 hover:shadow-md transition-all group rounded-2xl"
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                      {exam.subject}
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 text-[10px] font-semibold">
-                      Kelas {exam.className}
-                    </span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filteredExams.map((exam) => {
+            const session = examSessions[exam.id];
+            const isCompleted = session?.status === 'SUBMITTED';
+            const isLocked = session?.status === 'LOCKED';
+            const isInProgress = session?.status === 'IN_PROGRESS';
+
+            return (
+              <Card
+                key={exam.id}
+                noPadding
+                className={`p-5 flex flex-col justify-between transition-all rounded-[12px] border ${
+                  isCompleted
+                    ? 'border-success-300 bg-white shadow-2xs'
+                    : isLocked
+                    ? 'border-danger-300 bg-danger-50/20'
+                    : 'border-neutral-200 bg-white hover:border-primary-400 hover:shadow-xs'
+                }`}
+              >
+                <div className="space-y-3.5">
+                  {/* Top Badges */}
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="px-2.5 py-0.5 rounded-[999px] bg-primary-100 text-primary-800 text-[10px] font-bold">
+                        {exam.subject}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-[999px] bg-neutral-100 text-neutral-700 text-[10px] font-semibold">
+                        Kelas {exam.className}
+                      </span>
+                    </div>
+
+                    {isCompleted ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[999px] text-[10px] font-bold bg-success-100 text-success-800 border border-success-300">
+                        ✓ Telah Selesai
+                      </span>
+                    ) : isLocked ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[999px] text-[10px] font-bold bg-danger-100 text-danger-800 border border-danger-300 animate-pulse">
+                        🔒 Terkunci
+                      </span>
+                    ) : (
+                      <StatusBadge
+                        status={exam.status || 'ACTIVE'}
+                        label={exam.status === 'ACTIVE' ? 'Sedang Berlangsung' : 'Akan Datang'}
+                      />
+                    )}
                   </div>
-                  <StatusBadge status={exam.status} label={exam.status === 'ACTIVE' ? 'Aktif' : 'Akan Datang'} />
-                </div>
 
-                <div>
-                  <h3 className="text-sm sm:text-base font-bold text-neutral-900 group-hover:text-emerald-700 transition-colors">
-                    {exam.title}
-                  </h3>
-                  <p className="text-xs text-neutral-500 mt-1 line-clamp-2 leading-relaxed">
-                    {exam.description}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-neutral-50 border border-neutral-100 text-center">
+                  {/* Title & Description */}
                   <div>
-                    <p className="text-[10px] font-medium text-neutral-400">Durasi</p>
-                    <p className="text-xs font-bold text-neutral-800">{exam.durationMinutes} Menit</p>
+                    <h3 className="text-base font-bold text-neutral-900 tracking-tight">
+                      {exam.title}
+                    </h3>
+                    <p className="text-xs text-neutral-500 mt-1 line-clamp-2 leading-relaxed">
+                      {exam.description || 'Ujian berbasis komputer (CBT) dengan pengawasan anti-cheat.'}
+                    </p>
                   </div>
-                  <div>
-                    <p className="text-[10px] font-medium text-neutral-400">Jumlah Soal</p>
-                    <p className="text-xs font-bold text-neutral-800">{exam.totalQuestions} Butir</p>
+
+                  {/* Schedule & Timing Info (Requirement 6) */}
+                  <div className="p-3 rounded-[8px] bg-neutral-50 border border-neutral-200 space-y-2 text-xs">
+                    <div className="flex items-center justify-between text-neutral-700">
+                      <span className="text-[11px] font-medium text-neutral-500 flex items-center gap-1">
+                        <span>📅</span> Tanggal:
+                      </span>
+                      <span className="font-bold text-neutral-800">
+                        {exam.scheduledDate || (exam.startDateTime ? exam.startDateTime.split('T')[0] : 'Hari Ini')}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-neutral-700">
+                      <span className="text-[11px] font-medium text-neutral-500 flex items-center gap-1">
+                        <span>⏰</span> Jam / Batas Akhir:
+                      </span>
+                      <span className="font-bold text-neutral-800 font-mono">
+                        {exam.startTime || '08:00'} - {exam.endTime || '09:30'} WIB
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-neutral-200/60 text-center">
+                      <div>
+                        <p className="text-[10px] text-neutral-400 font-medium">Durasi Ujian</p>
+                        <p className="text-xs font-bold text-neutral-800">{exam.durationMinutes} Menit</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-neutral-400 font-medium">Pengajar</p>
+                        <p className="text-xs font-bold text-neutral-800 truncate">{exam.teacherName || 'Guru Mapel'}</p>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-[10px] font-medium text-neutral-400">Sifat</p>
-                    <p className="text-xs font-bold text-emerald-700">Mandiri</p>
-                  </div>
+
+                  {/* Score Card if Submitted (Requirement 6) */}
+                  {isCompleted && (
+                    <div className="p-3 rounded-[8px] bg-success-50 border border-success-200 flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] font-semibold text-success-800">Hasil Penilaian CBT:</p>
+                        <p className="text-[10px] text-success-600">
+                          {session.submittedAt
+                            ? `Dikumpulkan: ${new Date(session.submittedAt).toLocaleTimeString('id-ID')} WIB`
+                            : 'Jawaban tersimpan di sistem'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-2xl font-black text-success-700">
+                          {session.score !== undefined && session.score !== null ? session.score : 0}
+                        </span>
+                        <span className="text-xs font-bold text-success-600"> / 100</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-neutral-500 pt-1 border-t border-neutral-100">
-                  <span>Guru: {exam.teacherName}</span>
-                  <span>{new Date(exam.startTime).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}</span>
+                {/* Action Button */}
+                <div className="pt-4 mt-1">
+                  {isCompleted ? (
+                    <Button
+                      variant="outline"
+                      size="md"
+                      disabled
+                      className="w-full min-h-[42px] font-bold bg-neutral-100 text-neutral-500 border-neutral-200 cursor-not-allowed"
+                    >
+                      ✓ Ujian Telah Dikerjakan (Skor: {session.score ?? '-'})
+                    </Button>
+                  ) : isLocked ? (
+                    <Button
+                      variant="outline"
+                      size="md"
+                      disabled
+                      className="w-full min-h-[42px] font-bold bg-danger-50 text-danger-700 border-danger-300 cursor-not-allowed"
+                    >
+                      🔒 Layar Terkunci - Hubungi Pengawas
+                    </Button>
+                  ) : isInProgress ? (
+                    <Button
+                      variant="primary"
+                      size="md"
+                      className="w-full min-h-[42px] font-bold shadow-xs cursor-pointer"
+                      onClick={() => router.push(`/ujian/${exam.id}/run`)}
+                    >
+                      ⚡ Lanjutkan Pengerjaan Ujian
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      size="md"
+                      className="w-full min-h-[42px] font-bold shadow-xs cursor-pointer"
+                      onClick={() => handleOpenTokenModal(exam)}
+                    >
+                      🔑 Masukkan Token & Mulai Ujian
+                    </Button>
+                  )}
                 </div>
-              </div>
-
-              <div className="pt-3 sm:pt-4 mt-2">
-                <Button
-                  variant="accent"
-                  size="md"
-                  className="w-full min-h-[44px] font-bold shadow-xs cursor-pointer"
-                  onClick={() => handleOpenTokenModal(exam)}
-                >
-                  <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                  </svg>
-                  Mulai Kerjakan Ujian
-                </Button>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
 
-      {/* Fullscreen Kiosk Preparation View (Solusi 2: Terlock Sejak Memilih Ujian) */}
+      {/* Fullscreen Kiosk Preparation View */}
       {selectedExam && (
-        <div className="fixed inset-0 z-50 bg-neutral-950/95 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 select-none overflow-y-auto">
-          <div className="max-w-lg w-full max-h-[92dvh] flex flex-col my-auto bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 space-y-3.5 sm:space-y-4 shadow-2xl border-2 border-emerald-600 animate-in zoom-in-95 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-neutral-950/95 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 select-none overflow-y-auto">
+          <div className="max-w-md w-full my-auto bg-white rounded-[12px] p-5 sm:p-6 space-y-4 shadow-2xl border-2 border-primary-600 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm sm:text-base shadow-xs shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-[8px] bg-primary-600 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
                   🔒
                 </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-sm sm:text-base font-bold text-neutral-900 tracking-tight truncate">Mode Persiapan Ujian</h2>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold shrink-0">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                      Layar Terkunci
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-neutral-500 font-medium truncate mt-0.5">
-                    {selectedExam.title} • {selectedExam.subject} (Kelas {selectedExam.className})
+                <div>
+                  <h2 className="text-sm sm:text-base font-bold text-neutral-900 tracking-tight">
+                    Mode Kiosk Pengawas Ujian
+                  </h2>
+                  <p className="text-[11px] text-neutral-500 font-medium">
+                    {selectedExam.title} • Kelas {selectedExam.className}
                   </p>
                 </div>
               </div>
             </div>
 
             {/* Peringatan Sistem Anti-Cheat */}
-            <div className="p-3 sm:p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
-              <p className="font-bold flex items-center gap-1.5 text-amber-950">
+            <div className="p-3.5 rounded-[8px] bg-amber-50 border border-amber-200 text-amber-950 text-xs space-y-1">
+              <p className="font-bold flex items-center gap-1.5 text-amber-900">
                 <span>🛡️</span>
-                <span>Peraturan Pengawasan Anti-Cheat CBT:</span>
+                <span>Protokol Keamanan CBT:</span>
               </p>
-              <ul className="list-disc list-inside space-y-0.5 text-[11px] text-amber-800 leading-relaxed">
-                <li>Layar peramban telah dikunci ke mode <strong>Layar Penuh (Kiosk)</strong>.</li>
-                <li><strong>Dilarang menarik bilah notifikasi HP</strong>, menekan tombol Home, atau membuka aplikasi lain.</li>
-                <li>Jika Anda keluar layar, ujian akan <strong>langsung terkunci</strong> dan membutuhkan PIN Pengawas untuk membukanya.</li>
+              <ul className="list-disc list-inside space-y-1 text-[11px] text-amber-900 leading-relaxed">
+                <li>Layar otomatis dikunci ke mode <strong>Layar Penuh (Kiosk)</strong>.</li>
+                <li><strong>Jangan meminimalkan peramban</strong>, menarik bilah notifikasi, atau membuka aplikasi lain.</li>
+                <li>Toleransi pelanggaran: <strong>Maks. {selectedExam.maxViolations || 3}x</strong> sebelum terkunci permanen.</li>
               </ul>
             </div>
 
-            {/* Peringatan jika terdeteksi blur / notif ditarik */}
+            {/* Peringatan jika terdeteksi blur */}
             {prepWarning && (
-              <div className="p-2.5 sm:p-3 rounded-xl bg-danger-50 border border-danger-200 text-danger-700 text-xs font-semibold flex items-center gap-2 animate-bounce">
+              <div className="p-3 rounded-[8px] bg-danger-50 border border-danger-200 text-danger-700 text-xs font-semibold flex items-center gap-2">
                 <span className="text-base shrink-0">🚨</span>
                 <span className="leading-snug">{prepWarning}</span>
               </div>
@@ -268,9 +409,9 @@ export default function StudentExamsHubPage() {
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-neutral-800">
-                    Token Ujian
+                    Token Sesi Ujian:
                   </label>
-                  <span className="text-[11px] text-neutral-500">Minta token dari pengawas</span>
+                  <span className="text-[11px] text-neutral-500">Minta kepada guru/pengawas</span>
                 </div>
                 <Input
                   type="text"
@@ -303,18 +444,18 @@ export default function StudentExamsHubPage() {
                       }
                     }
                   }}
-                  className="w-full sm:w-1/3 min-h-[44px]"
+                  className="w-full sm:w-1/3 min-h-[42px] cursor-pointer"
                 >
                   Batal
                 </Button>
                 <Button
                   type="submit"
-                  variant="accent"
+                  variant="primary"
                   size="md"
                   loading={isVerifying}
-                  className="w-full sm:w-2/3 font-bold min-h-[44px]"
+                  className="w-full sm:w-2/3 font-bold min-h-[42px] cursor-pointer"
                 >
-                  🚀 Mulai Ujian Sekarang
+                  Mulai Ujian Sekarang
                 </Button>
               </div>
             </form>

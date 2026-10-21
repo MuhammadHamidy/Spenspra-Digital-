@@ -16,14 +16,19 @@ export default function TeacherExamsManagementPage() {
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingExamId, setEditingExamId] = useState(null);
   const [activeQuestionEditorExam, setActiveQuestionEditorExam] = useState(null);
 
-  // Form State: Create Exam
+  // Form State: Create / Edit Exam
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('Matematika');
   const [subjectCode, setSubjectCode] = useState('MAT');
   const [className, setClassName] = useState('7A');
   const [token, setToken] = useState('');
+  const [examDate, setExamDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [startTime, setStartTime] = useState('08:00');
+  const [endTime, setEndTime] = useState('09:30');
   const [durationMinutes, setDurationMinutes] = useState(60);
   const [maxViolations, setMaxViolations] = useState(1);
   const [description, setDescription] = useState('');
@@ -31,6 +36,7 @@ export default function TeacherExamsManagementPage() {
 
   // Question Editor State
   const [examQuestions, setExamQuestions] = useState([]);
+  const [editingQuestionId, setEditingQuestionId] = useState(null);
   const [newQuestionType, setNewQuestionType] = useState('MCQ');
   const [isStimulusOpen, setIsStimulusOpen] = useState(false);
   const [stimulusText, setStimulusText] = useState('');
@@ -48,24 +54,42 @@ export default function TeacherExamsManagementPage() {
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
 
   useEffect(() => {
-    setUser(tokenStorage.getUser());
     loadInitialData();
   }, []);
 
   const loadInitialData = async () => {
     setLoading(true);
     try {
+      const currentUser = tokenStorage.getUser();
+      setUser(currentUser);
       const [exData, subjData, clsData] = await Promise.all([
         elearningApi.getExams(),
         elearningApi.getSubjects(),
         elearningApi.getClasses(),
       ]);
       setExams(exData || []);
-      setSubjects(subjData || []);
+
+      // Filter mapel yang diampu oleh guru (dari SSO teaching courses)
+      const teacherCourseNames = currentUser?.courseNames || currentUser?.course_names || currentUser?.courses || [];
+      let filteredSubjects = subjData || [];
+      if (Array.isArray(teacherCourseNames) && teacherCourseNames.length > 0) {
+        const matched = subjData.filter((s) =>
+          teacherCourseNames.some((tc) => {
+            const tcName = typeof tc === 'string' ? tc.trim().toLowerCase() : (tc.name || '').trim().toLowerCase();
+            const tcCode = typeof tc === 'string' ? tc.trim().toLowerCase() : (tc.code || '').trim().toLowerCase();
+            return tcName === s.name.trim().toLowerCase() || tcCode === s.code.trim().toLowerCase();
+          })
+        );
+        if (matched.length > 0) {
+          filteredSubjects = matched;
+        }
+      }
+
+      setSubjects(filteredSubjects);
       setClasses(clsData || []);
-      if (subjData && subjData.length > 0) {
-        setSubject(subjData[0].name);
-        setSubjectCode(subjData[0].code);
+      if (filteredSubjects && filteredSubjects.length > 0) {
+        setSubject(filteredSubjects[0].name);
+        setSubjectCode(filteredSubjects[0].code);
       }
       if (clsData && clsData.length > 0) {
         setClassName(clsData[0].name);
@@ -88,50 +112,142 @@ export default function TeacherExamsManagementPage() {
 
   const handleOpenCreateModal = () => {
     const defaultSubj = subjects[0] || { name: 'Matematika', code: 'MAT' };
+    setEditingExamId(null);
     setTitle('');
     setSubject(defaultSubj.name);
     setSubjectCode(defaultSubj.code);
-    setClassName('7A');
+    setClassName(classes[0]?.name || '7A');
     setToken(Math.random().toString(36).substring(2, 8).toUpperCase());
+    setExamDate(new Date().toISOString().split('T')[0]);
+    setStartTime('08:00');
+    setEndTime('09:30');
     setDurationMinutes(60);
     setMaxViolations(1);
     setDescription('');
     setIsCreateModalOpen(true);
   };
 
-  const handleCreateExam = async (e) => {
+  const handleOpenEditModal = (ex) => {
+    setEditingExamId(ex.id);
+    setTitle(ex.title || '');
+    setSubject(ex.subject || subjects[0]?.name || 'Matematika');
+    setSubjectCode(ex.subjectCode || subjects[0]?.code || 'MAT');
+    setClassName(ex.className || classes[0]?.name || '7A');
+    setToken(ex.token || '');
+    setDurationMinutes(ex.durationMinutes || 60);
+    setMaxViolations(ex.maxViolations || 1);
+    if (ex.startDateTime) {
+      const [d, t] = ex.startDateTime.split('T');
+      setExamDate(d || new Date().toISOString().split('T')[0]);
+      setStartTime(t ? t.slice(0, 5) : '08:00');
+    } else {
+      setExamDate(ex.scheduledDate || new Date().toISOString().split('T')[0]);
+      setStartTime(ex.startTime || '08:00');
+    }
+    if (ex.endDateTime) {
+      const [, t] = ex.endDateTime.split('T');
+      setEndTime(t ? t.slice(0, 5) : '09:30');
+    } else {
+      setEndTime(ex.endTime || '09:30');
+    }
+    setDescription(ex.description || '');
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveExam = async (e) => {
     e.preventDefault();
     if (!title.trim() || !token.trim()) {
       alert('Judul dan Token ujian wajib diisi!');
       return;
     }
 
+    const startDateTime = `${examDate}T${startTime}:00`;
+    const endDateTime = `${examDate}T${endTime}:00`;
+
     setIsSubmitting(true);
     try {
-      await elearningApi.createExam({
-        title,
+      const payload = {
+        title: title.trim(),
         subject,
         subjectCode,
         className,
         teacherName: user?.fullName || user?.full_name || 'Bapak/Ibu Guru',
         token: token.trim().toUpperCase(),
         durationMinutes: Number(durationMinutes) || 60,
-        totalQuestions: 0,
         maxViolations: Number(maxViolations) || 3,
-        startTime: new Date().toISOString(),
-        endTime: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
-        description,
-      });
-      setIsCreateModalOpen(false);
+        scheduledDate: examDate,
+        startTime,
+        endTime,
+        startDateTime,
+        endDateTime,
+        description: description.trim(),
+      };
+
+      if (editingExamId) {
+        await elearningApi.updateExam(editingExamId, payload);
+        setIsEditModalOpen(false);
+      } else {
+        await elearningApi.createExam({
+          ...payload,
+          totalQuestions: 0,
+          status: 'UPCOMING',
+          isActive: true,
+        });
+        setIsCreateModalOpen(false);
+      }
       loadExams();
     } catch (err) {
-      alert('Gagal membuat ujian: ' + err.message);
+      alert('Gagal menyimpan jadwal ujian: ' + err.message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const getExamStatus = (ex) => {
+    if (ex.status === 'COMPLETED') return 'COMPLETED';
+    if (ex.status === 'ACTIVE') return 'ACTIVE';
+    if (ex.startDateTime && ex.endDateTime) {
+      const now = new Date();
+      const start = new Date(ex.startDateTime);
+      const end = new Date(ex.endDateTime);
+      if (now < start) return 'UPCOMING';
+      if (now >= start && now <= end) return 'ACTIVE';
+      if (now > end) return 'COMPLETED';
+    }
+    return ex.status || 'ACTIVE';
+  };
+
+  const handleStartExamNow = async (exam) => {
+    try {
+      await elearningApi.updateExam(exam.id, { status: 'ACTIVE' });
+      loadExams();
+    } catch (err) {
+      alert('Gagal memulai ujian: ' + err.message);
+    }
+  };
+
+  const handleEndExamNow = async (exam) => {
+    if (!confirm(`Selesaikan sesi ujian "${exam.title}" sekarang? Siswa tidak dapat mengirimkan jawaban lagi.`)) return;
+    try {
+      await elearningApi.updateExam(exam.id, { status: 'COMPLETED' });
+      loadExams();
+    } catch (err) {
+      alert('Gagal menyelesaikan ujian: ' + err.message);
+    }
+  };
+
+  const handleDeleteExam = async (examId, examTitle) => {
+    if (!confirm(`Hapus jadwal ujian "${examTitle}" beserta seluruh butir soalnya?`)) return;
+    try {
+      await elearningApi.deleteExam(examId);
+      loadExams();
+    } catch (err) {
+      alert('Gagal menghapus ujian: ' + err.message);
+    }
+  };
+
   const resetQuestionForm = () => {
+    setEditingQuestionId(null);
     setNewQuestionType('MCQ');
     setIsStimulusOpen(false);
     setStimulusText('');
@@ -153,6 +269,27 @@ export default function TeacherExamsManagementPage() {
     const qs = await elearningApi.getExamQuestions(exam.id);
     setExamQuestions(qs || []);
     resetQuestionForm();
+  };
+
+  const handleEditQuestion = (q) => {
+    setEditingQuestionId(q.id);
+    setNewQuestionType(q.type || 'MCQ');
+    setNewQuestionText(q.questionText || '');
+    setStimulusText(q.stimulusText || '');
+    setIsStimulusOpen(Boolean(q.stimulusText));
+    setImageUrl(q.imageUrl || '');
+    setIsImageOpen(Boolean(q.imageUrl));
+    if (q.type === 'MCQ') {
+      const optMap = (q.options || []).reduce((acc, curr) => ({ ...acc, [curr.key]: curr.text }), {});
+      setOptA(optMap['A'] || '');
+      setOptB(optMap['B'] || '');
+      setOptC(optMap['C'] || '');
+      setOptD(optMap['D'] || '');
+      setCorrectOption(q.correctOption || 'A');
+    } else {
+      setEssayPoints(q.points || 10);
+      setEssayRubric(q.essayRubric || '');
+    }
   };
 
   const handleImageUpload = (e) => {
@@ -207,31 +344,31 @@ export default function TeacherExamsManagementPage() {
         essayRubric: newQuestionType === 'ESSAY' ? essayRubric.trim() || undefined : undefined,
       };
 
-      const updated = [...examQuestions, newQ];
+      let updated;
+      if (editingQuestionId) {
+        updated = examQuestions.map((q) =>
+          q.id === editingQuestionId
+            ? { ...q, ...newQ, id: editingQuestionId, questionNumber: q.questionNumber }
+            : q
+        );
+        setSaveSuccessMsg(`✓ Soal #${examQuestions.find(q => q.id === editingQuestionId)?.questionNumber || ''} berhasil diperbarui!`);
+      } else {
+        updated = [...examQuestions, newQ];
+        setSaveSuccessMsg(
+          `✓ Soal #${newQ.questionNumber} (${newQuestionType === 'MCQ' ? 'Pilihan Ganda' : 'Esai'}) tersimpan!`
+        );
+      }
+
       setExamQuestions(updated);
 
       if (activeQuestionEditorExam?.id) {
         await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, updated);
       }
 
-      setSaveSuccessMsg(
-        `✓ Soal #${newQ.questionNumber} (${newQuestionType === 'MCQ' ? 'Pilihan Ganda' : 'Esai'}) tersimpan!`
-      );
       setTimeout(() => setSaveSuccessMsg(''), 4000);
-
-      // Reset form but retain question type
-      setStimulusText('');
-      setIsStimulusOpen(false);
-      setImageUrl('');
-      setIsImageOpen(false);
-      setNewQuestionText('');
-      setOptA('');
-      setOptB('');
-      setOptC('');
-      setOptD('');
-      setEssayRubric('');
+      resetQuestionForm();
     } catch (err) {
-      alert('Gagal menambahkan soal: ' + err.message);
+      alert('Gagal menyimpan soal: ' + err.message);
     } finally {
       setIsSavingQuestion(false);
     }
@@ -247,6 +384,11 @@ export default function TeacherExamsManagementPage() {
     if (activeQuestionEditorExam?.id) {
       await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, filtered);
     }
+    if (editingQuestionId === qId) {
+      resetQuestionForm();
+    }
+  };
+
   if (activeQuestionEditorExam) {
     const mcqCount = examQuestions.filter((q) => q.type === 'MCQ').length;
     const essayCount = examQuestions.filter((q) => q.type === 'ESSAY').length;
@@ -313,15 +455,17 @@ export default function TeacherExamsManagementPage() {
             <Card className="border border-neutral-200 bg-white shadow-xs p-5 sm:p-6 space-y-5">
               <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
                 <div className="flex items-center gap-2">
-                  <span className="w-7 h-7 rounded-lg bg-primary-600 text-white flex items-center justify-center font-bold text-xs">
-                    #{examQuestions.length + 1}
+                  <span className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${
+                    editingQuestionId ? 'bg-amber-600 text-white' : 'bg-primary-600 text-white'
+                  }`}>
+                    {editingQuestionId ? '✏️' : `#${examQuestions.length + 1}`}
                   </span>
                   <div>
                     <h2 className="text-sm sm:text-base font-bold text-neutral-900">
-                      Form Input Butir Soal Baru
+                      {editingQuestionId ? 'Edit Butir Soal' : 'Form Input Butir Soal Baru'}
                     </h2>
                     <p className="text-[11px] text-neutral-500">
-                      Tentukan tipe soal (Pilihan Ganda atau Esai), lalu lengkapi pertanyaan di bawah.
+                      {editingQuestionId ? 'Ubah konten soal, opsi jawaban, atau bobot nilai di bawah ini.' : 'Tentukan tipe soal (Pilihan Ganda atau Esai), lalu lengkapi pertanyaan di bawah.'}
                     </p>
                   </div>
                 </div>
@@ -632,23 +776,35 @@ export default function TeacherExamsManagementPage() {
 
                 {/* 5. Tombol Submit Form */}
                 <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2 pt-3 border-t border-neutral-100">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="md"
-                    onClick={resetQuestionForm}
-                    className="cursor-pointer"
-                  >
-                    Reset Form
-                  </Button>
+                  {editingQuestionId ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="md"
+                      onClick={resetQuestionForm}
+                      className="cursor-pointer font-bold text-neutral-600"
+                    >
+                      Batal Edit
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="md"
+                      onClick={resetQuestionForm}
+                      className="cursor-pointer"
+                    >
+                      Reset Form
+                    </Button>
+                  )}
                   <Button
                     type="submit"
-                    variant="primary"
+                    variant={editingQuestionId ? 'secondary' : 'primary'}
                     size="md"
                     className="font-bold min-h-[42px] cursor-pointer"
                     loading={isSavingQuestion}
                   >
-                    + Simpan Butir Soal #{examQuestions.length + 1}
+                    {editingQuestionId ? '💾 Simpan Perubahan Soal' : `+ Simpan Butir Soal #${examQuestions.length + 1}`}
                   </Button>
                 </div>
               </form>
@@ -683,7 +839,11 @@ export default function TeacherExamsManagementPage() {
                   examQuestions.map((q, idx) => (
                     <div
                       key={q.id || idx}
-                      className="p-3.5 rounded-xl border border-neutral-200 bg-neutral-50/60 hover:bg-neutral-50 transition-colors space-y-2 text-xs"
+                      className={`p-3.5 rounded-xl border transition-all space-y-2 text-xs ${
+                        editingQuestionId === q.id
+                          ? 'border-amber-400 bg-amber-50/70 ring-2 ring-amber-400/30'
+                          : 'border-neutral-200 bg-neutral-50/60 hover:bg-neutral-50'
+                      }`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 flex-wrap">
@@ -718,6 +878,14 @@ export default function TeacherExamsManagementPage() {
                               {q.points || 10} Poin
                             </span>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => handleEditQuestion(q)}
+                            className="text-primary-600 hover:text-primary-800 font-bold p-1 hover:bg-primary-50 rounded transition-colors cursor-pointer text-xs"
+                            title="Edit Soal Ini"
+                          >
+                            ✏️
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteQuestion(q.id)}
@@ -814,11 +982,10 @@ export default function TeacherExamsManagementPage() {
             <thead>
               <tr className="bg-neutral-50 text-neutral-500 font-bold border-b border-neutral-200 uppercase text-[10px] tracking-wider">
                 <th className="py-3 px-4">Nama Sesi Ujian</th>
-                <th className="py-3 px-4">Mapel</th>
-                <th className="py-3 px-4">Kelas</th>
-                <th className="py-3 px-4 font-mono">Token Ujian</th>
+                <th className="py-3 px-4">Mapel & Kelas</th>
+                <th className="py-3 px-4">Jadwal Pelaksanaan</th>
+                <th className="py-3 px-4 font-mono">Token</th>
                 <th className="py-3 px-4">Durasi</th>
-                <th className="py-3 px-4">Anti-Cheat</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4 text-right">Aksi</th>
               </tr>
@@ -826,73 +993,144 @@ export default function TeacherExamsManagementPage() {
             <tbody className="divide-y divide-neutral-100">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-neutral-400">
+                  <td colSpan={7} className="py-8 text-center text-neutral-400">
                     Memuat daftar ujian...
                   </td>
                 </tr>
               ) : exams.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-neutral-400">
-                    Belum ada jadwal ujian CBT yang dibuat.
+                  <td colSpan={7} className="py-8 text-center text-neutral-400">
+                    Belum ada jadwal ujian CBT yang dibuat. Klik tombol "+ Buat Jadwal Ujian" di atas.
                   </td>
                 </tr>
               ) : (
-                exams.map((ex) => (
-                  <tr key={ex.id} className="hover:bg-neutral-50/80 transition-colors">
-                    <td className="py-3 px-4 font-semibold text-neutral-900">
-                      <div className="space-y-0.5">
-                        <p className="truncate max-w-[240px] font-bold">{ex.title}</p>
-                        <p className="text-[11px] text-neutral-400 truncate max-w-[240px]">{ex.description || 'Ujian CBT Sekolah'}</p>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 font-bold text-primary-600">
-                      <span className="font-mono text-[10px] mr-1 px-1.5 py-0.5 rounded bg-primary-50 text-primary-700">
-                        {ex.subjectCode || 'MAPEL'}
-                      </span>
-                      {ex.subject}
-                    </td>
-                    <td className="py-3 px-4 font-medium text-neutral-600">Kelas {ex.className}</td>
-                    <td className="py-3 px-4 font-mono font-bold text-neutral-800 tracking-wider">
-                      <span className="px-2 py-0.5 rounded bg-neutral-100 border border-neutral-200">
-                        {ex.token}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-neutral-600">{ex.durationMinutes} Menit</td>
-                    <td className="py-3 px-4 font-bold text-danger-600">
-                      Maks. {ex.maxViolations || 3}x
-                    </td>
-                    <td className="py-3 px-4">
-                      <StatusBadge status={ex.status || 'ACTIVE'} label={ex.status === 'ACTIVE' ? 'Aktif' : 'Akan Datang'} />
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <Button
-                          variant="outline"
-                          size="xs"
-                          onClick={() => handleOpenQuestionEditor(ex)}
-                          className="cursor-pointer"
-                        >
-                          Kelola Soal
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                exams.map((ex) => {
+                  const currentStatus = getExamStatus(ex);
+                  return (
+                    <tr key={ex.id} className="hover:bg-neutral-50/80 transition-colors">
+                      <td className="py-3 px-4 font-semibold text-neutral-900">
+                        <div className="space-y-0.5">
+                          <p className="truncate max-w-[220px] font-bold text-neutral-900">{ex.title}</p>
+                          <p className="text-[11px] text-neutral-400 truncate max-w-[220px]">{ex.description || 'Ujian CBT Sekolah'}</p>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="space-y-0.5">
+                          <p className="font-bold text-primary-700">{ex.subject}</p>
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-neutral-100 text-neutral-600">
+                            Kelas {ex.className}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-neutral-700">
+                        <div className="space-y-0.5">
+                          <p className="font-semibold text-neutral-800">
+                            📅 {ex.scheduledDate || (ex.startDateTime ? ex.startDateTime.split('T')[0] : 'Sesuai Jadwal')}
+                          </p>
+                          <p className="text-[11px] text-neutral-500 font-mono">
+                            ⏰ {ex.startTime || '08:00'} - {ex.endTime || '09:30'} WIB
+                          </p>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 font-mono font-bold text-neutral-800">
+                        <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                          {ex.token}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-neutral-600 font-medium">
+                        {ex.durationMinutes} Menit
+                      </td>
+                      <td className="py-3 px-4">
+                        {currentStatus === 'ACTIVE' ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                            Sedang Berlangsung
+                          </span>
+                        ) : currentStatus === 'UPCOMING' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            ⏳ Akan Datang
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-neutral-100 text-neutral-600 border border-neutral-300">
+                            ✓ Selesai
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          {currentStatus === 'UPCOMING' && (
+                            <Button
+                              variant="primary"
+                              size="xs"
+                              onClick={() => handleStartExamNow(ex)}
+                              className="cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                              title="Mulai sesi ujian sekarang lebih awal"
+                            >
+                              ▶ Mulai
+                            </Button>
+                          )}
+                          {currentStatus === 'ACTIVE' && (
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              onClick={() => handleEndExamNow(ex)}
+                              className="cursor-pointer border-danger-300 text-danger-700 hover:bg-danger-50 font-bold"
+                              title="Tutup & selesaikan sesi ujian sekarang"
+                            >
+                              ⏹ Tutup
+                            </Button>
+                          )}
+                          <Button
+                            variant="primary"
+                            size="xs"
+                            onClick={() => handleOpenQuestionEditor(ex)}
+                            className="cursor-pointer font-bold"
+                          >
+                            Kelola Soal
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => handleOpenEditModal(ex)}
+                            className="cursor-pointer"
+                            title="Edit Jadwal & Konfigurasi"
+                          >
+                            ✏️
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => handleDeleteExam(ex.id, ex.title)}
+                            className="cursor-pointer border-danger-200 text-danger-600 hover:bg-danger-50"
+                            title="Hapus Ujian"
+                          >
+                            🗑️
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </Card>
 
-      {/* Modal Create Exam */}
+      {/* Modal Create & Edit Exam */}
       <Modal
-        isOpen={isCreateModalOpen}
-        onClose={() => !isSubmitting && setIsCreateModalOpen(false)}
-        title="Buat Jadwal & Sesi e-Ujian Baru"
+        isOpen={isCreateModalOpen || isEditModalOpen}
+        onClose={() => {
+          if (!isSubmitting) {
+            setIsCreateModalOpen(false);
+            setIsEditModalOpen(false);
+          }
+        }}
+        title={editingExamId ? 'Edit Jadwal & Sesi e-Ujian' : 'Buat Jadwal & Sesi e-Ujian Baru'}
         subtitle="Ujian akan menggunakan browser lockdown anti-cheat secara otomatis."
         size="lg"
       >
-        <form onSubmit={handleCreateExam} className="space-y-4">
+        <form onSubmit={handleSaveExam} className="space-y-4">
           <div className="space-y-1">
             <label className="text-xs font-bold text-neutral-800">Nama / Judul Ujian</label>
             <Input
@@ -906,17 +1144,24 @@ export default function TeacherExamsManagementPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-bold text-neutral-800">Mata Pelajaran</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-neutral-800">Mata Pelajaran (Diampu)</label>
+                {userCourses.length > 0 && (
+                  <span className="text-[10px] text-primary-700 font-bold bg-primary-50 px-1.5 py-0.5 rounded">
+                    Sesuai SSO Guru
+                  </span>
+                )}
+              </div>
               <select
                 value={subject}
                 onChange={(e) => {
                   setSubject(e.target.value);
-                  const matched = subjects.find((s) => s.name === e.target.value);
+                  const matched = availableSubjects.find((s) => s.name === e.target.value);
                   setSubjectCode(matched?.code || 'MAPEL');
                 }}
-                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium"
               >
-                {subjects.map((s) => (
+                {availableSubjects.map((s) => (
                   <option key={s.id || s.code} value={s.name}>
                     {s.name} ({s.code})
                   </option>
@@ -925,11 +1170,11 @@ export default function TeacherExamsManagementPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-neutral-800">Kelas / Rombel</label>
+              <label className="text-xs font-bold text-neutral-800">Target Kelas / Rombel</label>
               <select
                 value={className}
                 onChange={(e) => setClassName(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium"
               >
                 {classes.map((cls) => (
                   <option key={cls.id || cls.name} value={cls.name}>
@@ -937,6 +1182,48 @@ export default function TeacherExamsManagementPage() {
                   </option>
                 ))}
               </select>
+            </div>
+          </div>
+
+          {/* Jadwal Pelaksanaan */}
+          <div className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-neutral-800 flex items-center gap-1.5">
+                <span>📅</span>
+                <span>Waktu Pelaksanaan Ujian:</span>
+              </label>
+              <span className="text-[10px] text-neutral-500 font-medium">Ujian mulai otomatis pada jam ini</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-neutral-700">Tanggal Ujian</label>
+                <Input
+                  type="date"
+                  value={examDate}
+                  onChange={(e) => setExamDate(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-neutral-700">Jam Mulai</label>
+                <Input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-neutral-700">Batas Selesai / Deadline</label>
+                <Input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  required
+                />
+              </div>
             </div>
           </div>
 
@@ -954,15 +1241,18 @@ export default function TeacherExamsManagementPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-neutral-800">Durasi (Menit)</label>
-              <Input
-                type="number"
-                value={durationMinutes}
-                onChange={(e) => setDurationMinutes(e.target.value)}
-                min="10"
-                max="180"
-                required
-              />
+              <label className="text-xs font-bold text-neutral-800">Durasi Pengerjaan</label>
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="number"
+                  value={durationMinutes}
+                  onChange={(e) => setDurationMinutes(e.target.value)}
+                  min="10"
+                  max="180"
+                  required
+                />
+                <span className="text-xs text-neutral-500 font-medium">Menit</span>
+              </div>
             </div>
 
             <div className="space-y-1">
@@ -996,7 +1286,7 @@ export default function TeacherExamsManagementPage() {
               placeholder="Instruksi tambahan bagi peserta sebelum memulai ujian..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full text-xs p-2.5 rounded-[6px] border border-neutral-300"
+              className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300"
             />
           </div>
 
@@ -1007,7 +1297,10 @@ export default function TeacherExamsManagementPage() {
               size="md"
               className="w-full sm:w-auto min-h-[42px]"
               disabled={isSubmitting}
-              onClick={() => setIsCreateModalOpen(false)}
+              onClick={() => {
+                setIsCreateModalOpen(false);
+                setIsEditModalOpen(false);
+              }}
             >
               Batal
             </Button>
@@ -1018,7 +1311,7 @@ export default function TeacherExamsManagementPage() {
               className="w-full sm:w-auto min-h-[42px] font-bold"
               loading={isSubmitting}
             >
-              Terbitkan Jadwal Ujian
+              {editingExamId ? 'Simpan Perubahan' : 'Terbitkan Jadwal Ujian'}
             </Button>
           </div>
         </form>
