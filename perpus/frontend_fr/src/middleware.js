@@ -7,17 +7,22 @@ export function middleware(request) {
   const authUser = request.cookies.get('perpusdig_auth_user')?.value;
   const isAuthenticated = Boolean(authToken || authUser);
 
-  // If user is on /login and is authenticated -> redirect to /pustakawan
-  if (pathname === '/login') {
-    if (isAuthenticated) {
-      return NextResponse.redirect(new URL('/pustakawan', request.url));
-    }
-    return NextResponse.next();
+  let userRole = '';
+  if (authToken) {
+    try {
+      const parts = authToken.split('.');
+      if (parts.length === 3) {
+        const payloadJson = Buffer.from(parts[1], 'base64url').toString('utf8');
+        const payload = JSON.parse(payloadJson);
+        userRole = (payload.role || payload.role_name || payload.roleName || '').toUpperCase();
+      }
+    } catch {}
   }
 
   // Public paths accessible without librarian login
   const isPublicPath =
     pathname === '/' ||
+    pathname.startsWith('/sso/callback') ||
     pathname === '/perpus' ||
     pathname === '/kiosk' ||
     pathname === '/bibliografi' ||
@@ -25,6 +30,33 @@ export function middleware(request) {
     pathname === '/pinjam' ||
     pathname === '/baca' ||
     pathname === '/pembelajaran';
+
+  // If user is on /login and is authenticated -> redirect based on role
+  if (pathname === '/login') {
+    if (isAuthenticated) {
+      if (userRole === 'SISWA') {
+        return NextResponse.redirect(new URL('/', request.url));
+      }
+      return NextResponse.redirect(new URL('/pustakawan', request.url));
+    }
+    return NextResponse.next();
+  }
+
+  // Lindungi halaman administrasi pustakawan agar siswa diarahkan ke beranda siswa
+  const isLibrarianAdminPath =
+    pathname.startsWith('/pustakawan') ||
+    pathname.startsWith('/pustakwan') ||
+    pathname.startsWith('/circulation') ||
+    pathname.startsWith('/members') ||
+    pathname.startsWith('/faces') ||
+    pathname.startsWith('/books') ||
+    pathname.startsWith('/visitors') ||
+    pathname.startsWith('/loans') ||
+    pathname.startsWith('/reading-insights');
+
+  if (userRole === 'SISWA' && isLibrarianAdminPath) {
+    return NextResponse.redirect(new URL('/', request.url));
+  }
 
   // If user is not authenticated and trying to access protected administrative pages -> redirect to /login
   if (!isAuthenticated && !isPublicPath) {
@@ -73,9 +105,10 @@ export const config = {
      * - api (API routes)
      * - _next/static (static files)
      * - _next/image (image optimization files)
+     * - sso/callback
      * - favicon.ico, sitemap.xml, robots.txt (metadata files)
      * - static assets (.svg, .png, .jpg, .jpeg, .gif, .webp, .ico)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api|_next/static|_next/image|sso/callback|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

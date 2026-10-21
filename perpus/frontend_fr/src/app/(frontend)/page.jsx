@@ -11,6 +11,7 @@ import PerpusFooterMain from '@/components/perpus/home/PerpusFooterMain';
 import GuestVisitModal from '@/components/perpus/home/GuestVisitModal';
 import BookDetailModal from '@/components/perpus/home/BookDetailModal';
 import { berandaApi } from '@/lib/features/beranda/berandaApi';
+import { tokenStorage } from '@/lib/common/tokenStorage';
 
 export default function BerandaPage() {
   const router = useRouter();
@@ -21,16 +22,33 @@ export default function BerandaPage() {
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
-  // Ambil profil sesi pengguna dari endpoint backend /api/session
+  // Ambil profil sesi pengguna dari endpoint backend /api/session atau tokenStorage lokal
   const fetchSession = useCallback(async () => {
     try {
       const session = await berandaApi.getSession();
-      setUser(session);
-      return session;
+      if (session) {
+        setUser(session);
+        return session;
+      }
     } catch (e) {
-      setUser(null);
-      return null;
+      // Backend offline atau fallback sesi lokal
     }
+
+    const localUser = tokenStorage.getUser();
+    if (localUser) {
+      const mapped = {
+        id: localUser.id || 'siswa-1',
+        nama: localUser.nama || localUser.fullName || localUser.full_name || localUser.username || 'Siswa Spenspra',
+        peran: localUser.peran || localUser.roleName || 'SISWA',
+        kelas_atau_jabatan: localUser.kelas_atau_jabatan || localUser.className || localUser.kelas || 'Peserta Didik',
+        foto: localUser.photoUrl || localUser.foto || null,
+      };
+      setUser(mapped);
+      return mapped;
+    }
+
+    setUser(null);
+    return null;
   }, []);
 
   useEffect(() => {

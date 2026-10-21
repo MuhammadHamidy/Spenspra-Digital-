@@ -58,12 +58,23 @@ export default function CivitasDashboard() {
     return `${belajarBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}${redirectParam}`;
   };
 
-  const getPerpusLaunchUrl = () => {
+  const getPerpusLaunchUrl = (targetPath = '') => {
     const isPustakawan = role === 'ADMIN_PERPUS' || role === 'PUSTAKAWAN';
-    if (isPustakawan) {
-      return `${perpusBaseUrl}/pustakawan`;
-    }
-    return perpusBaseUrl;
+    const destination = isPustakawan ? '/pustakawan' : (targetPath || '/');
+    const token = tokenStorage.getToken() || 'sso-session-token';
+    const userPayload = {
+      id: user?.id || user?.person_id || 'user-1',
+      username: user?.username || '',
+      fullName: user?.fullName || user?.full_name || '',
+      roleName: isKepalaSekolah ? 'KEPALA_SEKOLAH' : (role || (isSiswa ? 'SISWA' : 'GURU')),
+      nimNip: user?.nimNip || user?.nip || user?.nisn || '',
+      nama: user?.fullName || user?.full_name || '',
+      peran: isSiswa ? 'SISWA' : (role || 'GURU'),
+      kelas_atau_jabatan: user?.className || user?.kelas || (isSiswa ? 'Peserta Didik' : 'Pendidik'),
+    };
+    const encodedUser = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(userPayload)))) : '';
+    const redirectParam = destination ? `&redirect=${encodeURIComponent(destination)}` : '';
+    return `${perpusBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}${redirectParam}`;
   };
 
   useEffect(() => {
@@ -296,128 +307,247 @@ export default function CivitasDashboard() {
         <h2 className="text-xs font-bold text-[#667085] uppercase tracking-wider mb-4 px-1">
           {isSiswa ? 'Layanan Siswa Terpadu' : 'Layanan Aplikasi Civitas'}
         </h2>
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
-          {/* Menu 1: Spenspra Belajar (LMS & CBT) */}
-          <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm hover:shadow-md hover:border-[#F2C94C] transition-all flex flex-col justify-between">
-            <div>
-              <div className="w-12 h-12 rounded-lg bg-[#FEF9E7] text-[#9A7B00] flex items-center justify-center mb-4">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-              </div>
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-[#172033] text-lg">Spenspra Belajar</h3>
-                <span className="text-[10px] font-semibold text-[#8B6E00] bg-[#FFFBEA] border border-[#F2C94C] px-2 py-0.5 rounded-full">
-                  LMS & CBT
-                </span>
-              </div>
-              <p className="text-sm text-[#667085] mt-1.5 leading-relaxed">
-                {isSiswa
-                  ? 'Akses materi pelajaran dari guru, kumpulkan tugas online, dan kerjakan ujian CBT.'
-                  : 'Platform pembelajaran daring, bank materi, penugasan digital, serta ujian CBT anti-cheat.'}
-              </p>
-            </div>
-            <div className="mt-6 pt-4 border-t border-[#E5E7EB]">
-              <a
-                href={getBelajarLaunchUrl()}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#2E7D5B] hover:bg-[#236348] active:bg-[#1A4C36] text-white py-2.5 px-4 text-sm font-semibold transition shadow-sm cursor-pointer"
-              >
-                <span>Buka Belajar & CBT</span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </a>
-            </div>
-          </div>
 
-          {/* Menu 2: e-Rapor SPENSPRA */}
-          <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm hover:shadow-md hover:border-[#B9B0D2] transition-all flex flex-col justify-between">
-            <div>
-              <div className="w-12 h-12 rounded-lg bg-[#EDEAF5] text-[#4B3B78] flex items-center justify-center mb-4">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
+        {isSiswa ? (
+          <div className="space-y-4">
+            {/* Baris 1: Spenspra Belajar (LMS & CBT) */}
+            <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-[#F2C94C] transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl bg-[#FEF9E7] text-[#9A7B00] flex items-center justify-center shrink-0 shadow-2xs">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-[#172033] text-base sm:text-lg">Spenspra Belajar</h3>
+                    <span className="text-[10px] font-semibold text-[#8B6E00] bg-[#FFFBEA] border border-[#F2C94C] px-2 py-0.5 rounded-full">
+                      LMS & CBT
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-[#667085] mt-1 max-w-2xl leading-relaxed">
+                    Akses materi pelajaran dari guru, kumpulkan tugas online, dan kerjakan ujian CBT dengan sistem anti-curang terpadu.
+                  </p>
+                </div>
               </div>
-              <h3 className="font-bold text-[#172033] text-lg">e-Rapor Spenspra</h3>
-              <p className="text-sm text-[#667085] mt-1.5 leading-relaxed">
-                {isSiswa
-                  ? 'Lihat capaian nilai harian, nilai sumatif tengah/akhir semester, dan rekapitulasi buku rapor.'
-                  : 'Penginputan nilai UTS, UAS, monitoring capaian belajar siswa, dan pencetakan rapor oleh wali kelas.'}
-              </p>
+              <div className="shrink-0 self-end sm:self-center w-full sm:w-auto">
+                <a
+                  href={getBelajarLaunchUrl()}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[#2E7D5B] hover:bg-[#236348] active:bg-[#1A4C36] text-white py-2.5 px-5 text-sm font-semibold transition shadow-xs cursor-pointer"
+                >
+                  <span>Buka Belajar & CBT</span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              </div>
             </div>
-            <div className="mt-6 pt-4 border-t border-[#E5E7EB]">
-              <a
-                href={getRaporLaunchUrl()}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#4B3B78] hover:bg-[#3D2E66] active:bg-[#30264F] text-white py-2.5 px-4 text-sm font-semibold transition shadow-sm cursor-pointer"
-              >
-                <span>{isSiswa ? 'Lihat Nilai & Rapor' : 'Buka Aplikasi e-Rapor'}</span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </a>
-            </div>
-          </div>
 
-          {/* Menu 3: e-Perpustakaan */}
-          <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm hover:shadow-md hover:border-[#A8CBDD] transition-all flex flex-col justify-between">
-            <div>
-              <div className="w-12 h-12 rounded-lg bg-[#E4F1F8] text-[#4F8FBB] flex items-center justify-center mb-4">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
+            {/* Baris 2: e-Rapor Spenspra */}
+            <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-[#B9B0D2] transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl bg-[#EDEAF5] text-[#4B3B78] flex items-center justify-center shrink-0 shadow-2xs">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-bold text-[#172033] text-base sm:text-lg">e-Rapor Spenspra</h3>
+                  <p className="text-xs sm:text-sm text-[#667085] mt-1 max-w-2xl leading-relaxed">
+                    Lihat capaian nilai harian, nilai sumatif tengah semester (PTS), sumatif akhir semester (PAS/UAS), dan rekapitulasi buku rapor digital.
+                  </p>
+                </div>
               </div>
-              <h3 className="font-bold text-[#172033] text-lg">e-Perpustakaan</h3>
-              <p className="text-sm text-[#667085] mt-1.5 leading-relaxed">
-                {isSiswa
-                  ? 'Katalog koleksi buku sekolah, status peminjaman buku, dan riwayat bacaan siswa.'
-                  : 'Katalog pustaka sekolah, sirkulasi peminjaman buku, dan riwayat bacaan civitas sekolah.'}
-              </p>
+              <div className="shrink-0 self-end sm:self-center w-full sm:w-auto">
+                <a
+                  href={getRaporLaunchUrl()}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[#4B3B78] hover:bg-[#3D2E66] active:bg-[#30264F] text-white py-2.5 px-5 text-sm font-semibold transition shadow-xs cursor-pointer"
+                >
+                  <span>Lihat Nilai & Rapor</span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              </div>
             </div>
-            <div className="mt-6 pt-4 border-t border-[#E5E7EB]">
-              <a
-                href={getPerpusLaunchUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#4F8FBB] hover:bg-[#397394] active:bg-[#2E607C] text-white py-2.5 px-4 text-sm font-semibold transition shadow-sm cursor-pointer"
-              >
-                <span>Buka Perpustakaan</span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </a>
-            </div>
-          </div>
 
-          {/* Menu 4: Presensi Barcode */}
-          <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
-            <div>
-              <div className="w-12 h-12 rounded-lg bg-[#FFF6D6] text-[#A97E0D] flex items-center justify-center mb-4">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                </svg>
+            {/* Baris 3: e-Perpustakaan */}
+            <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-[#A8CBDD] transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl bg-[#E4F1F8] text-[#4F8FBB] flex items-center justify-center shrink-0 shadow-2xs">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-bold text-[#172033] text-base sm:text-lg">e-Perpustakaan Digital</h3>
+                  <p className="text-xs sm:text-sm text-[#667085] mt-1 max-w-2xl leading-relaxed">
+                    Katalog koleksi buku perpustakaan sekolah, ringkasan peminjaman aktif, batas waktu pengembalian buku, dan riwayat literasi bacaan siswa.
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-[#172033] text-lg">{isSiswa ? 'Kartu Barcode & Absensi' : 'Presensi Barcode'}</h3>
-                <span className="text-[10px] font-semibold text-[#1C5038] bg-[#F7FCF9] border border-[#A9D8BC] px-2 py-0.5 rounded-full">
-                  Terintegrasi
-                </span>
+              <div className="shrink-0 self-end sm:self-center w-full sm:w-auto">
+                <a
+                  href={getPerpusLaunchUrl()}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[#4F8FBB] hover:bg-[#397394] active:bg-[#2E607C] text-white py-2.5 px-5 text-sm font-semibold transition shadow-xs cursor-pointer"
+                >
+                  <span>Buka Perpustakaan</span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
               </div>
-              <p className="text-sm text-[#667085] mt-1.5 leading-relaxed">
-                {isSiswa
-                  ? 'Kartu barcode identitas digital resmi Anda untuk absensi harian dan presensi di sekolah.'
-                  : 'Pencatatan presensi kehadiran siswa dan kelas berbasis kartu barcode resmi Spenspra.'}
-              </p>
             </div>
-            <div className="mt-6 pt-4 border-t border-[#E5E7EB]">
-              <Link
-                href="/students"
-                className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-[#E5E7EB] bg-white hover:bg-[#F8F9FC] text-[#172033] py-2.5 px-4 text-sm font-semibold transition shadow-sm cursor-pointer"
-              >
-                <span>Lihat Kartu Barcode Saya</span>
-              </Link>
+
+            {/* Banner Khusus Kartu Barcode Siswa di Bawah */}
+            <div className="mt-6 rounded-2xl border border-amber-200/80 bg-gradient-to-r from-[#FFFDF5] via-white to-[#F7FAF8] p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl bg-[#FFF6D6] text-[#A97E0D] flex items-center justify-center shrink-0 shadow-2xs">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-[#172033] text-base sm:text-lg">Kartu Barcode & Absensi Terpadu</h3>
+                    <span className="text-[10px] font-semibold text-[#1C5038] bg-[#F7FCF9] border border-[#A9D8BC] px-2 py-0.5 rounded-full">
+                      Terintegrasi
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-[#667085] mt-1 max-w-2xl leading-relaxed">
+                    Identitas barcode digital resmi peserta didik SMPN 1 Prambon. Gunakan untuk absensi presensi harian di sekolah dan peminjaman buku perpustakaan secara otomatis.
+                  </p>
+                </div>
+              </div>
+              <div className="shrink-0 self-end sm:self-center w-full sm:w-auto">
+                <Link
+                  href="/students"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-[#172033] py-2.5 px-5 text-sm font-semibold transition shadow-xs cursor-pointer"
+                >
+                  <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  <span>Lihat & Cetak Kartu Saya</span>
+                </Link>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
+            {/* Menu 1: Spenspra Belajar (LMS & CBT) */}
+            <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm hover:shadow-md hover:border-[#F2C94C] transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 rounded-lg bg-[#FEF9E7] text-[#9A7B00] flex items-center justify-center mb-4">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                </div>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-[#172033] text-lg">Spenspra Belajar</h3>
+                  <span className="text-[10px] font-semibold text-[#8B6E00] bg-[#FFFBEA] border border-[#F2C94C] px-2 py-0.5 rounded-full">
+                    LMS & CBT
+                  </span>
+                </div>
+                <p className="text-sm text-[#667085] mt-1.5 leading-relaxed">
+                  Platform pembelajaran daring, bank materi, penugasan digital, serta ujian CBT anti-cheat.
+                </p>
+              </div>
+              <div className="mt-6 pt-4 border-t border-[#E5E7EB]">
+                <a
+                  href={getBelajarLaunchUrl()}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#2E7D5B] hover:bg-[#236348] active:bg-[#1A4C36] text-white py-2.5 px-4 text-sm font-semibold transition shadow-sm cursor-pointer"
+                >
+                  <span>Buka Belajar & CBT</span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+
+            {/* Menu 2: e-Rapor SPENSPRA */}
+            <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm hover:shadow-md hover:border-[#B9B0D2] transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 rounded-lg bg-[#EDEAF5] text-[#4B3B78] flex items-center justify-center mb-4">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <h3 className="font-bold text-[#172033] text-lg">e-Rapor Spenspra</h3>
+                <p className="text-sm text-[#667085] mt-1.5 leading-relaxed">
+                  Penginputan nilai UTS, UAS, monitoring capaian belajar siswa, dan pencetakan rapor oleh wali kelas.
+                </p>
+              </div>
+              <div className="mt-6 pt-4 border-t border-[#E5E7EB]">
+                <a
+                  href={getRaporLaunchUrl()}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#4B3B78] hover:bg-[#3D2E66] active:bg-[#30264F] text-white py-2.5 px-4 text-sm font-semibold transition shadow-sm cursor-pointer"
+                >
+                  <span>Buka Aplikasi e-Rapor</span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+
+            {/* Menu 3: e-Perpustakaan */}
+            <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm hover:shadow-md hover:border-[#A8CBDD] transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 rounded-lg bg-[#E4F1F8] text-[#4F8FBB] flex items-center justify-center mb-4">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                </div>
+                <h3 className="font-bold text-[#172033] text-lg">e-Perpustakaan</h3>
+                <p className="text-sm text-[#667085] mt-1.5 leading-relaxed">
+                  Katalog pustaka sekolah, sirkulasi peminjaman buku, dan riwayat bacaan civitas sekolah.
+                </p>
+              </div>
+              <div className="mt-6 pt-4 border-t border-[#E5E7EB]">
+                <a
+                  href={getPerpusLaunchUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#4F8FBB] hover:bg-[#397394] active:bg-[#2E607C] text-white py-2.5 px-4 text-sm font-semibold transition shadow-sm cursor-pointer"
+                >
+                  <span>Buka Perpustakaan</span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+
+            {/* Menu 4: Presensi Barcode */}
+            <div className="rounded-xl border border-[#E5E7EB] bg-white p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 rounded-lg bg-[#FFF6D6] text-[#A97E0D] flex items-center justify-center mb-4">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                  </svg>
+                </div>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-[#172033] text-lg">Presensi Barcode</h3>
+                  <span className="text-[10px] font-semibold text-[#1C5038] bg-[#F7FCF9] border border-[#A9D8BC] px-2 py-0.5 rounded-full">
+                    Terintegrasi
+                  </span>
+                </div>
+                <p className="text-sm text-[#667085] mt-1.5 leading-relaxed">
+                  Pencatatan presensi kehadiran siswa dan kelas berbasis kartu barcode resmi Spenspra.
+                </p>
+              </div>
+              <div className="mt-6 pt-4 border-t border-[#E5E7EB]">
+                <Link
+                  href="/students"
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-[#E5E7EB] bg-white hover:bg-[#F8F9FC] text-[#172033] py-2.5 px-4 text-sm font-semibold transition shadow-sm cursor-pointer"
+                >
+                  <span>Lihat Barcode Presensi</span>
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
