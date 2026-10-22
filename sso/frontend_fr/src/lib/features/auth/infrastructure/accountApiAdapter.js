@@ -150,7 +150,7 @@ export const accountApiAdapter = {
       };
     }
 
-    const generated = newPassword || t.username || t.nim_nip || 'Spenspra2026';
+    const generated = newPassword || t.password || t.initial_password || t.username || 'Spenspra2026';
     const targetEmail = t.email || email || '';
 
     // 1. Try Go backend if available

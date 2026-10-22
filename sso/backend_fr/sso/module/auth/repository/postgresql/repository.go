@@ -16,6 +16,7 @@ type Repository struct {
 }
 
 func NewRepository(db *gorm.DB) domain.AuthRepository {
+	_ = db.Exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS initial_password VARCHAR(100);").Error
 	return &Repository{db: db}
 }
 
@@ -61,6 +62,10 @@ func (r *Repository) FindByUsername(ctx context.Context, username string) (*doma
 	account.ClassIds = classIDs
 	account.ClassCodes = classCodes
 
+	if account.InitialPassword != "" {
+		account.Password = account.InitialPassword
+	}
+
 	return &account, nil
 }
 
@@ -89,6 +94,10 @@ func (r *Repository) FindAccountByID(ctx context.Context, id string) (*domain.Ac
 	classIDs, classCodes, _ := r.getTeacherClasses(ctx, account.Id)
 	account.ClassIds = classIDs
 	account.ClassCodes = classCodes
+
+	if account.InitialPassword != "" {
+		account.Password = account.InitialPassword
+	}
 
 	return &account, nil
 }
@@ -129,6 +138,10 @@ func (r *Repository) FindAllAccounts(ctx context.Context, roleName string) ([]*d
 		classIDs, classCodes, _ := r.getTeacherClasses(ctx, a.Id)
 		a.ClassIds = classIDs
 		a.ClassCodes = classCodes
+
+		if a.InitialPassword != "" {
+			a.Password = a.InitialPassword
+		}
 	}
 
 	return accounts, nil
@@ -137,6 +150,9 @@ func (r *Repository) FindAllAccounts(ctx context.Context, roleName string) ([]*d
 func (r *Repository) StoreAccount(ctx context.Context, account *domain.Account) error {
 	if account.Id == "" {
 		account.Id = uuid.New().String()
+	}
+	if account.InitialPassword == "" && account.Password != "" {
+		account.InitialPassword = account.Password
 	}
 	err := r.db.WithContext(ctx).Create(account).Error
 	if err != nil {
@@ -152,6 +168,9 @@ func (r *Repository) StoreAccount(ctx context.Context, account *domain.Account) 
 }
 
 func (r *Repository) UpdateAccount(ctx context.Context, account *domain.Account) error {
+	if account.Password != "" && account.InitialPassword == "" {
+		account.InitialPassword = account.Password
+	}
 	err := r.db.WithContext(ctx).Model(&domain.Account{}).Where("id = ?", account.Id).Updates(account).Error
 	if err != nil {
 		return err
@@ -278,10 +297,13 @@ func (r *Repository) FindRoleByID(ctx context.Context, id string) (*domain.Role,
 	return &role, err
 }
 
-func (r *Repository) ResetPassword(ctx context.Context, id string, newPasswordHash string) error {
+func (r *Repository) ResetPassword(ctx context.Context, id string, newPasswordHash string, rawPassword ...string) error {
 	updates := map[string]interface{}{
 		"password_hash": newPasswordHash,
 		"updated_at":    time.Now(),
+	}
+	if len(rawPassword) > 0 && rawPassword[0] != "" {
+		updates["initial_password"] = rawPassword[0]
 	}
 	result := r.db.WithContext(ctx).Model(&domain.Account{}).Where("id = ? OR person_id = ? OR username = ? OR nim_nip = ?", id, id, id, id).Updates(updates)
 	if result.Error != nil {
@@ -314,6 +336,9 @@ func (r *Repository) UpdateProfile(ctx context.Context, id string, req domain.Up
 	}
 	if newPasswordHash != "" {
 		updates["password_hash"] = newPasswordHash
+		if req.NewPassword != "" {
+			updates["initial_password"] = req.NewPassword
+		}
 	}
 
 	err := r.db.WithContext(ctx).Model(&domain.Account{}).Where("id = ?", id).Updates(updates).Error

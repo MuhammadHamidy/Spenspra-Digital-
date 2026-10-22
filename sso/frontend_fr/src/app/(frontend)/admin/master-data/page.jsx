@@ -486,14 +486,15 @@ function MasterDataContent() {
 
   const getStaffPassword = useCallback((p) => {
     const username = getStaffUsername(p);
-    if (p.id && savedPasswords[p.id]) return savedPasswords[p.id];
-    if (p.nip && savedPasswords[p.nip]) return savedPasswords[p.nip];
-    if (username && savedPasswords[username]) return savedPasswords[username];
     const matchingAcc = accounts.find(
       (a) => a.person_id === p.id || a.id === p.id || a.username === username || (p.nip && a.nim_nip === p.nip)
     );
+    if (matchingAcc?.initial_password) return matchingAcc.initial_password;
     if (matchingAcc?.password) return matchingAcc.password;
-    return p.nip || username || 'Spenspra2026';
+    if (p.id && savedPasswords[p.id]) return savedPasswords[p.id];
+    if (p.nip && savedPasswords[p.nip]) return savedPasswords[p.nip];
+    if (username && savedPasswords[username]) return savedPasswords[username];
+    return 'Spenspra2026';
   }, [savedPasswords, accounts, getStaffUsername]);
 
   const togglePasswordVisibility = (id) => {
@@ -551,7 +552,7 @@ function MasterDataContent() {
       setAccounts((prev) =>
         prev.map((acc) =>
           acc.id === passwordModal.accountId || acc.person_id === passwordModal.id || acc.username === passwordModal.username
-            ? { ...acc, password: newPassword }
+            ? { ...acc, password: newPassword, initial_password: newPassword }
             : acc
         )
       );
@@ -650,7 +651,7 @@ const generateUsernameFromName = (name) => {
         : (cleanNip || generateUsernameFromName(rawFullName));
 
       const defaultEmail = personForm.email?.trim() || `${identifier}@spenspra.sch.id`;
-      const passToSave = personForm.password?.trim() || (isSiswa ? cleanNisn : (cleanNip || identifier));
+      const passToSave = personForm.password?.trim() || (isSiswa ? cleanNisn : 'Spenspra2026');
 
       if (editingPersonId) {
         // Mode Edit: Update identitas di school_people

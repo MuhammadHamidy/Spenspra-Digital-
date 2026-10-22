@@ -18,14 +18,15 @@ func (Role) TableName() string {
 }
 
 type Account struct {
-	Id           string    `json:"id" gorm:"primaryKey"`
-	Username     string    `json:"username" gorm:"unique;not null"`
-	PasswordHash string    `json:"-" gorm:"not null"`
-	Password     string    `json:"password,omitempty" gorm:"-"`
-	Email        string    `json:"email" gorm:"unique;not null"`
-	FullName     string    `json:"full_name" gorm:"not null"`
-	RoleId       string    `json:"role_id" gorm:"not null"`
-	RoleName     string    `json:"role_name" gorm:"-"`
+	Id              string    `json:"id" gorm:"primaryKey"`
+	Username        string    `json:"username" gorm:"unique;not null"`
+	PasswordHash    string    `json:"-" gorm:"not null"`
+	Password        string    `json:"password,omitempty" gorm:"-"`
+	InitialPassword string    `json:"initial_password,omitempty" gorm:"column:initial_password"`
+	Email           string    `json:"email" gorm:"unique;not null"`
+	FullName        string    `json:"full_name" gorm:"not null"`
+	RoleId          string    `json:"role_id" gorm:"not null"`
+	RoleName        string    `json:"role_name" gorm:"-"`
 	NimNip       string    `json:"nim_nip"`
 	Phone        string    `json:"phone"`
 	Nisn         string    `json:"nisn"`
@@ -119,7 +120,7 @@ type AuthRepository interface {
 	GetTeacherClassIDs(ctx context.Context, teacherId string) ([]string, error)
 	FindAllRoles(ctx context.Context) ([]*Role, error)
 	FindRoleByID(ctx context.Context, id string) (*Role, error)
-	ResetPassword(ctx context.Context, id string, newPasswordHash string) error
+	ResetPassword(ctx context.Context, id string, newPasswordHash string, rawPassword ...string) error
 	UpdateProfile(ctx context.Context, id string, req UpdateProfileRequest, newPasswordHash string) (*Account, error)
 }
 

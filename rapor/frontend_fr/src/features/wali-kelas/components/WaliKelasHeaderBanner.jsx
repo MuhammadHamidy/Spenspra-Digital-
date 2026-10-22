@@ -15,6 +15,8 @@ export default function WaliKelasHeaderBanner({
   onOpenSignature = null,
 }) {
   const isEndorsed = Boolean(endorsement && (endorsement.status === 'APPROVED' || endorsement.signature_data));
+  const isAdminEndorsed = isEndorsed && (endorsement?.approver_role === 'ADMIN' || (endorsement?.notes && endorsement.notes.toLowerCase().includes('admin')));
+  const yearOptions = Array.from(new Set(['2024/2025', '2025/2026', '2026/2027', academicYear].filter(Boolean))).sort();
 
   return (
     <section className="bg-white border border-slate-200 border-l-4 border-l-[#193D9B] rounded-xl p-5 shadow-xs print:p-2 print:border-none print:shadow-none">
@@ -26,16 +28,25 @@ export default function WaliKelasHeaderBanner({
               Rekapitulasi Nilai & Rapor Kelas {selectedClass}
             </h1>
             {isEndorsed ? (
-              <span className="px-2.5 py-0.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5 shadow-2xs">
-                <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
-                </svg>
-                <span>Disahkan Kepala Sekolah</span>
-              </span>
+              isAdminEndorsed ? (
+                <span className="px-2.5 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1.5 shadow-2xs">
+                  <svg className="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Disahkan Administrator</span>
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5 shadow-2xs">
+                  <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Disahkan Kepala Sekolah</span>
+                </span>
+              )
             ) : (
-              <span className="px-2.5 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                <span>Menunggu Pengesahan</span>
+              <span className="px-2.5 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>Format Standar (Siap Cetak)</span>
               </span>
             )}
 
@@ -44,16 +55,16 @@ export default function WaliKelasHeaderBanner({
                 type="button"
                 onClick={onOpenSignature}
                 className="px-2.5 py-1 rounded-md text-xs font-bold bg-[#193D9B] hover:bg-[#1E4DBD] text-white flex items-center gap-1.5 shadow-2xs transition cursor-pointer"
-                title="Buka form pembubuhan tanda tangan & stempel resmi Kepala Sekolah"
+                title="Buka form pembubuhan pengesahan resmi oleh Kepala Sekolah atau Administrator"
               >
                 <span>✍️</span>
-                <span>{isEndorsed ? 'Ubah TTD & Stempel' : 'Sahkan Rapor Rombel Ini'}</span>
+                <span>{isEndorsed ? 'Ubah Pengesahan' : 'Pengesahan Kepsek / Admin'}</span>
               </button>
             )}
           </div>
 
           <p className="text-xs text-slate-500 leading-relaxed max-w-2xl">
-            Arsip dan rekapitulasi capaian rapor siswa. Pilih tahun ajaran & semester untuk mengakses riwayat rapor semester sebelumnya.
+            Arsip dan rekapitulasi capaian rapor siswa. Rapor siap langsung dicetak kapan saja dengan opsi format standar 2 kolom atau pengesahan 3 kolom (Kepsek / Admin).
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-0.5 text-xs">
@@ -81,9 +92,11 @@ export default function WaliKelasHeaderBanner({
                 onChange={(e) => setAcademicYear(e.target.value)}
                 className="bg-white text-slate-800 text-xs font-semibold px-3 py-1.5 rounded-md outline-none cursor-pointer border border-slate-300 hover:border-[#193D9B] focus:ring-2 focus:ring-[#193D9B]/15 transition"
               >
-                <option value="2024/2025">2024/2025 (Arsip)</option>
-                <option value="2025/2026">2025/2026 (Aktif)</option>
-                <option value="2026/2027">2026/2027</option>
+                {yearOptions.map((y) => (
+                  <option key={y} value={y}>
+                    {y} {y === academicYear ? '(Aktif)' : ''}
+                  </option>
+                ))}
               </select>
             </div>
 

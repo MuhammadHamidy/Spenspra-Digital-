@@ -38,6 +38,35 @@ function SSOCallbackContent() {
     tokenStorage.setInstitutionId(institutionId);
     tokenStorage.setUser(user);
 
+    // Sinkronisasi Tahun Ajaran, Semester, dan KKM dari Super Admin SSO
+    const academicYear = searchParams.get('academic_year');
+    const academicSemester = searchParams.get('academic_semester');
+    const schoolKkm = searchParams.get('school_kkm');
+
+    if (academicYear || academicSemester || schoolKkm) {
+      try {
+        const periodData = {
+          year: academicYear || '2025/2026',
+          semester: (academicSemester || 'GENAP').toUpperCase(),
+          kkm: Number(schoolKkm) || 75,
+        };
+        localStorage.setItem('spenspra_academic_period', JSON.stringify(periodData));
+        if (schoolKkm) {
+          localStorage.setItem('spenspra_school_kkm', String(schoolKkm));
+        }
+
+        const isProd = typeof window !== 'undefined' && window.location.hostname.includes('spenspra');
+        const domainPart = isProd ? '; domain=.spenspra.com' : '';
+        document.cookie = `spenspra_academic_year=${encodeURIComponent(periodData.year)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
+        document.cookie = `spenspra_academic_semester=${encodeURIComponent(periodData.semester)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
+        document.cookie = `spenspra_school_kkm=${encodeURIComponent(periodData.kkm)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
+
+        document.cookie = `spenspra_academic_year=${encodeURIComponent(periodData.year)}; path=/; max-age=31536000; SameSite=Lax`;
+        document.cookie = `spenspra_academic_semester=${encodeURIComponent(periodData.semester)}; path=/; max-age=31536000; SameSite=Lax`;
+        document.cookie = `spenspra_school_kkm=${encodeURIComponent(periodData.kkm)}; path=/; max-age=31536000; SameSite=Lax`;
+      } catch (err) {}
+    }
+
     const redirectPath = searchParams.get('redirect');
     router.replace(redirectPath || '/');
   }, [router, searchParams]);

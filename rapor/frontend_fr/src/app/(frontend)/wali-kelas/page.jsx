@@ -462,10 +462,10 @@ export default function WaliKelasRaporPage() {
     }));
   };
 
-  const handleSaveSignature = async ({ signatureData, signatureType, notes, principalName, principalNip }) => {
+  const handleSaveSignature = async ({ signatureData, signatureType, notes, approverRole, principalName, principalNip, signatoryTitle }) => {
     try {
       const user = tokenStorage.getUser();
-      const finalPrincipalName = principalName?.trim() || user?.fullName || user?.full_name || 'Kepala Sekolah SMPN 1 Prambon';
+      const finalPrincipalName = principalName?.trim() || user?.fullName || user?.full_name || (approverRole === 'ADMIN' ? 'Administrator Kurikulum' : 'Kepala Sekolah SMPN 1 Prambon');
       const finalPrincipalNip = principalNip?.trim() || user?.nimNip || user?.nip || '';
 
       const payload = {
@@ -476,10 +476,12 @@ export default function WaliKelasRaporPage() {
         principal_id: user?.id || '',
         principal_name: finalPrincipalName,
         principal_nip: finalPrincipalNip,
+        approver_role: approverRole || 'KEPALA_SEKOLAH',
+        signatory_title: signatoryTitle || (approverRole === 'ADMIN' ? 'Administrator / Tim Kurikulum' : 'Kepala SMP Negeri 1 Prambon'),
         signature_type: signatureType,
         signature_data: signatureData,
         status: 'APPROVED',
-        notes: notes || 'Disahkan oleh Kepala Sekolah SMPN 1 Prambon',
+        notes: notes || (approverRole === 'ADMIN' ? 'Disahkan oleh Administrator Kurikulum SMPN 1 Prambon' : 'Disahkan oleh Kepala Sekolah SMPN 1 Prambon'),
       };
 
       const res = await gradeApi.saveEndorsement(payload);

@@ -6,6 +6,7 @@ import {
 } from './StudentReportModal';
 import { getOrderedRaporSubjects } from '@/lib/raporSubjectConfig';
 import { KOP_IMAGE_DATA_URI, WATERMARK_IMAGE_DATA_URI } from '@/lib/reportAssets';
+import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
 
 export function generateSingleStudentSectionHTML({
   student,
@@ -17,6 +18,7 @@ export function generateSingleStudentSectionHTML({
   semester = '',
   isLast = false,
   endorsement = null,
+  endorsementFormat = 'AUTO',
   paperSize = 'A4',
   subjects = null,
 }) {
@@ -24,7 +26,31 @@ export function generateSingleStudentSectionHTML({
   const activeReportDate = getDynamicReportDate(reportDate);
   const displayTeacherName = teacherName || student?.homeroom_teacher || 'Wali Kelas';
   const displayTeacherNip = teacherNip || student?.homeroom_nip || '-';
-  const isEndorsed = Boolean(endorsement && (endorsement.status === 'APPROVED' || endorsement.signature_data));
+
+  const period = getSchoolAcademicPeriod();
+  const displayAcademicYear = academicYear || period?.year || '2025/2026';
+  const displaySemester = (semester || period?.semester || 'GENAP').toUpperCase();
+
+  let effectiveFormat = endorsementFormat;
+  if (!effectiveFormat || effectiveFormat === 'AUTO') {
+    if (endorsement && (endorsement.status === 'APPROVED' || endorsement.signature_data)) {
+      effectiveFormat = (endorsement.approver_role === 'ADMIN' || (endorsement.notes && endorsement.notes.toLowerCase().includes('admin'))) ? 'ADMIN' : 'KEPSEK';
+    } else {
+      effectiveFormat = 'STANDARD';
+    }
+  }
+
+  const isThreeColumn = effectiveFormat === 'KEPSEK' || effectiveFormat === 'ADMIN';
+  const signatoryTitle = effectiveFormat === 'ADMIN'
+    ? (endorsement?.signatory_title || 'Administrator / Tim Kurikulum')
+    : (endorsement?.signatory_title || 'Kepala SMP Negeri 1 Prambon');
+  const signatoryName = effectiveFormat === 'ADMIN'
+    ? (endorsement?.admin_name || endorsement?.principal_name || 'Administrator Sekolah')
+    : (endorsement?.principal_name || 'Kepala Sekolah');
+  const signatoryNip = effectiveFormat === 'ADMIN'
+    ? (endorsement?.admin_nip || endorsement?.principal_nip || '-')
+    : (endorsement?.principal_nip || '-');
+
   const attendance = {
     sakit: student?.attendance?.sakit ?? student?.sakit ?? 0,
     izin: student?.attendance?.izin ?? student?.izin ?? 0,
@@ -76,7 +102,7 @@ export function generateSingleStudentSectionHTML({
 
         <div class="title-block">
           <h2>RAPOR SISIPAN TENGAH SEMESTER</h2>
-          <h3>SEMESTER ${String(semester).toUpperCase()} TAHUN AJARAN ${academicYear}</h3>
+          <h3>SEMESTER ${String(displaySemester).toUpperCase()} TAHUN AJARAN ${displayAcademicYear}</h3>
         </div>
 
         <table class="identitas-table">
@@ -145,9 +171,9 @@ export function generateSingleStudentSectionHTML({
         </table>
 
         ${
-          isEndorsed
+          isThreeColumn
             ? `
-        <!-- Tiga Kolom Pengesahan: Orang Tua, Wali Kelas, dan Kepala Sekolah Resmi -->
+        <!-- Tiga Kolom Pengesahan: Orang Tua, Wali Kelas, dan Kepala Sekolah / Admin Resmi -->
         <table class="signature-grid">
           <tr>
             <td style="width: 32%; text-align: left;">
@@ -168,7 +194,7 @@ export function generateSingleStudentSectionHTML({
               Wali Kelas,
             </td>
             <td style="width: 34%; text-align: left; padding-left: 8pt;">
-              Mengetahui,<br/>Kepala SMP Negeri 1 Prambon,
+              Mengetahui,<br/>${signatoryTitle},
             </td>
           </tr>
           <tr style="height: 38pt;">
@@ -177,7 +203,7 @@ export function generateSingleStudentSectionHTML({
             <td style="vertical-align: middle; text-align: left; padding-left: 8pt;">
               ${
                 endorsement?.signature_data
-                  ? `<img src="${endorsement.signature_data}" style="max-height: 36pt; max-width: 95pt; object-fit: contain; display: block;" alt="TTD Kepala Sekolah" />`
+                  ? `<img src="${endorsement.signature_data}" style="max-height: 36pt; max-width: 95pt; object-fit: contain; display: block;" alt="TTD Pengesahan" />`
                   : ''
               }
             </td>
@@ -191,8 +217,8 @@ export function generateSingleStudentSectionHTML({
               <p style="margin: 2pt 0 0 0;">NIP. ${displayTeacherNip}</p>
             </td>
             <td style="width: 34%; text-align: left; padding-left: 8pt;">
-              <p style="margin: 0; font-weight: bold; text-decoration: underline;">${endorsement?.principal_name || 'Kepala Sekolah'}</p>
-              <p style="margin: 2pt 0 0 0;">${endorsement?.principal_nip ? `NIP. ${endorsement.principal_nip}` : 'NIP. -'}</p>
+              <p style="margin: 0; font-weight: bold; text-decoration: underline;">${signatoryName}</p>
+              <p style="margin: 2pt 0 0 0;">${signatoryNip && signatoryNip !== '-' ? `NIP. ${signatoryNip}` : 'NIP. -'}</p>
             </td>
           </tr>
         </table>
@@ -248,6 +274,7 @@ export function generateBulkPrintableHTML({
   academicYear = '',
   semester = '',
   endorsement = null,
+  endorsementFormat = 'AUTO',
   paperSize = 'A4',
   subjects = null,
 }) {
@@ -256,6 +283,11 @@ export function generateBulkPrintableHTML({
   const displayTeacherName = teacherName || 'Wali Kelas';
   const displayTeacherNip = teacherNip || '-';
   const activeSubjects = subjects || getOrderedRaporSubjects();
+
+  const period = getSchoolAcademicPeriod();
+  const displayAcademicYear = academicYear || period?.year || '2025/2026';
+  const displaySemester = (semester || period?.semester || 'GENAP').toUpperCase();
+
   const sectionsHTML = students
     .map((student, idx) =>
       generateSingleStudentSectionHTML({
@@ -264,10 +296,11 @@ export function generateBulkPrintableHTML({
         teacherName: displayTeacherName,
         teacherNip: displayTeacherNip,
         reportDate: activeReportDate,
-        academicYear,
-        semester,
+        academicYear: displayAcademicYear,
+        semester: displaySemester,
         isLast: idx === students.length - 1,
         endorsement,
+        endorsementFormat,
         paperSize,
         subjects: activeSubjects,
       })
@@ -443,6 +476,10 @@ export default function BulkStudentReportModal({
   academicYear = '',
   semester = '',
 }) {
+  const period = getSchoolAcademicPeriod();
+  const activeAcademicYear = academicYear || period?.year || '2025/2026';
+  const activeSemester = (semester || period?.semester || 'GENAP').toUpperCase();
+
   const [selectedStudentIds, setSelectedStudentIds] = useState(() =>
     students.map((s) => s.id)
   );
@@ -450,6 +487,24 @@ export default function BulkStudentReportModal({
   const [includeSignature, setIncludeSignature] = useState(true);
   const [filterType, setFilterType] = useState('ALL'); // 'ALL' | 'COMPLETE' | 'PASSED'
   const [isGenerating, setIsGenerating] = useState(false);
+
+  const [endorsementFormat, setEndorsementFormat] = useState(() => {
+    if (endorsement && (endorsement.status === 'APPROVED' || endorsement.signature_data)) {
+      return (endorsement.approver_role === 'ADMIN' || (endorsement.notes && endorsement.notes.toLowerCase().includes('admin'))) ? 'ADMIN' : 'KEPSEK';
+    }
+    return 'STANDARD';
+  });
+
+  React.useEffect(() => {
+    if (endorsement && (endorsement.status === 'APPROVED' || endorsement.signature_data)) {
+      setEndorsementFormat((prev) => {
+        if (prev === 'STANDARD') {
+          return (endorsement.approver_role === 'ADMIN' || (endorsement.notes && endorsement.notes.toLowerCase().includes('admin'))) ? 'ADMIN' : 'KEPSEK';
+        }
+        return prev;
+      });
+    }
+  }, [endorsement]);
 
   // Sync saat data students berubah
   React.useEffect(() => {
@@ -508,8 +563,9 @@ export default function BulkStudentReportModal({
       teacherNip,
       reportDate,
       endorsement,
-      academicYear,
-      semester,
+      endorsementFormat,
+      academicYear: activeAcademicYear,
+      semester: activeSemester,
       includeSignature,
       paperSize,
     });
@@ -544,8 +600,9 @@ export default function BulkStudentReportModal({
       teacherNip,
       reportDate,
       endorsement,
-      academicYear,
-      semester,
+      endorsementFormat,
+      academicYear: activeAcademicYear,
+      semester: activeSemester,
       includeSignature,
       paperSize,
     });
@@ -554,7 +611,7 @@ export default function BulkStudentReportModal({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Rapor_Massal_Kelas_${selectedClass}_${academicYear.replace('/', '-')}_${semester}_${paperSize}.html`;
+    a.download = `Rapor_Massal_Kelas_${selectedClass}_${activeAcademicYear.replace('/', '-')}_${activeSemester}_${paperSize}.html`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -572,7 +629,7 @@ export default function BulkStudentReportModal({
                 Fitur Cetak Massal Rapor
               </span>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/30 text-emerald-200 border border-emerald-400/30">
-                Kelas {selectedClass} • {academicYear} ({semester})
+                Kelas {selectedClass} • {activeAcademicYear} ({activeSemester})
               </span>
             </div>
             <h2 className="text-lg font-bold text-white mt-1">
@@ -633,17 +690,23 @@ export default function BulkStudentReportModal({
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                Format Pengesahan:
+                Format Pengesahan Rapor:
               </label>
-              <div className="text-xs text-slate-800 font-medium py-1">
-                {endorsement?.status === 'APPROVED' || endorsement?.signature_data
-                  ? '3 Kolom (Disahkan Kepala Sekolah + Wali Kelas)'
-                  : '2 Kolom (Wali Kelas & Orang Tua/Wali)'}
-              </div>
-              <span className="text-[10px] text-emerald-600 font-semibold block">
-                {endorsement?.status === 'APPROVED' || endorsement?.signature_data
-                  ? `✓ Disahkan oleh ${endorsement?.principal_name || 'Kepala Sekolah'}`
-                  : '✓ Sesuai Format Rapor Sisipan Resmi'}
+              <select
+                value={endorsementFormat}
+                onChange={(e) => setEndorsementFormat(e.target.value)}
+                className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#1E4DBD] bg-white font-semibold text-slate-800"
+              >
+                <option value="STANDARD">Format Standar (2 Kolom: Walas & Ortu)</option>
+                <option value="KEPSEK">Pengesahan Kepala Sekolah (3 Kolom)</option>
+                <option value="ADMIN">Pengesahan Administrator / TU (3 Kolom)</option>
+              </select>
+              <span className="text-[10px] text-emerald-600 font-semibold block mt-1">
+                {endorsementFormat === 'STANDARD'
+                  ? '✓ Format Standar Resmi (Siap Cetak Langsung)'
+                  : endorsementFormat === 'ADMIN'
+                  ? `✓ Pengesahan oleh ${endorsement?.admin_name || endorsement?.principal_name || 'Administrator Kurikulum'}`
+                  : `✓ Pengesahan oleh ${endorsement?.principal_name || 'Kepala Sekolah'}`}
               </span>
             </div>
 

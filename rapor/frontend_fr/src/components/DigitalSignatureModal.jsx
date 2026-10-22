@@ -17,6 +17,7 @@ export default function DigitalSignatureModal({
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasDrawn, setHasDrawn] = useState(false);
   const [uploadedImage, setUploadedImage] = useState(initialSignature || '');
+  const [approverRole, setApproverRole] = useState('KEPALA_SEKOLAH'); // 'KEPALA_SEKOLAH' | 'ADMIN'
   const [notes, setNotes] = useState('Rapor telah diverifikasi dan disahkan secara resmi oleh Kepala Sekolah.');
   const [inputPrincipalName, setInputPrincipalName] = useState(principalName || '');
   const [inputPrincipalNip, setInputPrincipalNip] = useState(principalNip || '');
@@ -105,7 +106,7 @@ export default function DigitalSignatureModal({
 
   const handleConfirmSubmit = () => {
     if (!inputPrincipalName.trim()) {
-      alert('Mohon masukkan Nama Kepala Sekolah penandatangan pengesahan.');
+      alert(`Mohon masukkan Nama ${approverRole === 'ADMIN' ? 'Administrator' : 'Kepala Sekolah'} penandatangan pengesahan.`);
       return;
     }
 
@@ -131,8 +132,10 @@ export default function DigitalSignatureModal({
       signatureData: finalSignatureData,
       signatureType: sigType,
       notes,
+      approverRole,
       principalName: inputPrincipalName.trim(),
       principalNip: inputPrincipalNip.trim(),
+      signatoryTitle: approverRole === 'ADMIN' ? 'Administrator / Tim Kurikulum' : 'Kepala SMP Negeri 1 Prambon',
     });
   };
 
@@ -156,31 +159,65 @@ export default function DigitalSignatureModal({
             <div>
               <p className="font-bold text-xs">Pengesahan Massal Rapor Aktif</p>
               <p className="text-[11px] text-amber-800">
-                Tanda tangan digital, Nama, dan NIP Kepala Sekolah di bawah ini akan langsung disematkan secara resmi ke <strong>seluruh rombel (Kelas 7A, 7B, 8A, 8B, 9A, 9B)</strong>.
+                Tanda tangan digital, Nama, dan NIP {approverRole === 'ADMIN' ? 'Administrator' : 'Kepala Sekolah'} di bawah ini akan langsung disematkan secara resmi ke <strong>seluruh rombel (Kelas 7A, 7B, 8A, 8B, 9A, 9B)</strong>.
               </p>
             </div>
           </div>
         )}
 
-        {/* Form Identitas Kepala Sekolah (Dapat Diinput & Diedit) */}
+        {/* Tab Pemilihan Otoritas Pengesahan: Kepala Sekolah atau Administrator */}
+        <div className="flex items-center gap-2 p-1.5 bg-slate-100 rounded-xl">
+          <button
+            type="button"
+            onClick={() => {
+              setApproverRole('KEPALA_SEKOLAH');
+              setNotes('Rapor telah diverifikasi dan disahkan secara resmi oleh Kepala Sekolah.');
+            }}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 ${
+              approverRole === 'KEPALA_SEKOLAH'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <span>🏛️</span>
+            <span>Pengesahan Kepala Sekolah</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setApproverRole('ADMIN');
+              setNotes('Rapor telah diverifikasi dan disahkan secara resmi oleh Administrator Kurikulum.');
+            }}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 ${
+              approverRole === 'ADMIN'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <span>👨‍💼</span>
+            <span>Pengesahan Administrator / TU</span>
+          </button>
+        </div>
+
+        {/* Form Identitas Penandatangan (Dapat Diinput & Diedit) */}
         <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
           <div className="flex items-center gap-2 pb-1 border-b border-slate-200">
             <span className="w-2 h-2 rounded-full bg-[#193D9B]" />
             <span className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">
-              Identitas Kepala Sekolah Penandatangan
+              Identitas {approverRole === 'ADMIN' ? 'Administrator / Tim Kurikulum' : 'Kepala Sekolah'} Penandatangan
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                Nama Lengkap Kepala Sekolah <span className="text-rose-500">*</span>
+                Nama Lengkap {approverRole === 'ADMIN' ? 'Administrator' : 'Kepala Sekolah'} <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
                 value={inputPrincipalName}
                 onChange={(e) => setInputPrincipalName(e.target.value)}
-                placeholder="Masukkan nama kepala sekolah beserta gelar"
+                placeholder={approverRole === 'ADMIN' ? 'Masukkan nama administrator beserta gelar' : 'Masukkan nama kepala sekolah beserta gelar'}
                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#193D9B]/20 focus:border-[#193D9B]"
                 required
               />
@@ -188,7 +225,7 @@ export default function DigitalSignatureModal({
 
             <div>
               <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                NIP Kepala Sekolah
+                NIP / NUPTK {approverRole === 'ADMIN' ? 'Administrator' : 'Kepala Sekolah'}
               </label>
               <input
                 type="text"

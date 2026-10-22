@@ -4,6 +4,7 @@ import {
   getOrderedRaporSubjects,
   DEFAULT_OFFICIAL_RAPOR_SUBJECTS,
 } from '@/lib/raporSubjectConfig';
+import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
 
 export const OFFICIAL_RAPOR_SUBJECTS = DEFAULT_OFFICIAL_RAPOR_SUBJECTS;
 
@@ -84,6 +85,7 @@ export function generatePrintableReportHTML({
   academicYear = '',
   semester = '',
   endorsement = null,
+  endorsementFormat = 'AUTO',
   paperSize = 'A4',
   subjects = null,
 }) {
@@ -91,7 +93,31 @@ export function generatePrintableReportHTML({
   const activeReportDate = getDynamicReportDate(reportDate);
   const displayTeacherName = teacherName || student?.homeroom_teacher || 'Wali Kelas';
   const displayTeacherNip = teacherNip || student?.homeroom_nip || '-';
-  const isEndorsed = Boolean(endorsement && (endorsement.status === 'APPROVED' || endorsement.signature_data));
+
+  const period = getSchoolAcademicPeriod();
+  const displayAcademicYear = academicYear || period?.year || '2025/2026';
+  const displaySemester = (semester || period?.semester || 'GENAP').toUpperCase();
+
+  let effectiveFormat = endorsementFormat;
+  if (!effectiveFormat || effectiveFormat === 'AUTO') {
+    if (endorsement && (endorsement.status === 'APPROVED' || endorsement.signature_data)) {
+      effectiveFormat = (endorsement.approver_role === 'ADMIN' || (endorsement.notes && endorsement.notes.toLowerCase().includes('admin'))) ? 'ADMIN' : 'KEPSEK';
+    } else {
+      effectiveFormat = 'STANDARD';
+    }
+  }
+
+  const isThreeColumn = effectiveFormat === 'KEPSEK' || effectiveFormat === 'ADMIN';
+  const signatoryTitle = effectiveFormat === 'ADMIN'
+    ? (endorsement?.signatory_title || 'Administrator / Tim Kurikulum')
+    : (endorsement?.signatory_title || 'Kepala SMP Negeri 1 Prambon');
+  const signatoryName = effectiveFormat === 'ADMIN'
+    ? (endorsement?.admin_name || endorsement?.principal_name || 'Administrator Sekolah')
+    : (endorsement?.principal_name || 'Kepala Sekolah');
+  const signatoryNip = effectiveFormat === 'ADMIN'
+    ? (endorsement?.admin_nip || endorsement?.principal_nip || '-')
+    : (endorsement?.principal_nip || '-');
+
   const attendance = {
     sakit: student?.attendance?.sakit ?? student?.sakit ?? 0,
     izin: student?.attendance?.izin ?? student?.izin ?? 0,
@@ -307,7 +333,7 @@ export function generatePrintableReportHTML({
 
       <div class="title-block">
         <h2>RAPOR SISIPAN TENGAH SEMESTER</h2>
-        <h3>SEMESTER ${String(semester).toUpperCase()} TAHUN AJARAN ${academicYear}</h3>
+        <h3>SEMESTER ${String(displaySemester).toUpperCase()} TAHUN AJARAN ${displayAcademicYear}</h3>
       </div>
 
       <table class="identitas-table">
@@ -376,9 +402,9 @@ export function generatePrintableReportHTML({
       </table>
 
       ${
-        isEndorsed
+        isThreeColumn
           ? `
-      <!-- Tiga Kolom Pengesahan: Orang Tua, Wali Kelas, dan Kepala Sekolah Resmi -->
+      <!-- Tiga Kolom Pengesahan: Orang Tua, Wali Kelas, dan Kepala Sekolah / Admin Resmi -->
       <table class="signature-grid">
         <tr>
           <td style="width: 32%; text-align: left;">
@@ -399,7 +425,7 @@ export function generatePrintableReportHTML({
             Wali Kelas,
           </td>
           <td style="width: 34%; text-align: left; padding-left: 8pt;">
-            Mengetahui,<br/>Kepala SMP Negeri 1 Prambon,
+            Mengetahui,<br/>${signatoryTitle},
           </td>
         </tr>
         <tr style="height: 38pt;">
@@ -408,7 +434,7 @@ export function generatePrintableReportHTML({
           <td style="vertical-align: middle; text-align: left; padding-left: 8pt;">
             ${
               endorsement?.signature_data
-                ? `<img src="${endorsement.signature_data}" style="max-height: 36pt; max-width: 95pt; object-fit: contain; display: block;" alt="TTD Kepala Sekolah" />`
+                ? `<img src="${endorsement.signature_data}" style="max-height: 36pt; max-width: 95pt; object-fit: contain; display: block;" alt="TTD Pengesahan" />`
                 : ''
             }
           </td>
@@ -422,8 +448,8 @@ export function generatePrintableReportHTML({
             <p style="margin: 2pt 0 0 0;">NIP. ${displayTeacherNip}</p>
           </td>
           <td style="width: 34%; text-align: left; padding-left: 8pt;">
-            <p style="margin: 0; font-weight: bold; text-decoration: underline;">${endorsement?.principal_name || 'Kepala Sekolah'}</p>
-            <p style="margin: 2pt 0 0 0;">${endorsement?.principal_nip ? `NIP. ${endorsement.principal_nip}` : 'NIP. -'}</p>
+            <p style="margin: 0; font-weight: bold; text-decoration: underline;">${signatoryName}</p>
+            <p style="margin: 2pt 0 0 0;">${signatoryNip && signatoryNip !== '-' ? `NIP. ${signatoryNip}` : 'NIP. -'}</p>
           </td>
         </tr>
       </table>
@@ -486,6 +512,28 @@ export default function StudentReportModal({
   const [paperSize, setPaperSize] = React.useState('A4');
   const [activeSubjects, setActiveSubjects] = React.useState(() => getOrderedRaporSubjects());
 
+  const period = getSchoolAcademicPeriod();
+  const activeAcademicYear = academicYear || period?.year || '2025/2026';
+  const activeSemester = (semester || period?.semester || 'GENAP').toUpperCase();
+
+  const [endorsementFormat, setEndorsementFormat] = React.useState(() => {
+    if (endorsement && (endorsement.status === 'APPROVED' || endorsement.signature_data)) {
+      return (endorsement.approver_role === 'ADMIN' || (endorsement.notes && endorsement.notes.toLowerCase().includes('admin'))) ? 'ADMIN' : 'KEPSEK';
+    }
+    return 'STANDARD';
+  });
+
+  React.useEffect(() => {
+    if (endorsement && (endorsement.status === 'APPROVED' || endorsement.signature_data)) {
+      setEndorsementFormat((prev) => {
+        if (prev === 'STANDARD') {
+          return (endorsement.approver_role === 'ADMIN' || (endorsement.notes && endorsement.notes.toLowerCase().includes('admin'))) ? 'ADMIN' : 'KEPSEK';
+        }
+        return prev;
+      });
+    }
+  }, [endorsement]);
+
   React.useEffect(() => {
     const handleOrderChange = () => {
       setActiveSubjects(getOrderedRaporSubjects());
@@ -500,7 +548,18 @@ export default function StudentReportModal({
   const formattedReportDate = getDynamicReportDate(reportDate);
   const displayTeacherName = teacherName || student?.homeroom_teacher || 'Wali Kelas';
   const displayTeacherNip = teacherNip || student?.homeroom_nip || '-';
-  const isEndorsed = Boolean(endorsement && (endorsement.status === 'APPROVED' || endorsement.signature_data));
+  const isThreeColumn = endorsementFormat === 'KEPSEK' || endorsementFormat === 'ADMIN';
+
+  const signatoryTitle = endorsementFormat === 'ADMIN'
+    ? (endorsement?.signatory_title || 'Administrator / Tim Kurikulum')
+    : (endorsement?.signatory_title || 'Kepala SMPN 1 Prambon');
+  const signatoryName = endorsementFormat === 'ADMIN'
+    ? (endorsement?.admin_name || endorsement?.principal_name || 'Administrator Sekolah')
+    : (endorsement?.principal_name || 'Kepala Sekolah');
+  const signatoryNip = endorsementFormat === 'ADMIN'
+    ? (endorsement?.admin_nip || endorsement?.principal_nip || '-')
+    : (endorsement?.principal_nip || '-');
+
   const attendance = {
     sakit: student?.attendance?.sakit ?? student?.sakit ?? 0,
     izin: student?.attendance?.izin ?? student?.izin ?? 0,
@@ -514,9 +573,10 @@ export default function StudentReportModal({
       teacherName: displayTeacherName,
       teacherNip: displayTeacherNip,
       reportDate: formattedReportDate,
-      academicYear,
-      semester,
+      academicYear: activeAcademicYear,
+      semester: activeSemester,
       endorsement,
+      endorsementFormat,
       paperSize,
       subjects: activeSubjects,
     });
@@ -540,7 +600,7 @@ export default function StudentReportModal({
         <div className="flex flex-wrap items-center justify-between px-6 py-4 bg-slate-50 border-b border-slate-200 gap-3">
           <div>
             <span className="text-[10px] font-bold tracking-wider uppercase text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-              Format Rapor Sisipan Semester Genap TA 2025/2026 • SMPN 1 Prambon
+              Format Rapor Sisipan Semester {activeSemester} TA {activeAcademicYear} • SMPN 1 Prambon
             </span>
             <h2 className="text-base sm:text-lg font-extrabold text-slate-900 mt-1">
               Pratinjau Rapor: {student.name} ({student.nisn})
@@ -548,9 +608,24 @@ export default function StudentReportModal({
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Pilihan Format Pengesahan Rapor */}
+            <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 shadow-2xs">
+              <span className="text-[11px] font-bold text-slate-600">Pengesahan:</span>
+              <select
+                value={endorsementFormat}
+                onChange={(e) => setEndorsementFormat(e.target.value)}
+                className="text-xs font-semibold text-slate-800 bg-transparent border-none focus:outline-none cursor-pointer"
+                title="Pilih format pengesahan rapor (Standar 2 Kolom, Pengesahan Kepsek, atau Pengesahan Admin)"
+              >
+                <option value="STANDARD">Format Standar (2 Kolom: Walas & Ortu)</option>
+                <option value="KEPSEK">Pengesahan Kepala Sekolah (3 Kolom)</option>
+                <option value="ADMIN">Pengesahan Administrator / TU (3 Kolom)</option>
+              </select>
+            </div>
+
             {/* Pilihan Ukuran Kertas Cetak */}
             <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 shadow-2xs">
-              <span className="text-[11px] font-bold text-slate-600">Ukuran Kertas:</span>
+              <span className="text-[11px] font-bold text-slate-600">Kertas:</span>
               <select
                 value={paperSize}
                 onChange={(e) => setPaperSize(e.target.value)}
@@ -600,7 +675,7 @@ export default function StudentReportModal({
               <div className="text-center my-3">
                 <h2 className="text-sm font-bold uppercase tracking-wide m-0">RAPOR SISIPAN TENGAH SEMESTER</h2>
                 <h3 className="text-sm font-bold uppercase tracking-wide m-0 mt-0.5">
-                  SEMESTER ${String(semester).toUpperCase()} TAHUN AJARAN {academicYear}
+                  SEMESTER {String(activeSemester).toUpperCase()} TAHUN AJARAN {activeAcademicYear}
                 </h3>
               </div>
 
@@ -713,8 +788,8 @@ export default function StudentReportModal({
                 </tbody>
               </table>
 
-              {/* Pengesahan Rapor: 3 Kolom Jika Disahkan Kepala Sekolah, atau 2 Kolom Standar */}
-              {isEndorsed ? (
+              {/* Pengesahan Rapor: 3 Kolom Jika Disahkan Kepala Sekolah / Admin, atau 2 Kolom Standar */}
+              {isThreeColumn ? (
                 <div className="grid grid-cols-3 gap-4 text-xs pt-3">
                   <div>
                     <p className="m-0">&nbsp;</p>
@@ -738,21 +813,21 @@ export default function StudentReportModal({
                   <div className="pl-2">
                     <p className="m-0 text-slate-700">Kabupaten Sidoarjo, {formattedReportDate}</p>
                     <p className="m-0 mt-0.5">Mengetahui,</p>
-                    <p className="m-0 font-semibold text-slate-900">Kepala SMPN 1 Prambon,</p>
+                    <p className="m-0 font-semibold text-slate-900">{signatoryTitle},</p>
                     <div className="h-12 flex items-center">
                       {endorsement?.signature_data ? (
                         <img
                           src={endorsement.signature_data}
-                          alt="TTD Kepala Sekolah"
+                          alt="TTD Pengesahan"
                           className="max-h-12 max-w-[120px] object-contain"
                         />
                       ) : (
                         <div className="text-[10px] text-emerald-700 italic">Disahkan Digital</div>
                       )}
                     </div>
-                    <p className="m-0 font-bold underline text-slate-900">{endorsement?.principal_name || 'Kepala Sekolah'}</p>
+                    <p className="m-0 font-bold underline text-slate-900">{signatoryName}</p>
                     <p className="m-0 mt-0.5 text-slate-600 font-mono text-[11px]">
-                      {endorsement?.principal_nip ? `NIP. ${endorsement.principal_nip}` : 'NIP. -'}
+                      {signatoryNip && signatoryNip !== '-' ? `NIP. ${signatoryNip}` : 'NIP. -'}
                     </p>
                   </div>
                 </div>

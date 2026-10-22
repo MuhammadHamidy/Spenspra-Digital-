@@ -301,6 +301,7 @@ func (u *useCase) CreateAccount(ctx context.Context, account *domain.Account) er
 		return err
 	}
 	account.PasswordHash = string(hashedPassword)
+	account.InitialPassword = rawPassword
 	account.Password = ""
 
 	err = u.repo.StoreAccount(ctx, account)
@@ -344,6 +345,7 @@ func (u *useCase) UpdateAccount(ctx context.Context, id string, account *domain.
 			return err
 		}
 		account.PasswordHash = string(hashedPassword)
+		account.InitialPassword = account.Password
 		account.Password = ""
 	}
 	return u.repo.UpdateAccount(ctx, account)
@@ -373,7 +375,7 @@ func (u *useCase) ResetPassword(ctx context.Context, id string, req domain.Reset
 		return nil, err
 	}
 
-	err = u.repo.ResetPassword(ctx, id, string(hashedPassword))
+	err = u.repo.ResetPassword(ctx, id, string(hashedPassword), newPassword)
 	if err != nil {
 		return nil, err
 	}
@@ -417,7 +419,7 @@ func (u *useCase) SendAccessEmail(ctx context.Context, id string, customPassword
 	if err != nil {
 		return err
 	}
-	_ = u.repo.ResetPassword(ctx, account.Id, string(hashedPassword))
+	_ = u.repo.ResetPassword(ctx, account.Id, string(hashedPassword), password)
 
 	return u.mailer.SendTeacherAccessEmail(
 		ctx,

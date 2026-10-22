@@ -234,9 +234,10 @@ func (u *useCase) ImportStudentsFromExcel(ctx context.Context, fileReader io.Rea
 				accountData := map[string]interface{}{
 					"id":            vr.ID,
 					"person_id":     vr.ID,
-					"username":      vr.Username,
-					"password_hash": string(hashedPwd),
-					"email":         fmt.Sprintf("%s@siswa.sekolah.sch.id", vr.NISN),
+					"username":         vr.Username,
+					"password_hash":    string(hashedPwd),
+					"initial_password": "password123",
+					"email":            fmt.Sprintf("%s@siswa.sekolah.sch.id", vr.NISN),
 					"full_name":     vr.FullName,
 					"role_id":       "role-siswa",
 					"nim_nip":       "NISN. " + vr.NISN,
@@ -709,6 +710,7 @@ func (u *useCase) ImportTeachersFromExcel(ctx context.Context, fileReader io.Rea
 				}
 				if vr.Password != "" {
 					updAccount["password_hash"] = string(hashedPwd) // Update password sesuai Excel
+					updAccount["initial_password"] = vr.Password
 				}
 				queryUpd := tx.Table("accounts").Where("id = ? OR person_id = ? OR username = ?", personID, personID, vr.Username)
 				if vr.NIP != "" {
@@ -717,18 +719,19 @@ func (u *useCase) ImportTeachersFromExcel(ctx context.Context, fileReader io.Rea
 				_ = queryUpd.Updates(updAccount).Error
 			} else {
 				accountData := map[string]interface{}{
-					"id":            personID,
-					"person_id":     personID,
-					"username":      vr.Username,
-					"password_hash": string(hashedPwd),
-					"email":         vr.AccountEmail,
-					"full_name":     vr.FullName,
-					"role_id":       "role-guru",
-					"nim_nip":       vr.NIP,
-					"phone":         vr.Phone,
-					"is_active":     true,
-					"created_at":    now,
-					"updated_at":    now,
+					"id":               personID,
+					"person_id":        personID,
+					"username":         vr.Username,
+					"password_hash":    string(hashedPwd),
+					"initial_password": vr.Password,
+					"email":            vr.AccountEmail,
+					"full_name":        vr.FullName,
+					"role_id":          "role-guru",
+					"nim_nip":          vr.NIP,
+					"phone":            vr.Phone,
+					"is_active":        true,
+					"created_at":       now,
+					"updated_at":       now,
 				}
 				if err := tx.Table("accounts").Create(accountData).Error; err != nil {
 					return fmt.Errorf("gagal insert akun guru %s (Username: %s): %w", vr.FullName, vr.Username, err)

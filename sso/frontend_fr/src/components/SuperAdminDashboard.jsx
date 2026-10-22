@@ -64,7 +64,10 @@ export default function SuperAdminDashboard() {
     };
     const encodedUser = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(userPayload)))) : '';
     const redirectParam = targetPath ? `&redirect=${encodeURIComponent(targetPath)}` : '';
-    return `${raporBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}${redirectParam}`;
+    const yearParam = academicPeriod?.year ? `&academic_year=${encodeURIComponent(academicPeriod.year)}` : '';
+    const semParam = academicPeriod?.semester ? `&academic_semester=${encodeURIComponent(academicPeriod.semester)}` : '';
+    const kkmParam = academicPeriod?.kkm ? `&school_kkm=${encodeURIComponent(academicPeriod.kkm)}` : '';
+    return `${raporBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}${yearParam}${semParam}${kkmParam}${redirectParam}`;
   };
 
   const getPerpusLaunchUrl = () => {
