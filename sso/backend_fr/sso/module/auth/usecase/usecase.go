@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"os"
@@ -243,10 +244,13 @@ func (u *useCase) Login(ctx context.Context, req domain.LoginRequest) (*domain.L
 
 	account.PasswordHash = ""
 
+	period, _ := u.GetAcademicPeriod(ctx)
+
 	return &domain.LoginResponse{
-		Token:     tokenString,
-		ExpiresAt: expiresAt.Format(time.RFC3339),
-		Account:   account,
+		Token:          tokenString,
+		ExpiresAt:      expiresAt.Format(time.RFC3339),
+		Account:        account,
+		AcademicPeriod: period,
 	}, nil
 }
 
@@ -470,4 +474,36 @@ func (u *useCase) UpdateProfile(ctx context.Context, id string, req domain.Updat
 		updated.PasswordHash = ""
 	}
 	return updated, nil
+}
+
+func (u *useCase) GetAcademicPeriod(ctx context.Context) (map[string]interface{}, error) {
+	val, err := u.repo.GetSetting(ctx, "academic_period")
+	if err != nil || strings.TrimSpace(val) == "" {
+		return map[string]interface{}{
+			"year":      "2026/2027",
+			"semester":  "GANJIL",
+			"kkm":       75,
+			"status":    "AKTIF",
+			"startDate": "2026-01-05",
+			"endDate":   "2026-06-20",
+		}, nil
+	}
+	var res map[string]interface{}
+	if err := json.Unmarshal([]byte(val), &res); err != nil {
+		return map[string]interface{}{
+			"year":     "2026/2027",
+			"semester": "GANJIL",
+			"kkm":      75,
+			"status":   "AKTIF",
+		}, nil
+	}
+	return res, nil
+}
+
+func (u *useCase) SetAcademicPeriod(ctx context.Context, period map[string]interface{}) error {
+	bytes, err := json.Marshal(period)
+	if err != nil {
+		return err
+	}
+	return u.repo.SetSetting(ctx, "academic_period", string(bytes))
 }

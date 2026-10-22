@@ -79,6 +79,27 @@ export default function SuperAdminDashboard() {
   };
 
   useEffect(() => {
+    // Muat periode akademik aktif dari backend server secara real-time
+    accountApiAdapter.getAcademicPeriod().then((serverPeriod) => {
+      if (serverPeriod?.year && serverPeriod?.semester) {
+        setAcademicPeriod(serverPeriod);
+        try {
+          localStorage.setItem('spenspra_academic_period', JSON.stringify(serverPeriod));
+          if (serverPeriod.kkm) localStorage.setItem('spenspra_school_kkm', String(serverPeriod.kkm));
+
+          const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+          const domainAttr = hostname.includes('spenspra.com') ? '; domain=.spenspra.com' : '';
+          document.cookie = `spenspra_academic_year=${encodeURIComponent(serverPeriod.year)}; path=/; max-age=31536000; SameSite=Lax${domainAttr}`;
+          document.cookie = `spenspra_academic_semester=${encodeURIComponent(serverPeriod.semester)}; path=/; max-age=31536000; SameSite=Lax${domainAttr}`;
+          document.cookie = `spenspra_school_kkm=${encodeURIComponent(serverPeriod.kkm || 75)}; path=/; max-age=31536000; SameSite=Lax${domainAttr}`;
+
+          document.cookie = `spenspra_academic_year=${encodeURIComponent(serverPeriod.year)}; path=/; max-age=31536000; SameSite=Lax`;
+          document.cookie = `spenspra_academic_semester=${encodeURIComponent(serverPeriod.semester)}; path=/; max-age=31536000; SameSite=Lax`;
+          document.cookie = `spenspra_school_kkm=${encodeURIComponent(serverPeriod.kkm || 75)}; path=/; max-age=31536000; SameSite=Lax`;
+        } catch (e) {}
+      }
+    }).catch(() => {});
+
     try {
       const storedPeriod = localStorage.getItem('spenspra_academic_period');
       const storedKkm = localStorage.getItem('spenspra_school_kkm');

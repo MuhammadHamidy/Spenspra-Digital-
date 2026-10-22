@@ -17,6 +17,7 @@ type Repository struct {
 
 func NewRepository(db *gorm.DB) domain.AuthRepository {
 	_ = db.Exec("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS initial_password VARCHAR(100);").Error
+	_ = db.Exec("CREATE TABLE IF NOT EXISTS school_settings (key VARCHAR(64) PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMP NOT NULL DEFAULT NOW());").Error
 	return &Repository{db: db}
 }
 
@@ -367,4 +368,22 @@ func (r *Repository) UpdateProfile(ctx context.Context, id string, req domain.Up
 	}
 
 	return r.FindAccountByID(ctx, id)
+}
+
+func (r *Repository) GetSetting(ctx context.Context, key string) (string, error) {
+	var val struct {
+		Value string `gorm:"column:value"`
+	}
+	err := r.db.WithContext(ctx).Table("school_settings").Select("value").Where("key = ?", key).First(&val).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", nil
+	}
+	return val.Value, err
+}
+
+func (r *Repository) SetSetting(ctx context.Context, key string, value string) error {
+	return r.db.WithContext(ctx).Exec(
+		"INSERT INTO school_settings (key, value, updated_at) VALUES (?, ?, NOW()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()",
+		key, value,
+	).Error
 }

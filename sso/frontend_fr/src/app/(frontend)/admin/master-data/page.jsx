@@ -252,6 +252,25 @@ function MasterDataContent() {
   }, [loadAll]);
 
   useEffect(() => {
+    // 1. Coba muat dari backend server terlebih dahulu
+    accountApiAdapter.getAcademicPeriod().then((serverPeriod) => {
+      if (serverPeriod?.year && serverPeriod?.semester) {
+        setAcademicPeriod((prev) => ({ ...prev, ...serverPeriod }));
+        setPeriodForm((prev) => ({ ...prev, ...serverPeriod }));
+        try {
+          localStorage.setItem('spenspra_academic_period', JSON.stringify(serverPeriod));
+          if (serverPeriod.kkm) localStorage.setItem('spenspra_school_kkm', String(serverPeriod.kkm));
+        } catch (e) {}
+        setPeriodHistory((prev) =>
+          prev.map((item) => ({
+            ...item,
+            status: item.year === serverPeriod.year && item.semester === serverPeriod.semester ? 'AKTIF' : 'ARSIP',
+          }))
+        );
+        return;
+      }
+    }).catch(() => {});
+
     try {
       let activeKkm = 75;
       const storedKkm = localStorage.getItem('spenspra_school_kkm');
@@ -289,7 +308,7 @@ function MasterDataContent() {
     setIsPeriodModalOpen(true);
   };
 
-  const handleSaveAcademicPeriod = (e) => {
+  const handleSaveAcademicPeriod = async (e) => {
     e.preventDefault();
     const cleanYear = periodForm.year?.trim() || '2025/2026';
     const cleanKkm = Number(periodForm.kkm) || 75;
@@ -303,15 +322,26 @@ function MasterDataContent() {
       status: 'AKTIF',
     };
     setAcademicPeriod(updated);
+
+    // Simpan ke database backend server SSO
+    try {
+      await accountApiAdapter.setAcademicPeriod(updated);
+    } catch (apiErr) {
+      console.warn('Gagal simpan ke server:', apiErr);
+    }
+
     try {
       localStorage.setItem('spenspra_academic_period', JSON.stringify(updated));
       localStorage.setItem('spenspra_school_kkm', String(cleanKkm));
-      const isProd = typeof window !== 'undefined' && window.location.hostname.includes('spenspra');
-      const domainPart = isProd ? '; domain=.spenspra.com' : '';
-      document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
-      document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
-      document.cookie = `spenspra_school_kkm=${encodeURIComponent(cleanKkm)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
 
+      const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+      const domainAttr = hostname.includes('spenspra.com') ? '; domain=.spenspra.com' : '';
+
+      document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/; max-age=31536000; SameSite=Lax${domainAttr}`;
+      document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/; max-age=31536000; SameSite=Lax${domainAttr}`;
+      document.cookie = `spenspra_school_kkm=${encodeURIComponent(cleanKkm)}; path=/; max-age=31536000; SameSite=Lax${domainAttr}`;
+
+      // Set juga host cookie lokal sebagai fallback
       document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/; max-age=31536000; SameSite=Lax`;
       document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/; max-age=31536000; SameSite=Lax`;
       document.cookie = `spenspra_school_kkm=${encodeURIComponent(cleanKkm)}; path=/; max-age=31536000; SameSite=Lax`;
@@ -347,7 +377,7 @@ function MasterDataContent() {
     );
   };
 
-  const handleQuickActivatePeriod = (p) => {
+  const handleQuickActivatePeriod = async (p) => {
     const activeKkm = academicPeriod.kkm || 75;
     const updated = {
       ...academicPeriod,
@@ -358,14 +388,24 @@ function MasterDataContent() {
     };
     setAcademicPeriod(updated);
     setPeriodForm((prev) => ({ ...prev, year: p.year, semester: p.semester, kkm: activeKkm }));
+
+    // Simpan ke database backend server SSO
+    try {
+      await accountApiAdapter.setAcademicPeriod(updated);
+    } catch (apiErr) {
+      console.warn('Gagal simpan ke server:', apiErr);
+    }
+
     try {
       localStorage.setItem('spenspra_academic_period', JSON.stringify(updated));
       localStorage.setItem('spenspra_school_kkm', String(activeKkm));
-      const isProd = typeof window !== 'undefined' && window.location.hostname.includes('spenspra');
-      const domainPart = isProd ? '; domain=.spenspra.com' : '';
-      document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
-      document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
-      document.cookie = `spenspra_school_kkm=${encodeURIComponent(activeKkm)}; path=/${domainPart}; max-age=31536000; SameSite=Lax`;
+
+      const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+      const domainAttr = hostname.includes('spenspra.com') ? '; domain=.spenspra.com' : '';
+
+      document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/; max-age=31536000; SameSite=Lax${domainAttr}`;
+      document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/; max-age=31536000; SameSite=Lax${domainAttr}`;
+      document.cookie = `spenspra_school_kkm=${encodeURIComponent(activeKkm)}; path=/; max-age=31536000; SameSite=Lax${domainAttr}`;
 
       document.cookie = `spenspra_academic_year=${encodeURIComponent(updated.year)}; path=/; max-age=31536000; SameSite=Lax`;
       document.cookie = `spenspra_academic_semester=${encodeURIComponent(updated.semester)}; path=/; max-age=31536000; SameSite=Lax`;

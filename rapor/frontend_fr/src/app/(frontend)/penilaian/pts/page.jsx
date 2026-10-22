@@ -733,9 +733,12 @@ export default function PenilaianPTSPage() {
             onChange={(e) => setAcademicYear(e.target.value)}
             className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-600"
           >
-            <option value="2024/2025">2024/2025 (Arsip)</option>
-            <option value="2025/2026">2025/2026 (Aktif)</option>
-            <option value="2026/2027">2026/2027</option>
+            <option value="2024/2025">{`2024/2025 ${academicYear === '2024/2025' ? '(Aktif)' : '(Arsip)'}`}</option>
+            <option value="2025/2026">{`2025/2026 ${academicYear === '2025/2026' ? '(Aktif)' : ''}`}</option>
+            <option value="2026/2027">{`2026/2027 ${academicYear === '2026/2027' ? '(Aktif)' : ''}`}</option>
+            {academicYear && !['2024/2025', '2025/2026', '2026/2027'].includes(academicYear) && (
+              <option value={academicYear}>{`${academicYear} (Aktif)`}</option>
+            )}
           </select>
         </label>
         <label className="text-xs font-semibold text-slate-700">

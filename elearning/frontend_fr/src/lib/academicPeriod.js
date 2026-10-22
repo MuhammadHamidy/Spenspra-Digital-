@@ -44,8 +44,8 @@ export function getSchoolAcademicPeriod() {
   }
 
   return {
-    year: year || '2025/2026',
-    semester: (semester || 'GENAP').toUpperCase(),
+    year: year || '2026/2027',
+    semester: (semester || 'GANJIL').toUpperCase(),
     kkm: kkm || 75,
   };
 }

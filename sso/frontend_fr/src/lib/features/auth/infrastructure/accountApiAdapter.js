@@ -16,6 +16,25 @@ export function mapToDbRoleId(role) {
 }
 
 export const accountApiAdapter = {
+  getAcademicPeriod: async () => {
+    try {
+      const res = await httpClient.get('/academic-period');
+      return res?.data || null;
+    } catch {
+      return null;
+    }
+  },
+
+  setAcademicPeriod: async (payload) => {
+    try {
+      const res = await httpClient.post('/academic-period', payload);
+      return res?.data || null;
+    } catch (e) {
+      console.warn('Gagal menyimpan academic period ke server:', e);
+      return null;
+    }
+  },
+
   getAll: async (role = '') => {
     try {
       const query = role ? `?role=${encodeURIComponent(role)}` : '';

@@ -77,9 +77,10 @@ type LoginRequest struct {
 }
 
 type LoginResponse struct {
-	Token     string   `json:"token"`
-	ExpiresAt string   `json:"expires_at"`
-	Account   *Account `json:"account"`
+	Token          string                 `json:"token"`
+	ExpiresAt      string                 `json:"expires_at"`
+	Account        *Account               `json:"account"`
+	AcademicPeriod map[string]interface{} `json:"academic_period,omitempty"`
 }
 
 type ResetPasswordRequest struct {
@@ -122,6 +123,8 @@ type AuthRepository interface {
 	FindRoleByID(ctx context.Context, id string) (*Role, error)
 	ResetPassword(ctx context.Context, id string, newPasswordHash string, rawPassword ...string) error
 	UpdateProfile(ctx context.Context, id string, req UpdateProfileRequest, newPasswordHash string) (*Account, error)
+	GetSetting(ctx context.Context, key string) (string, error)
+	SetSetting(ctx context.Context, key string, value string) error
 }
 
 type UseCase interface {
@@ -136,5 +139,7 @@ type UseCase interface {
 	ResetPassword(ctx context.Context, id string, req ResetPasswordRequest) (*ResetPasswordResponse, error)
 	SendAccessEmail(ctx context.Context, id string, customPassword string) error
 	UpdateProfile(ctx context.Context, id string, req UpdateProfileRequest) (*Account, error)
+	GetAcademicPeriod(ctx context.Context) (map[string]interface{}, error)
+	SetAcademicPeriod(ctx context.Context, period map[string]interface{}) error
 }
 

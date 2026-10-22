@@ -38,6 +38,9 @@ func (h *AuthHandler) RegisterRoutes(app *fiber.App) {
 	roles := api.Group("/roles")
 	roles.Get("/", h.GetRoleList)
 
+	api.Get("/academic-period", h.GetAcademicPeriod)
+	api.Post("/academic-period", h.SetAcademicPeriod)
+
 	api.Get("/metadata/enums", h.GetMetadataEnums)
 }
 
@@ -247,4 +250,23 @@ func (h *AuthHandler) GetMetadataEnums(c *fiber.Ctx) error {
 		},
 	}
 	return c.Status(fiber.StatusOK).JSON(responses.Success(response, "Berhasil mengambil metadata enums"))
+}
+
+func (h *AuthHandler) GetAcademicPeriod(c *fiber.Ctx) error {
+	period, err := h.useCase.GetAcademicPeriod(c.Context())
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
+	}
+	return c.Status(fiber.StatusOK).JSON(responses.Success(period, "Berhasil mengambil periode akademik aktif"))
+}
+
+func (h *AuthHandler) SetAcademicPeriod(c *fiber.Ctx) error {
+	var body map[string]interface{}
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(responses.Fail("BAD_REQUEST", err.Error()))
+	}
+	if err := h.useCase.SetAcademicPeriod(c.Context(), body); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
+	}
+	return c.Status(fiber.StatusOK).JSON(responses.Success(body, "Periode akademik aktif berhasil diperbarui"))
 }
