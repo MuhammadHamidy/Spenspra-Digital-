@@ -1146,7 +1146,7 @@ export default function TeacherExamsManagementPage() {
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-neutral-800">Mata Pelajaran (Diampu)</label>
-                {userCourses.length > 0 && (
+                {(user?.courseNames?.length > 0 || user?.courses?.length > 0) && (
                   <span className="text-[10px] text-primary-700 font-bold bg-primary-50 px-1.5 py-0.5 rounded">
                     Sesuai SSO Guru
                   </span>
@@ -1156,12 +1156,12 @@ export default function TeacherExamsManagementPage() {
                 value={subject}
                 onChange={(e) => {
                   setSubject(e.target.value);
-                  const matched = availableSubjects.find((s) => s.name === e.target.value);
+                  const matched = subjects.find((s) => s.name === e.target.value);
                   setSubjectCode(matched?.code || 'MAPEL');
                 }}
                 className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium"
               >
-                {availableSubjects.map((s) => (
+                {subjects.map((s) => (
                   <option key={s.id || s.code} value={s.name}>
                     {s.name} ({s.code})
                   </option>
