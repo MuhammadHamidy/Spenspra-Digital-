@@ -114,8 +114,6 @@ function AdminMonitoringContent() {
     }
   };
 
-  const [deleteConfirmConfig, setDeleteConfirmConfig] = useState(null);
-
   const handleDeleteTeacherGrades = (teacher) => {
     setDeleteConfirmConfig({
       title: 'Hapus Progres Nilai',
