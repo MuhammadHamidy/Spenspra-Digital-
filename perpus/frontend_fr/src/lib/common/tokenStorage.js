@@ -1,5 +1,6 @@
 const TOKEN_KEY = 'perpusdig_auth_token';
 const USER_KEY = 'perpusdig_auth_user';
+const INSTITUTION_KEY = 'perpusdig_institution_id';
 const SESSION_ACTIVE_KEY = 'spenspra_session_active';
 const LAST_ACTIVITY_KEY = 'spenspra_last_activity';
 
@@ -220,22 +221,45 @@ export const tokenStorage = {
     }
   },
 
+  getInstitutionId: () => {
+    if (typeof window === 'undefined') return 'smpn1prambon';
+    try {
+      return sessionStorage.getItem(INSTITUTION_KEY) || localStorage.getItem(INSTITUTION_KEY) || getCookie(INSTITUTION_KEY) || 'smpn1prambon';
+    } catch {
+      return 'smpn1prambon';
+    }
+  },
+
+  setInstitutionId: (institutionId) => {
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(INSTITUTION_KEY, institutionId);
+        localStorage.setItem(INSTITUTION_KEY, institutionId);
+      } catch (e) {}
+      setSessionCookie(INSTITUTION_KEY, institutionId);
+    }
+  },
+
   clear: () => {
     if (typeof window !== 'undefined') {
       try {
         sessionStorage.removeItem(TOKEN_KEY);
         sessionStorage.removeItem(USER_KEY);
+        sessionStorage.removeItem(INSTITUTION_KEY);
         sessionStorage.removeItem(SESSION_ACTIVE_KEY);
         sessionStorage.removeItem(LAST_ACTIVITY_KEY);
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(USER_KEY);
+        localStorage.removeItem(INSTITUTION_KEY);
         localStorage.removeItem(SESSION_ACTIVE_KEY);
         localStorage.removeItem(LAST_ACTIVITY_KEY);
       } catch (e) {}
       removeCookie(TOKEN_KEY);
       removeCookie(USER_KEY);
+      removeCookie(INSTITUTION_KEY);
       removeCookie('perpusdig_auth_token');
       removeCookie('perpusdig_auth_user');
+      removeCookie('perpusdig_institution_id');
       removeCookie('rapor_institution_id');
     }
   },

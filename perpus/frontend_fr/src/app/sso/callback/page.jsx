@@ -10,56 +10,82 @@ function SSOCallbackContent() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const accessToken = searchParams.get('access_token');
-    const institutionId = searchParams.get('institution_id');
-    const encodedUser = searchParams.get('user');
+    try {
+      const accessToken = searchParams.get('access_token');
+      const institutionId = searchParams.get('institution_id') || 'smpn1prambon';
+      const encodedUser = searchParams.get('user');
 
-    if (!accessToken || !institutionId) {
-      setError('Callback SSO tidak lengkap. Token dan institution_id wajib dikirim.');
-      return;
-    }
+      if (!accessToken) {
+        setError('Callback SSO tidak lengkap. Token autentikasi wajib dikirim.');
+        return;
+      }
 
-    let user = { id: searchParams.get('sub') || '', roleName: 'SISWA' };
-    if (encodedUser) {
-      try {
-        const decoded = decodeURIComponent(escape(atob(encodedUser)));
-        user = { ...user, ...JSON.parse(decoded) };
-      } catch {
+      let user = { id: searchParams.get('sub') || '', roleName: 'SISWA' };
+      if (encodedUser) {
         try {
-          user = { ...user, ...JSON.parse(atob(encodedUser)) };
+          const normalized = encodedUser.replace(/ /g, '+');
+          const decoded = decodeURIComponent(escape(atob(normalized)));
+          user = { ...user, ...JSON.parse(decoded) };
         } catch {
-          setError('Data pengguna dari SSO tidak valid.');
-          return;
+          try {
+            const normalized = encodedUser.replace(/ /g, '+');
+            user = { ...user, ...JSON.parse(atob(normalized)) };
+          } catch (e) {
+            console.warn('Gagal membaca data pengguna dari SSO callback:', e);
+          }
         }
       }
-    }
 
-    // Pastikan field nama, peran, dan kelas_atau_jabatan tersedia untuk beranda perpustakaan
-    if (!user.nama) user.nama = user.fullName || user.full_name || user.username || 'Siswa Spenspra';
-    if (!user.peran) user.peran = user.roleName || 'SISWA';
-    if (!user.kelas_atau_jabatan) user.kelas_atau_jabatan = user.className || user.kelas || 'Peserta Didik';
+      // Pastikan field nama, peran, dan kelas_atau_jabatan tersedia untuk beranda perpustakaan
+      if (!user.nama) user.nama = user.fullName || user.full_name || user.username || 'Pengguna Spenspra';
+      if (!user.peran) user.peran = user.roleName || 'SISWA';
+      if (!user.kelas_atau_jabatan) user.kelas_atau_jabatan = user.className || user.kelas || 'Peserta Didik';
 
-    tokenStorage.setToken(accessToken);
-    tokenStorage.setInstitutionId(institutionId);
-    tokenStorage.setUser(user);
+      try {
+        if (tokenStorage && typeof tokenStorage.setToken === 'function') {
+          tokenStorage.setToken(accessToken);
+        }
+        if (tokenStorage && typeof tokenStorage.setInstitutionId === 'function') {
+          tokenStorage.setInstitutionId(institutionId);
+        }
+        if (tokenStorage && typeof tokenStorage.setUser === 'function') {
+          tokenStorage.setUser(user);
+        }
+      } catch (err) {
+        console.warn('Gagal memanggil tokenStorage helper:', err);
+      }
 
-    let destination = searchParams.get('redirect');
-    const roleUpper = (user.roleName || user.peran || user.role || '').toUpperCase();
-    
-    if (!destination) {
-      if (roleUpper === 'ADMIN_PERPUS' || roleUpper === 'PUSTAKAWAN' || roleUpper === 'SUPER_ADMIN') {
-        destination = '/pustakawan';
-      } else {
+      // Fallback cadangan langsung ke storage browser
+      try {
+        localStorage.setItem('perpusdig_auth_token', accessToken);
+        sessionStorage.setItem('perpusdig_auth_token', accessToken);
+        localStorage.setItem('access_token', accessToken);
+        sessionStorage.setItem('access_token', accessToken);
+        localStorage.setItem('perpusdig_auth_user', JSON.stringify(user));
+        sessionStorage.setItem('perpusdig_auth_user', JSON.stringify(user));
+      } catch (e) {}
+
+      let destination = searchParams.get('redirect');
+      const roleUpper = (user.roleName || user.peran || user.role || '').toUpperCase();
+      
+      if (!destination || destination === '/sso/callback') {
+        if (roleUpper === 'ADMIN_PERPUS' || roleUpper === 'PUSTAKAWAN' || roleUpper === 'SUPER_ADMIN') {
+          destination = '/pustakawan';
+        } else {
+          destination = '/';
+        }
+      }
+
+      // Siswa TIDAK boleh diarahkan ke dashboard admin pustakawan
+      if (roleUpper === 'SISWA' && destination.startsWith('/pustakawan')) {
         destination = '/';
       }
-    }
 
-    // Siswa TIDAK boleh diarahkan ke dashboard admin pustakawan
-    if (roleUpper === 'SISWA' && destination.startsWith('/pustakawan')) {
-      destination = '/';
+      window.location.href = destination;
+    } catch (err) {
+      console.error('Error saat memproses SSO callback:', err);
+      setError('Terjadi kendala saat menyelesaikan login: ' + (err?.message || 'Gagal autentikasi'));
     }
-
-    router.replace(destination);
   }, [router, searchParams]);
 
   if (error) {

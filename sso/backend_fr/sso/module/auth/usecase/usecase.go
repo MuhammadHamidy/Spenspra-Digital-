@@ -210,9 +210,9 @@ func (u *useCase) Login(ctx context.Context, req domain.LoginRequest) (*domain.L
 	case "SISWA":
 		aud = []string{"sso", "erapor", "perpus", "elearning"}
 	case "ADMIN_RAPOR", "ADMIN_ABSENSI", "GURU", "WALI_KELAS":
-		aud = []string{"sso", "erapor", "elearning"}
+		aud = []string{"sso", "erapor", "perpus", "elearning"}
 	default:
-		aud = []string{"sso", "erapor", "elearning"}
+		aud = []string{"sso", "erapor", "perpus", "elearning"}
 	}
 
 	expiresAt := time.Now().Add(7 * 24 * time.Hour)
