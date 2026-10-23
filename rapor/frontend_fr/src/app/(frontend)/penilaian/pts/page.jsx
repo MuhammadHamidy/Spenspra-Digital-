@@ -486,18 +486,30 @@ export default function PenilaianPTSPage() {
 
   const applyTemplateToAllStudents = () => {
     if (isLocked || isKepalaSekolah) return;
-    setRows((current) => {
-      const updated = current.map((row) => {
-        const predicate = getPredicate(row.score);
-        return {
-          ...row,
-          description: formatDescription(predicate),
-        };
-      });
-      saveDraftLocally(updated);
-      return updated;
+
+    // Simpan materi pokok / TP ke cache browser
+    if (className && subject) {
+      try {
+        localStorage.setItem(getTopicStorageKey(className, subject, academicYear, semester), quickTopic);
+      } catch {}
+    }
+
+    const updated = rows.map((row) => {
+      const predicate = getPredicate(row.score);
+      return {
+        ...row,
+        description: formatDescription(predicate),
+      };
     });
+    setRows(updated);
+    saveDraftLocally(updated);
     setSaved(false);
+
+    const filled = updated.filter((r) => r.score !== '' && r.score !== null).length;
+    alert(
+      `Deskripsi berhasil disimpan untuk ${filled} siswa kelas ${className}.\n\n` +
+      'Klik tombol "Simpan Nilai USTS" agar nilai & deskripsi tersimpan ke database e-Rapor.'
+    );
   };
 
   const handleToggleLock = async (targetLockState, reason = '') => {
@@ -1083,19 +1095,20 @@ export default function PenilaianPTSPage() {
           {/* Bottom Action Bar: Button Pindah ke Bawah */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-blue-200">
             <span className="text-[11px] text-slate-500 font-medium">
-              💡 Deskripsi di atas akan otomatis digunakan untuk siswa baru yang nilainya diinput. Klik tombol di kanan jika ingin menyelaraskan ulang seluruh siswa kelas {className}.
+              💡 Deskripsi di atas otomatis digunakan saat nilai siswa diinput. Klik &quot;Simpan Deskripsi&quot; untuk menyimpan deskripsi ke seluruh siswa kelas {className}.
             </span>
             <button
+              id="btn-simpan-deskripsi"
               type="button"
               disabled={isLocked || isKepalaSekolah}
               onClick={applyTemplateToAllStudents}
               className="px-4 py-2 rounded-xl bg-[#193D9B] hover:bg-[#153280] disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-2"
-              title="Terapkan template deskripsi ini ke seluruh siswa kelas"
+              title="Simpan deskripsi ke seluruh siswa kelas"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
               </svg>
-              <span>🔄 Terapkan ke Semua Siswa Kelas {className}</span>
+              <span>Simpan Deskripsi</span>
             </button>
           </div>
         </section>

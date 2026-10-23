@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { gradeApi } from '@/lib/gradeApi';
 import { attendanceApi } from '@/lib/attendanceApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
@@ -133,11 +133,16 @@ export default function PenilaianUASPage() {
     fetchMasterData();
   }, []);
 
+  const predicateTemplatesRef = useRef(predicateTemplates);
+  useEffect(() => {
+    predicateTemplatesRef.current = predicateTemplates;
+  }, [predicateTemplates]);
+
   const formatDescription = useCallback((predicate) => {
     if (!predicate || predicate === '-') return '';
-    const template = predicateTemplates[predicate] || INITIAL_PREDICATE_DESCRIPTIONS[predicate] || '';
+    const template = predicateTemplatesRef.current[predicate] || INITIAL_PREDICATE_DESCRIPTIONS[predicate] || '';
     return template.replace(/^[A-D]:\s*/i, '').trim();
-  }, [predicateTemplates]);
+  }, []);
 
   const loadStudentsAndGrades = useCallback(async () => {
     setSaved(false);
@@ -218,16 +223,20 @@ export default function PenilaianUASPage() {
   };
 
   const applyTemplateToAllStudents = () => {
-    setRows((current) =>
-      current.map((row) => {
-        const predicate = getPredicate(row.score);
-        return {
-          ...row,
-          description: formatDescription(predicate),
-        };
-      })
-    );
+    const updated = rows.map((row) => {
+      const predicate = getPredicate(row.score);
+      return {
+        ...row,
+        description: formatDescription(predicate),
+      };
+    });
+    setRows(updated);
     setSaved(false);
+    const filled = updated.filter((r) => r.score !== '' && r.score !== null).length;
+    alert(
+      `Deskripsi berhasil disimpan untuk ${filled} siswa kelas ${className}.\n\n` +
+      'Klik tombol "Simpan Nilai" agar nilai & deskripsi tersimpan ke database e-Rapor.'
+    );
   };
 
   const handleSaveGrades = async () => {
@@ -472,11 +481,12 @@ export default function PenilaianUASPage() {
           </div>
           <div className="flex justify-end pt-2 border-t border-blue-200">
             <button
+              id="btn-simpan-deskripsi-uas"
               type="button"
               onClick={applyTemplateToAllStudents}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
             >
-              <span>🔄 Terapkan ke Semua Siswa Kelas {className}</span>
+              <span>Simpan Deskripsi</span>
             </button>
           </div>
         </div>
