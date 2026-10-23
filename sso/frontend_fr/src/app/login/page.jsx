@@ -19,10 +19,13 @@ function LoginForm() {
   const reason = searchParams.get('reason');
   const [showPassword, setShowPassword] = useState(false);
 
-  // Ambil target redirect dari query string lalu bersihkan URL bar agar tetap bersih (/login)
+  // Ambil target redirect dari query string lalu simpan agar tidak hilang
   React.useEffect(() => {
-    const raw = searchParams.get('redirect_uri') || searchParams.get('app');
+    const raw = searchParams.get('redirect_uri') || searchParams.get('app') || searchParams.get('redirect');
     if (raw) {
+      try {
+        sessionStorage.setItem('sso_login_redirect_target', raw);
+      } catch {}
       if (raw.toLowerCase() === 'erapor' || raw.toLowerCase() === 'rapor') {
         setRedirectTarget(getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor'));
       } else if (raw.toLowerCase() === 'perpus' || raw.toLowerCase() === 'perpusdig') {
@@ -34,6 +37,19 @@ function LoginForm() {
       if (typeof window !== 'undefined' && window.history?.replaceState) {
         window.history.replaceState({}, document.title, window.location.pathname);
       }
+    } else {
+      try {
+        const stored = sessionStorage.getItem('sso_login_redirect_target');
+        if (stored) {
+          if (stored.toLowerCase() === 'erapor' || stored.toLowerCase() === 'rapor') {
+            setRedirectTarget(getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor'));
+          } else if (stored.toLowerCase() === 'perpus' || stored.toLowerCase() === 'perpusdig') {
+            setRedirectTarget(getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus'));
+          } else {
+            setRedirectTarget(stored);
+          }
+        }
+      } catch {}
     }
   }, [searchParams]);
 
@@ -48,22 +64,72 @@ function LoginForm() {
       const user = res?.user || {};
       const roleName = (user.roleName || user.role || user.role_name || '').toUpperCase();
 
-      // Super Admin adalah pengelola portal SSO: selalu masuk ke panel /superadmin,
-      // abaikan redirect_uri dari aplikasi satelit (e-Rapor / Perpus).
-      if (roleName === 'SUPER_ADMIN' || roleName === 'SUPER-ADMIN') {
-        window.location.href = '/superadmin';
+      let targetUrl = redirectTarget || searchParams.get('redirect_uri') || searchParams.get('app');
+      if (!targetUrl) {
+        try {
+          targetUrl = sessionStorage.getItem('sso_login_redirect_target');
+        } catch {}
+      }
+      try {
+        sessionStorage.removeItem('sso_login_redirect_target');
+      } catch {}
+
+      const userPayload = {
+        id: user?.id || user?.person_id || '',
+        username: user?.username || '',
+        fullName: user?.fullName || user?.full_name || user?.name || '',
+        roleName: roleName,
+        peran: roleName,
+        className: user?.className || user?.kelas || '',
+        nimNip: user?.nimNip || user?.nip || user?.nisn || '',
+      };
+      const encodedUser = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(userPayload)))) : '';
+      const token = res?.token || '';
+
+      // 1. Jika ada target redirect ke PERPUSTAKAAN (misal klik Masuk SSO dari perpus):
+      // Kembalikan langsung ke halaman perpus dengan sesi aktif, jangan diarahkan ke menu dashboard SSO!
+      if (targetUrl && (targetUrl.toLowerCase().includes('perpus') || targetUrl.toLowerCase() === 'perpusdig')) {
+        const perpusBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus');
+        let destinationPath = '/';
+        try {
+          if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+            const parsed = new URL(targetUrl);
+            destinationPath = parsed.pathname + parsed.search;
+          } else if (targetUrl.startsWith('/')) {
+            destinationPath = targetUrl;
+          }
+        } catch {}
+
+        if ((roleName === 'ADMIN_PERPUS' || roleName === 'PUSTAKAWAN') && (destinationPath === '/' || destinationPath === '')) {
+          destinationPath = '/pustakawan';
+        }
+
+        window.location.href = `${perpusBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent(destinationPath)}`;
         return;
       }
 
-      // Siswa selalu masuk ke portal /dashboard (Layanan Siswa Terpadu) untuk memilih menu
-      // (Spenspra Belajar, e-Rapor, atau e-Perpustakaan). Abaikan redirect_uri otomatis dari satelit.
-      if (roleName === 'SISWA' || roleName === 'ROLE-SISWA' || roleName === 'MAHASISWA') {
-        window.location.href = '/dashboard';
+      // 2. Jika ada target redirect ke E-RAPOR:
+      if (targetUrl && (targetUrl.toLowerCase().includes('rapor') || targetUrl.toLowerCase() === 'erapor')) {
+        const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
+        let destinationPath = '/';
+        try {
+          if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+            const parsed = new URL(targetUrl);
+            destinationPath = parsed.pathname + parsed.search;
+          } else if (targetUrl.startsWith('/')) {
+            destinationPath = targetUrl;
+          }
+        } catch {}
+
+        if ((roleName === 'ADMIN_RAPOR' || roleName === 'ADMIN-RAPOR') && (destinationPath === '/' || destinationPath === '')) {
+          destinationPath = '/admin/teachers';
+        }
+
+        window.location.href = `${raporBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent(destinationPath)}`;
         return;
       }
 
-      // Validasi ketat redirect_uri jika ada
-      const targetUrl = redirectTarget || searchParams.get('redirect_uri');
+      // 3. Jika ada target redirect lainnya yang valid:
       if (targetUrl) {
         try {
           const parsed = new URL(targetUrl, window.location.origin);
@@ -85,26 +151,26 @@ function LoginForm() {
         }
       }
 
-      // Default redirect berdasarkan role user
+      // 4. Default: Jika login langsung di SSO tanpa redirect_uri dari aplikasi satelit
+      if (roleName === 'SUPER_ADMIN' || roleName === 'SUPER-ADMIN') {
+        window.location.href = '/superadmin';
+        return;
+      }
+
+      if (roleName === 'SISWA' || roleName === 'ROLE-SISWA' || roleName === 'MAHASISWA') {
+        window.location.href = '/dashboard';
+        return;
+      }
 
       if (roleName === 'ADMIN_RAPOR' || roleName === 'ADMIN-RAPOR') {
         const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
-        const userPayload = {
-          id: user?.id || user?.person_id || 'user-admin-rapor',
-          username: user?.username || '',
-          fullName: user?.fullName || user?.full_name || 'Administrator e-Rapor',
-          roleName: 'ADMIN_RAPOR',
-          nimNip: user?.nimNip || user?.nip || user?.nisn || 'ADMIN-RAPOR-001',
-        };
-        const encodedUser = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(userPayload)))) : '';
-        const token = res.token || '';
         window.location.href = `${raporBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent('/admin/teachers')}`;
         return;
       }
 
       if (roleName === 'ADMIN_PERPUS' || roleName === 'ADMIN-PERPUS' || roleName === 'PUSTAKAWAN') {
         const perpusBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus');
-        window.location.href = `${perpusBaseUrl}/pustakawan`;
+        window.location.href = `${perpusBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent('/pustakawan')}`;
         return;
       }
 
