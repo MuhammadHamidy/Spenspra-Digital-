@@ -3,6 +3,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { gradeApi } from '@/lib/gradeApi';
+import { attendanceApi } from '@/lib/attendanceApi';
+import { accountApiAdapter } from '@/lib/features/accounts/infrastructure/accountApiAdapter';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 import { deadlineApiAdapter } from '@/lib/features/deadlines/infrastructure/deadlineApiAdapter';
 
@@ -19,6 +21,12 @@ export default function MainPage() {
   const [deadlines, setDeadlines] = useState([]);
   const [endorsements, setEndorsements] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Data Scope Guru Pengampu & Wali Kelas
+  const [teacherClassCodes, setTeacherClassCodes] = useState([]);
+  const [teacherSubjectCodes, setTeacherSubjectCodes] = useState([]);
+  const [walasClass, setWalasClass] = useState(null);
+  const [teacherGrades, setTeacherGrades] = useState([]);
 
   // Data Murni dari Backend API
   const [serverSummary, setServerSummary] = useState(null);
@@ -38,11 +46,25 @@ export default function MainPage() {
     const loadDashboardData = async () => {
       setIsLoading(true);
       try {
-        const [sumRes, dlRes, endRes] = await Promise.all([
+        const currentUser = tokenStorage.getUser();
+        setUser(currentUser);
+        const roleStr = String(currentUser?.roleName || currentUser?.role || '').toUpperCase();
+        const isPrivileged = roleStr.includes('ADMIN') || roleStr.includes('KEPALA');
+        const isTeacher = !isPrivileged;
+
+        const promises = [
           gradeApi.getMonitoringSummary(schoolKkm).catch(() => null),
           deadlineApiAdapter.getDeadlines().catch(() => []),
           gradeApi.getEndorsements({ academicYear, semester }).catch(() => ({ data: [] })),
-        ]);
+        ];
+
+        if (isTeacher) {
+          promises.push(attendanceApi.getClasses().catch(() => ({ data: [] })));
+          promises.push(accountApiAdapter.getTeachers().catch(() => []));
+          promises.push(gradeApi.getGrades({ academicYear, semester }).catch(() => ({ data: [] })));
+        }
+
+        const [sumRes, dlRes, endRes, clsRes, teachersRes, allGradesRes] = await Promise.all(promises);
 
         if (sumRes?.success && sumRes?.data) {
           setServerSummary(sumRes.data);
@@ -61,6 +83,60 @@ export default function MainPage() {
         } else {
           setEndorsements([]);
         }
+
+        if (isTeacher && clsRes?.success && Array.isArray(clsRes.data)) {
+          const myName = (currentUser.fullName || currentUser.full_name || '').toLowerCase();
+          const filtered = clsRes.data.filter((c) =>
+            c.dosen_id === currentUser.id ||
+            c.teacher_id === currentUser.id ||
+            (myName && c.teacher_name && c.teacher_name.toLowerCase().includes(myName)) ||
+            (currentUser.nimNip && (c.dosen_id?.includes(currentUser.nimNip) || c.teacher_nip?.includes(currentUser.nimNip)))
+          );
+
+          const tClasses = new Set(filtered.map((c) => (c.class_code || c.name || '').replace(/^Kelas\s*/i, '').trim()).filter(Boolean));
+          const tSubjects = new Set(filtered.map((c) => (c.course_code || c.course_id || '').toLowerCase().trim()).filter(Boolean));
+
+          let myWalas = currentUser.className || currentUser.class_name;
+          if (Array.isArray(teachersRes)) {
+            const me = teachersRes.find(
+              (t) =>
+                t.id === currentUser.id ||
+                (currentUser.nimNip && t.nim_nip === currentUser.nimNip) ||
+                (t.full_name && currentUser.fullName && t.full_name.toLowerCase() === currentUser.fullName.toLowerCase())
+            );
+            if (me?.class_name) {
+              myWalas = me.class_name;
+            }
+          }
+
+          if (myWalas) {
+            const cleanWalas = myWalas.replace(/^Kelas\s*/i, '').trim();
+            tClasses.add(cleanWalas);
+            setWalasClass(cleanWalas);
+          } else {
+            setWalasClass(null);
+          }
+
+          const classArray = [...tClasses];
+          const subjectArray = [...tSubjects];
+          setTeacherClassCodes(classArray);
+          setTeacherSubjectCodes(subjectArray);
+
+          if (allGradesRes?.success && Array.isArray(allGradesRes.data)) {
+            const relevantGrades = allGradesRes.data.filter((g) => {
+              const gClass = (g.class_name || '').replace(/^Kelas\s*/i, '').trim();
+              const gSub = (g.subject_code || '').toLowerCase().trim();
+              return (
+                classArray.includes(gClass) ||
+                subjectArray.includes(gSub) ||
+                g.teacher_id === currentUser.id
+              );
+            });
+            setTeacherGrades(relevantGrades);
+          } else {
+            setTeacherGrades([]);
+          }
+        }
       } catch (err) {
         console.warn('Gagal memuat data analitik dashboard:', err);
         setServerSummary(null);
@@ -75,13 +151,21 @@ export default function MainPage() {
   const role = String(user?.roleName || user?.role || '').toUpperCase();
   const isAdmin = role.includes('ADMIN') || role === 'SUPER_ADMIN';
   const isKepalaSekolah = role.includes('KEPALA');
+  const isTeacher = !isAdmin && !isKepalaSekolah;
 
   // ──────────────────────────────────────────────────────────
-  // Perhitungan Data Murni (Clean Code, Tanpa Mock Data)
+  // Perhitungan Data Murni (Scoped untuk Guru & Wali Kelas)
   // ──────────────────────────────────────────────────────────
   const rawClasses = useMemo(() => {
     if (!serverSummary?.classes || !Array.isArray(serverSummary.classes)) return [];
-    return serverSummary.classes.map((c) => {
+    let classesList = serverSummary.classes;
+    if (isTeacher && teacherClassCodes.length > 0) {
+      classesList = classesList.filter((c) => {
+        const cName = (c.class_name || '').replace(/^Kelas\s*/i, '').trim();
+        return teacherClassCodes.includes(cName);
+      });
+    }
+    return classesList.map((c) => {
       const graded = Number(c.graded_count) || 0;
       const belowKkm = Number(c.below_kkm) || 0;
       const passed = Math.max(0, graded - belowKkm);
@@ -97,7 +181,7 @@ export default function MainPage() {
         avg,
       };
     });
-  }, [serverSummary]);
+  }, [serverSummary, isTeacher, teacherClassCodes]);
 
   const filteredClasses = useMemo(() => {
     if (levelFilter === 'ALL') return rawClasses;
@@ -106,7 +190,16 @@ export default function MainPage() {
 
   const rawSubjects = useMemo(() => {
     if (!serverSummary?.subjects || !Array.isArray(serverSummary.subjects)) return [];
-    return [...serverSummary.subjects]
+    let subjectsList = serverSummary.subjects;
+    if (isTeacher && teacherSubjectCodes.length > 0) {
+      subjectsList = subjectsList.filter((s) => {
+        const sCode = (s.subject_code || '').toLowerCase().trim();
+        return teacherSubjectCodes.some(
+          (tc) => tc === sCode || tc === `crs-${sCode}` || sCode.includes(tc)
+        );
+      });
+    }
+    return [...subjectsList]
       .map((s) => ({
         code: s.subject_code || '',
         name: s.subject_name || s.subject_code || 'Mata Pelajaran',
@@ -114,10 +207,34 @@ export default function MainPage() {
         graded: Number(s.graded_count) || 0,
       }))
       .sort((a, b) => b.avg - a.avg);
-  }, [serverSummary]);
+  }, [serverSummary, isTeacher, teacherSubjectCodes]);
 
-  // Metrik Sekolah
+  // Metrik Sekolah / Scoped Guru
   const metrics = useMemo(() => {
+    if (isTeacher && teacherGrades.length > 0) {
+      const validScores = teacherGrades.filter(
+        (g) => g.score !== null && g.score !== undefined && Number(g.score) >= 0
+      );
+      const totalGraded = validScores.length;
+      const sumScore = validScores.reduce((acc, g) => acc + Number(g.score), 0);
+      const schoolAvg = totalGraded > 0 ? Number((sumScore / totalGraded).toFixed(1)) : 0;
+      const totalRemedial = validScores.filter((g) => Number(g.score) < schoolKkm).length;
+      const totalPassed = Math.max(0, totalGraded - totalRemedial);
+      const masteryRate = totalGraded > 0 ? Math.round((totalPassed / totalGraded) * 100) : 0;
+      const endorsedCount = endorsements.filter((e) => e.status === 'APPROVED' || e.signature_data).length;
+
+      return {
+        totalStudents: totalGraded,
+        totalGraded,
+        schoolAvg,
+        totalRemedial,
+        totalPassed,
+        masteryRate,
+        endorsedCount,
+        totalEndorsementsExpected: endorsements.length || rawClasses.length || 0,
+      };
+    }
+
     const totalStudents = Number(serverSummary?.total_students) || 0;
     const totalGraded = Number(serverSummary?.total_graded_students) || 0;
     const schoolAvg = serverSummary?.average_score ? Number(serverSummary.average_score.toFixed(1)) : 0;
@@ -136,10 +253,30 @@ export default function MainPage() {
       endorsedCount,
       totalEndorsementsExpected: endorsements.length || rawClasses.length || 0,
     };
-  }, [serverSummary, endorsements, rawClasses]);
+  }, [serverSummary, endorsements, rawClasses, isTeacher, teacherGrades, schoolKkm]);
 
-  // Distribusi Predikat (Murni dari Backend)
+  // Distribusi Predikat (Murni dari Backend / Scoped Guru)
   const predicateDistribution = useMemo(() => {
+    if (isTeacher && teacherGrades.length > 0) {
+      let a = 0, b = 0, c = 0, d = 0;
+      teacherGrades.forEach((g) => {
+        const pred = (g.predicate || '').toUpperCase();
+        if (pred === 'A') a++;
+        else if (pred === 'B') b++;
+        else if (pred === 'C') c++;
+        else if (pred === 'D') d++;
+      });
+      const total = a + b + c + d;
+
+      return {
+        A: { count: a, percent: total > 0 ? Math.round((a / total) * 100) : 0 },
+        B: { count: b, percent: total > 0 ? Math.round((b / total) * 100) : 0 },
+        C: { count: c, percent: total > 0 ? Math.round((c / total) * 100) : 0 },
+        D: { count: d, percent: total > 0 ? Math.round((d / total) * 100) : 0 },
+        total,
+      };
+    }
+
     const p = serverSummary?.predicate_distribution;
     const a = Number(p?.A) || 0;
     const b = Number(p?.B) || 0;
@@ -154,18 +291,32 @@ export default function MainPage() {
       D: { count: d, percent: total > 0 ? Math.round((d / total) * 100) : 0 },
       total,
     };
-  }, [serverSummary]);
+  }, [serverSummary, isTeacher, teacherGrades]);
 
-  // Siswa Berprestasi & Remedial (Murni dari Backend)
+  // Siswa Berprestasi & Remedial (Murni dari Backend / Scoped Guru)
   const topStudents = useMemo(() => {
     if (!serverSummary?.top_students || !Array.isArray(serverSummary.top_students)) return [];
-    return serverSummary.top_students.slice(0, 5);
-  }, [serverSummary]);
+    let list = serverSummary.top_students;
+    if (isTeacher && teacherClassCodes.length > 0) {
+      list = list.filter((s) => {
+        const cName = (s.class_name || '').replace(/^Kelas\s*/i, '').trim();
+        return teacherClassCodes.includes(cName);
+      });
+    }
+    return list.slice(0, 5);
+  }, [serverSummary, isTeacher, teacherClassCodes]);
 
   const remedialStudents = useMemo(() => {
     if (!serverSummary?.remedial_students || !Array.isArray(serverSummary.remedial_students)) return [];
-    return serverSummary.remedial_students.slice(0, 5);
-  }, [serverSummary]);
+    let list = serverSummary.remedial_students;
+    if (isTeacher && teacherClassCodes.length > 0) {
+      list = list.filter((s) => {
+        const cName = (s.class_name || '').replace(/^Kelas\s*/i, '').trim();
+        return teacherClassCodes.includes(cName);
+      });
+    }
+    return list.slice(0, 5);
+  }, [serverSummary, isTeacher, teacherClassCodes]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12">
@@ -181,13 +332,24 @@ export default function MainPage() {
                 SMP NEGERI 1 PRAMBON
               </span>
               <span className="text-xs text-slate-500 font-medium">• Sistem Penilaian e-Rapor</span>
+              {isTeacher && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-800 border border-blue-200">
+                  <span>Scope Guru:</span>
+                  <strong>{rawClasses.length} Rombel</strong>
+                  <span>•</span>
+                  <strong>{rawSubjects.length} Mapel</strong>
+                  {walasClass && <span>• Walas {walasClass}</span>}
+                </span>
+              )}
             </div>
 
             <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-              Dashboard Analitik Penilaian & Capaian Rapor
+              {isTeacher ? 'Dashboard Capaian Nilai Kelas & Mapel Diampu' : 'Dashboard Analitik Penilaian & Capaian Rapor'}
             </h1>
             <p className="text-xs text-slate-500 leading-relaxed">
-              Supervisi terpadu mutu pembelajaran, ketuntasan KKM setiap rombel kelas, serta verifikasi pengesahan tanda tangan digital Kepala Sekolah.
+              {isTeacher
+                ? 'Pemantauan capaian nilai siswa khusus untuk rombongan belajar dan mata pelajaran yang Anda ampu serta kelas perwalian.'
+                : 'Supervisi terpadu mutu pembelajaran, ketuntasan KKM setiap rombel kelas, serta verifikasi pengesahan tanda tangan digital Kepala Sekolah.'}
             </p>
           </div>
 
@@ -249,9 +411,11 @@ export default function MainPage() {
       {/* 4 KARTU METRIK UTAMA (EXECUTIVE KPI) */}
       {/* ────────────────────────────────────────────────────────── */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Metric 1: Rerata Nilai Sekolah */}
+        {/* Metric 1: Rerata Nilai */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
-          <p className="text-xs font-semibold text-slate-500">Rata-rata Nilai Sekolah</p>
+          <p className="text-xs font-semibold text-slate-500">
+            {isTeacher ? 'Rata-rata Kelas Diampu' : 'Rata-rata Nilai Sekolah'}
+          </p>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-3xl font-black text-slate-900 tracking-tight">
               {metrics.schoolAvg > 0 ? metrics.schoolAvg : '-'}
@@ -330,7 +494,9 @@ export default function MainPage() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Grafik perbandingan capaian rerata seluruh rombongan belajar.
+                  {isTeacher
+                    ? 'Grafik capaian rerata rombongan belajar yang Anda ampu & kelas perwalian.'
+                    : 'Grafik perbandingan capaian rerata seluruh rombongan belajar.'}
                 </p>
               </div>
 
@@ -476,7 +642,9 @@ export default function MainPage() {
                 Distribusi Predikat Nilai Rapor
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Proporsi predikat capaian A, B, C, dan D siswa sekolah.
+                {isTeacher
+                  ? 'Proporsi predikat capaian siswa pada kelas & mapel yang Anda ampu.'
+                  : 'Proporsi predikat capaian A, B, C, dan D siswa sekolah.'}
               </p>
             </div>
 

@@ -88,19 +88,14 @@ func (u *useCase) SaveBulk(ctx context.Context, req domain.BulkGradeRequest, rea
 	}
 
 	for _, g := range req.Grades {
-		if g.Score == nil || g.StudentID == "" {
-			continue // nilai kosong dilewati
-		}
-		score := *g.Score
-		if score < 0 || score > 100 {
-			return 0, fmt.Errorf("nilai %s harus 0-100", g.StudentName)
+		if g.StudentID == "" {
+			continue
 		}
 
-		// Deteksi apakah nilai berubah dari yang tersimpan
-		if old, exists := existingMap[g.StudentID]; exists {
-			if old.Score >= 0 && (old.Score != score || old.Description != g.Description) {
+		// Tangani jika nilai dikosongkan (Score nil atau < 0)
+		if g.Score == nil || *g.Score < 0 {
+			if old, exists := existingMap[g.StudentID]; exists && old.Score >= 0 {
 				oldScoreVal := old.Score
-				newScoreVal := score
 				changeLogs = append(changeLogs, &domain.GradeChangeLog{
 					ID:             uuid.New().String(),
 					StudentID:      g.StudentID,
@@ -112,6 +107,64 @@ func (u *useCase) SaveBulk(ctx context.Context, req domain.BulkGradeRequest, rea
 					AcademicYear:   req.AcademicYear,
 					Semester:       req.Semester,
 					OldScore:       &oldScoreVal,
+					NewScore:       nil,
+					OldDescription: old.Description,
+					NewDescription: "",
+					ChangedByID:    req.TeacherID,
+					ChangedByName:  req.TeacherName,
+					Reason:         "Nilai dikosongkan oleh guru pengampu",
+					CreatedAt:      now,
+				})
+
+				rows = append(rows, &domain.StudentGrade{
+					ID:             old.ID,
+					StudentID:      g.StudentID,
+					PersonID:       g.PersonID,
+					NISN:           g.NISN,
+					StudentName:    g.StudentName,
+					ClassName:      req.ClassName,
+					SubjectCode:    req.SubjectCode,
+					SubjectName:    req.SubjectName,
+					AssessmentType: req.AssessmentType,
+					AcademicYear:   req.AcademicYear,
+					Semester:       req.Semester,
+					Score:          -1,
+					Predicate:      "-",
+					Description:    "",
+					TeacherID:      req.TeacherID,
+					TeacherName:    req.TeacherName,
+					CreatedAt:      now,
+					UpdatedAt:      now,
+				})
+			}
+			continue
+		}
+
+		score := *g.Score
+		if score < 0 || score > 100 {
+			return 0, fmt.Errorf("nilai %s harus 0-100", g.StudentName)
+		}
+
+		// Deteksi apakah nilai berubah dari yang tersimpan
+		if old, exists := existingMap[g.StudentID]; exists {
+			if old.Score != score || old.Description != g.Description {
+				var oldScorePtr *float64
+				if old.Score >= 0 {
+					oldScoreVal := old.Score
+					oldScorePtr = &oldScoreVal
+				}
+				newScoreVal := score
+				changeLogs = append(changeLogs, &domain.GradeChangeLog{
+					ID:             uuid.New().String(),
+					StudentID:      g.StudentID,
+					StudentName:    g.StudentName,
+					ClassName:      req.ClassName,
+					SubjectCode:    req.SubjectCode,
+					SubjectName:    req.SubjectName,
+					AssessmentType: req.AssessmentType,
+					AcademicYear:   req.AcademicYear,
+					Semester:       req.Semester,
+					OldScore:       oldScorePtr,
 					NewScore:       &newScoreVal,
 					OldDescription: old.Description,
 					NewDescription: g.Description,
@@ -123,8 +176,13 @@ func (u *useCase) SaveBulk(ctx context.Context, req domain.BulkGradeRequest, rea
 			}
 		}
 
+		gradeID := uuid.New().String()
+		if old, exists := existingMap[g.StudentID]; exists && old.ID != "" {
+			gradeID = old.ID
+		}
+
 		rows = append(rows, &domain.StudentGrade{
-			ID:             uuid.New().String(),
+			ID:             gradeID,
 			StudentID:      g.StudentID,
 			PersonID:       g.PersonID,
 			NISN:           g.NISN,

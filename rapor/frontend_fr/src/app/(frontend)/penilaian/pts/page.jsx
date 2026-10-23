@@ -38,6 +38,8 @@ export default function PenilaianPTSPage() {
   const [currentUser, setCurrentUser] = useState(null);
   const [subjects, setSubjects] = useState([]);
   const [classes, setClasses] = useState([]);
+  const [teacherAssignments, setTeacherAssignments] = useState([]);
+  const [allClassAllocations, setAllClassAllocations] = useState([]);
   const [subject, setSubject] = useState('');
   const [className, setClassName] = useState('');
   const [rows, setRows] = useState([]);
@@ -112,6 +114,7 @@ export default function PenilaianPTSPage() {
         const isTeacherRole = Boolean(user && (roleUpper === 'GURU' || roleUpper.includes('GURU') || roleUpper.includes('TEACHER')));
 
         if (clsRes.success && Array.isArray(clsRes.data)) {
+          setAllClassAllocations(clsRes.data);
           let teacherClasses = clsRes.data;
           // Filter ketat jika pengguna adalah GURU
           if (isTeacherRole) {
@@ -126,13 +129,10 @@ export default function PenilaianPTSPage() {
             teacherClasses = filtered;
           }
 
+          setTeacherAssignments(teacherClasses);
+
           const classNames = [...new Set(teacherClasses.map((c) => c.class_code || c.name || c.id).filter(Boolean))];
           setClasses(classNames);
-          if (classNames.length > 0) {
-            setClassName((prev) => (classNames.includes(prev) ? prev : classNames[0]));
-          } else {
-            setClassName('');
-          }
 
           // Filter mapel yang diampu guru
           if (isTeacherRole) {
@@ -160,6 +160,39 @@ export default function PenilaianPTSPage() {
     };
     fetchMasterData();
   }, []);
+
+  // Filter rombel/kelas secara dinamis sesuai mata pelajaran yang dipilih
+  const classesForSubject = useMemo(() => {
+    if (!subject) return [];
+    const sourceList = isTeacherRole ? teacherAssignments : (allClassAllocations.length ? allClassAllocations : teacherAssignments);
+    if (sourceList && sourceList.length > 0) {
+      const target = subject.toLowerCase().trim();
+      const matched = sourceList.filter((tc) => {
+        const cCode = String(tc.course_code || tc.course_id || '').toLowerCase().trim();
+        const cName = String(tc.course_name || '').toLowerCase().trim();
+        return (
+          cCode === target ||
+          cCode === `crs-${target}` ||
+          (cCode && cCode.includes(target)) ||
+          (cName && cName.includes(target))
+        );
+      });
+      const result = [...new Set(matched.map((c) => c.class_code || c.name || c.id).filter(Boolean))].sort();
+      if (result.length > 0) return result;
+    }
+    return isTeacherRole ? [] : classes;
+  }, [subject, isTeacherRole, classes, teacherAssignments, allClassAllocations]);
+
+  // Otomatis pilih kelas pertama yang valid untuk mata pelajaran yang aktif
+  useEffect(() => {
+    if (classesForSubject.length > 0) {
+      if (!className || !classesForSubject.includes(className)) {
+        setClassName(classesForSubject[0]);
+      }
+    } else {
+      setClassName('');
+    }
+  }, [classesForSubject, className]);
 
   const getTopicStorageKey = useCallback((cls, sbj, yr, sm) => {
     return `spenspra_pts_topic_${cls || ''}_${sbj || ''}_${String(yr || '').replace('/', '_')}_${sm || ''}`;
@@ -384,30 +417,24 @@ export default function PenilaianPTSPage() {
         const currentSubjectObj = subjects.find((item) => item.code === subject);
         const subjectName = currentSubjectObj ? currentSubjectObj.name : subject;
 
-        const validGrades = currentRows
-          .filter((r) => r.score !== '' && r.score !== null && !isNaN(Number(r.score)))
-          .map((r) => {
-            const pred = getPredicate(r.score);
-            let desc = r.description;
-            if (!desc && pred !== '-') {
-              const tmpl = customTemplates || predicateTemplates;
-              desc = tmpl[pred] || INITIAL_PREDICATE_DESCRIPTIONS[pred] || '';
-            }
-            return {
-              student_id: r.id,
-              person_id: r.person_id,
-              nisn: r.nisn,
-              student_name: r.name,
-              score: Number(r.score),
-              description: desc || '',
-            };
-          });
-
-        if (validGrades.length === 0) {
-          setAutoSaving(false);
-          setSaveStatus('CLOUD_SAVED');
-          return;
-        }
+        const validGrades = currentRows.map((r) => {
+          const hasScore = r.score !== '' && r.score !== null && !isNaN(Number(r.score));
+          const numScore = hasScore ? Number(r.score) : -1;
+          const pred = hasScore ? getPredicate(numScore) : '-';
+          let desc = r.description;
+          if (!desc && pred !== '-') {
+            const tmpl = customTemplates || predicateTemplates;
+            desc = tmpl[pred] || INITIAL_PREDICATE_DESCRIPTIONS[pred] || '';
+          }
+          return {
+            student_id: r.id,
+            person_id: r.person_id,
+            nisn: r.nisn,
+            student_name: r.name,
+            score: numScore,
+            description: numScore >= 0 ? (desc || '') : '',
+          };
+        });
 
         const payload = {
           class_name: className,
@@ -437,7 +464,7 @@ export default function PenilaianPTSPage() {
       } finally {
         setAutoSaving(false);
       }
-    }, 1200);
+    }, 2500); // 2.5 detik idle sebelum auto-save
   }, [isLocked, isKepalaSekolah, className, subject, subjects, academicYear, semester, predicateTemplates, draftKey]);
 
   const handleTopicChange = (e) => {
@@ -485,11 +512,11 @@ export default function PenilaianPTSPage() {
     if (isLocked || isKepalaSekolah) return;
     const score = value === '' ? '' : Math.max(0, Math.min(100, Number(value)));
     const predicate = getPredicate(score);
-    const autoDesc = formatDescription(predicate);
+    const autoDesc = score === '' ? '' : formatDescription(predicate);
     setRows((current) => {
       const updated = current.map((row) =>
         row.id === id
-          ? { ...row, score, description: autoDesc }
+          ? { ...row, score: score === '' ? '' : String(score), description: autoDesc }
           : row
       );
       saveDraftLocally(updated);
@@ -665,21 +692,28 @@ export default function PenilaianPTSPage() {
       semester: semester,
       teacher_id: currentUser?.id || '',
       teacher_name: currentUser?.fullName || currentUser?.full_name || 'Guru Pengampu',
-      grades: rows
-        .filter((r) => r.score !== '' && r.score !== null && !isNaN(Number(r.score)))
-        .map((r) => ({
+      grades: rows.map((r) => {
+        const hasScore = r.score !== '' && r.score !== null && !isNaN(Number(r.score));
+        const numScore = hasScore ? Number(r.score) : -1;
+        const pred = hasScore ? getPredicate(numScore) : '-';
+        let desc = r.description;
+        if (!desc && pred !== '-') {
+          desc = formatDescription(pred);
+        }
+        return {
           student_id: r.id,
           person_id: r.person_id,
           nisn: r.nisn,
           student_name: r.name,
-          score: Number(r.score),
-          description: r.description || (getPredicate(r.score) === '-' ? '' : formatDescription(getPredicate(r.score))),
-        })),
+          score: numScore,
+          description: numScore >= 0 ? (desc || '') : '',
+        };
+      }),
     };
 
     if (payload.grades.length === 0) {
       setIsSaving(false);
-      setSaveMessage('Belum ada nilai yang diinput untuk disimpan.');
+      setSaveMessage('Belum ada siswa di kelas ini.');
       setSaved(true);
       return;
     }
@@ -937,10 +971,10 @@ export default function PenilaianPTSPage() {
         <label className="text-xs font-semibold text-slate-700">
           Rombel
           <select value={className} onChange={(event) => setClassName(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100">
-            {classes.length === 0 ? (
+            {classesForSubject.length === 0 ? (
               <option value="">— Belum Ada Kelas —</option>
             ) : (
-              classes.map((item) => <option key={item} value={item}>Kelas {item}</option>)
+              classesForSubject.map((item) => <option key={item} value={item}>Kelas {item}</option>)
             )}
           </select>
         </label>
@@ -1005,58 +1039,45 @@ export default function PenilaianPTSPage() {
         )}
       </div>
 
-      {/* Panel Pengaturan Template Deskripsi Capaian (Terbuka Otomatis Tanpa Perlu Ditekan) */}
+      {/* Panel Pengaturan Template Deskripsi Capaian (Redesain & Button di Bawah) */}
       {showTemplateConfig && (
-        <section className="rounded-xl border border-blue-200 bg-linear-to-b from-blue-50/80 to-indigo-50/30 p-4 shadow-xs space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-blue-200 pb-3">
+        <section className="rounded-2xl border border-blue-200 bg-gradient-to-b from-blue-50/70 via-indigo-50/30 to-white p-5 shadow-sm space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-blue-100 pb-3">
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-xs font-bold text-blue-950">
+                <h3 className="text-sm font-bold text-blue-950">
                   Pengaturan Default Deskripsi Capaian — Kelas {className} ({subjects.find((s) => s.code === subject)?.name || subject})
                 </h3>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
                   Tersimpan Otomatis
                 </span>
               </div>
-              <p className="text-[11px] text-blue-800/80 mt-0.5">
-                Cukup isi 1 input <strong>Materi Pokok / TP</strong> di bawah. Uraian capaian untuk semua predikat (A, B, C, D) otomatis terisi secara real-time dan selalu tersimpan di akun Anda.
+              <p className="text-xs text-blue-800/80 mt-1">
+                Ketikkan ringkasan <strong>Materi Pokok / Tujuan Pembelajaran (TP)</strong> pada kotak di bawah. Uraian capaian otomatis dirangkai untuk semua predikat (A, B, C, D) dan tersimpan permanen di akun Anda.
               </p>
             </div>
-
-            <button
-              type="button"
-              disabled={isLocked}
-              onClick={applyTemplateToAllStudents}
-              className="px-3.5 py-1.5 rounded-lg bg-[#193D9B] hover:bg-[#153280] disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
-              title="Terapkan template deskripsi ini ke seluruh siswa kelas"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              <span>🔄 Terapkan ke Semua Siswa Kelas {className}</span>
-            </button>
           </div>
 
-          {/* 1 Input Materi Pokok / TP (Tanpa button "Isi ke 4 Predikat", auto-fill & auto-save) */}
-          <div className="rounded-xl bg-white p-3.5 border border-blue-200 shadow-2xs space-y-1.5">
+          {/* Input Materi Pokok / TP Lebih Luas (Multi-line Textarea) */}
+          <div className="rounded-xl bg-white p-4 border border-blue-200 shadow-2xs space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <label htmlFor="input-materi-tp" className="text-xs font-bold text-slate-800 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#193D9B]" />
+                <span className="w-2.5 h-2.5 rounded-full bg-[#193D9B]" />
                 <span>Materi Pokok / Tujuan Pembelajaran (TP):</span>
               </label>
               <span className="text-[11px] text-slate-500 font-medium">
-                Ketik langsung di sini — tersimpan permanen & auto terisi ke 4 predikat
+                Ketik materi pokok di sini — otomatis diaplikasikan ke semua predikat
               </span>
             </div>
-            <input
+            <textarea
               id="input-materi-tp"
-              type="text"
+              rows={3}
               disabled={isLocked || isKepalaSekolah}
               value={quickTopic}
               onChange={handleTopicChange}
-              placeholder="Contoh: memahami makna ghibah, tabayun dan ruksah di kehidupan sehari-hari"
-              className="w-full border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#193D9B] focus:ring-2 focus:ring-blue-100 transition font-medium"
+              placeholder="Contoh: memahami makna ghibah, tabayun dan ruksah di kehidupan sehari-hari serta mampu mempraktikkan sikap bijak bermedia sosial"
+              className="w-full border border-slate-300 rounded-xl p-3 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#193D9B] focus:ring-2 focus:ring-blue-100 transition font-medium leading-relaxed resize-y shadow-inner"
             />
           </div>
 
@@ -1113,6 +1134,25 @@ export default function PenilaianPTSPage() {
                 {predicateTemplates.D}
               </p>
             </div>
+          </div>
+
+          {/* Bottom Action Bar: Button Pindah ke Bawah */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-blue-200">
+            <span className="text-[11px] text-slate-500 font-medium">
+              💡 Deskripsi di atas akan otomatis digunakan untuk siswa baru yang nilainya diinput. Klik tombol di kanan jika ingin menyelaraskan ulang seluruh siswa kelas {className}.
+            </span>
+            <button
+              type="button"
+              disabled={isLocked || isKepalaSekolah}
+              onClick={applyTemplateToAllStudents}
+              className="px-4 py-2 rounded-xl bg-[#193D9B] hover:bg-[#153280] disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-2"
+              title="Terapkan template deskripsi ini ke seluruh siswa kelas"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>🔄 Terapkan ke Semua Siswa Kelas {className}</span>
+            </button>
           </div>
         </section>
       )}

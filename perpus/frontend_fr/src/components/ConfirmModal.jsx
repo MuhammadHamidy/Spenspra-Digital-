@@ -12,6 +12,7 @@ import React from 'react';
  * - message: string | ReactNode
  * - confirmText: string (default: "Ya, Lanjutkan")
  * - cancelText: string (default: "Batal")
+ * - type: 'danger' | 'logout' | 'warning' | 'info'
  * - isDanger: boolean (default: true)
  * - isLoading: boolean
  * - onConfirm: () => void
@@ -23,6 +24,7 @@ export default function ConfirmModal({
   message,
   confirmText = 'Ya, Lanjutkan',
   cancelText = 'Batal',
+  type,
   isDanger = true,
   isLoading = false,
   onConfirm,
@@ -30,23 +32,41 @@ export default function ConfirmModal({
 }) {
   if (!isOpen) return null;
 
+  const isLogout = type === 'logout' || 
+    title.toLowerCase().includes('keluar') || 
+    title.toLowerCase().includes('logout') ||
+    confirmText.toLowerCase().includes('keluar');
+
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-neutral-1000/50 backdrop-blur-xs animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
       <div
-        className="w-full max-w-md bg-neutral-50 rounded-[16px] shadow-lg border border-neutral-300 overflow-hidden scale-100 animate-in zoom-in-95 duration-150"
+        className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden scale-100 animate-in zoom-in-95 duration-150"
         role="dialog"
         aria-modal="true"
       >
         <div className="p-6">
           <div className="flex items-start gap-4">
             <div
-              className={`w-12 h-12 rounded-[12px] flex items-center justify-center shrink-0 ${
-                isDanger
-                  ? 'bg-danger-50 text-danger-500 border border-danger-300'
-                  : 'bg-accent-50 text-accent-800 border border-accent-300'
+              className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                isLogout
+                  ? 'bg-rose-50 text-rose-600 border border-rose-200 shadow-xs'
+                  : isDanger
+                  ? 'bg-rose-50 text-rose-600 border border-rose-200 shadow-xs'
+                  : 'bg-amber-50 text-amber-600 border border-amber-200 shadow-xs'
               }`}
             >
-              {isDanger ? (
+              {isLogout ? (
+                /* Icon Keluar / Logout Resmi (Pintu & Panah Keluar) */
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                  />
+                </svg>
+              ) : isDanger ? (
+                /* Icon Hapus / Bahaya */
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
@@ -56,6 +76,7 @@ export default function ConfirmModal({
                   />
                 </svg>
               ) : (
+                /* Icon Peringatan */
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
@@ -67,20 +88,20 @@ export default function ConfirmModal({
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-base sm:text-lg font-bold text-neutral-1000 leading-snug">{title}</h3>
-              <div className="mt-2 text-xs sm:text-sm text-neutral-700 leading-relaxed whitespace-pre-line">
+              <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-snug">{title}</h3>
+              <div className="mt-1.5 text-xs sm:text-sm text-slate-600 leading-relaxed whitespace-pre-line">
                 {message}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-neutral-100 px-6 py-3.5 flex items-center justify-end gap-2.5 border-t border-neutral-300">
+        <div className="bg-slate-50 px-6 py-3.5 flex items-center justify-end gap-2.5 border-t border-slate-200">
           <button
             type="button"
             disabled={isLoading}
             onClick={onCancel}
-            className="px-4 py-2 rounded-[8px] text-xs sm:text-sm font-semibold text-neutral-800 bg-neutral-50 border border-neutral-300 hover:bg-neutral-100 active:bg-neutral-300 transition shadow-sm cursor-pointer disabled:opacity-50"
+            className="px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 active:bg-slate-200 transition shadow-xs cursor-pointer disabled:opacity-50"
           >
             {cancelText}
           </button>
@@ -88,19 +109,25 @@ export default function ConfirmModal({
             type="button"
             disabled={isLoading}
             onClick={onConfirm}
-            className={`px-4 py-2 rounded-[8px] text-xs sm:text-sm font-semibold text-neutral-50 transition shadow-sm cursor-pointer flex items-center gap-1.5 disabled:opacity-50 ${
-              isDanger
-                ? 'bg-danger-500 hover:bg-danger-700 active:bg-danger-800'
-                : 'bg-primary-500 hover:bg-primary-700 active:bg-primary-800'
+            className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold text-white transition shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50 ${
+              isLogout
+                ? 'bg-rose-600 hover:bg-rose-700 active:bg-rose-800'
+                : isDanger
+                ? 'bg-rose-600 hover:bg-rose-700 active:bg-rose-800'
+                : 'bg-[#193D9B] hover:bg-[#153280] active:bg-blue-900'
             }`}
           >
-            {isLoading && (
+            {isLoading ? (
               <svg className="animate-spin -ml-1 mr-1.5 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
               </svg>
-            )}
-            {confirmText}
+            ) : isLogout ? (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            ) : null}
+            <span>{confirmText}</span>
           </button>
         </div>
       </div>
