@@ -1,5 +1,24 @@
 import { NextResponse } from 'next/server';
 
+function getSsoLoginUrl(request, reason = '') {
+  const host = request.headers.get('host') || '';
+  const isSpenspraCom = host.includes('spenspra.com');
+  const isSpenspraSch = host.includes('spenspra.sch.id');
+
+  const defaultSsoUrl = isSpenspraCom
+    ? 'https://sso.spenspra.com/login'
+    : isSpenspraSch
+    ? 'https://sso.spenspra.sch.id/login'
+    : 'http://sso.localhost/login';
+
+  const ssoLoginUrl = process.env.NEXT_PUBLIC_SSO_LOGIN_URL || defaultSsoUrl;
+  const redirectUrl = new URL(ssoLoginUrl, request.url);
+  if (reason) {
+    redirectUrl.searchParams.set('reason', reason);
+  }
+  return redirectUrl;
+}
+
 export function middleware(request) {
   const { pathname } = request.nextUrl;
 
@@ -31,7 +50,7 @@ export function middleware(request) {
     pathname.startsWith('/baca') ||
     pathname.startsWith('/pembelajaran');
 
-  // If user is on /login and is authenticated -> redirect based on role
+  // Rute /login kini dialihkan langsung ke SSO terpusat
   if (pathname === '/login') {
     if (isAuthenticated) {
       if (userRole === 'SISWA') {
@@ -39,7 +58,7 @@ export function middleware(request) {
       }
       return NextResponse.redirect(new URL('/pustakawan', request.url));
     }
-    return NextResponse.next();
+    return NextResponse.redirect(getSsoLoginUrl(request));
   }
 
   // Lindungi halaman administrasi pustakawan agar siswa diarahkan ke beranda siswa
@@ -58,9 +77,9 @@ export function middleware(request) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 
-  // If user is not authenticated and trying to access protected administrative pages -> redirect to /login
+  // Jika belum login dan mengakses area administrasi pustakawan -> alihkan langsung ke SSO
   if (!isAuthenticated && !isPublicPath) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    return NextResponse.redirect(getSsoLoginUrl(request, 'auth_required'));
   }
 
   // Enforce audience claim untuk halaman terlindungi

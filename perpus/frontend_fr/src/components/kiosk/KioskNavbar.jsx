@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { tokenStorage } from '@/lib/common/tokenStorage';
+import { redirectToSsoLogin } from '@/lib/features/beranda/ssoHelper';
 
 export default function KioskNavbar({
   currentUser,
@@ -69,15 +70,16 @@ export default function KioskNavbar({
               </button>
             </div>
           ) : (
-            <Link
-              href="/login"
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-semibold transition-all shadow-xs"
+            <button
+              type="button"
+              onClick={() => redirectToSsoLogin()}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-semibold transition-all shadow-xs cursor-pointer"
             >
               <svg className="w-3.5 h-3.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
               </svg>
-              <span>Pustakawan</span>
-            </Link>
+              <span>Pustakawan (SSO)</span>
+            </button>
           )}
         </div>
       </div>
