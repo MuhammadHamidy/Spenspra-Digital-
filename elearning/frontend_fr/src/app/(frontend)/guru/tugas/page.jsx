@@ -5,6 +5,7 @@ import Card from '@/components/Card';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
 import Modal from '@/components/Modal';
+import ConfirmModal from '@/components/ConfirmModal';
 import StatusBadge from '@/components/StatusBadge';
 import { elearningApi } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
@@ -17,6 +18,16 @@ export default function TeacherAssignmentsManagementPage() {
   const [activeGradingAssignment, setActiveGradingAssignment] = useState(null);
   const [subjects, setSubjects] = useState([]);
   const [classes, setClasses] = useState([]);
+
+  const [editingAssignmentId, setEditingAssignmentId] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Konfirmasi',
+    confirmVariant: 'primary',
+    onConfirm: () => {},
+  });
 
   // Form State Create Assignment
   const [title, setTitle] = useState('');
@@ -106,6 +117,7 @@ export default function TeacherAssignmentsManagementPage() {
 
   const handleOpenCreateModal = () => {
     const defaultSubj = subjects[0] || { name: '', code: '' };
+    setEditingAssignmentId(null);
     setTitle('');
     setSubject(defaultSubj.name || '');
     setSubjectCode(defaultSubj.code || '');
@@ -120,7 +132,31 @@ export default function TeacherAssignmentsManagementPage() {
     setIsCreateModalOpen(true);
   };
 
-  const handleCreateAssignment = async (e) => {
+  const handleOpenEditModal = (item) => {
+    setEditingAssignmentId(item.id);
+    setTitle(item.title || '');
+    setSubject(item.subject || subjects[0]?.name || '');
+    setSubjectCode(item.subjectCode || subjects[0]?.code || 'MAPEL');
+    setClassName(item.className || classes[0]?.name || '');
+    let formattedDue = '';
+    if (item.dueDate) {
+      try {
+        formattedDue = new Date(item.dueDate).toISOString().slice(0, 16);
+      } catch {
+        formattedDue = '';
+      }
+    }
+    setDueDate(formattedDue || new Date(Date.now() + 1000 * 60 * 60 * 24 * 5).toISOString().slice(0, 16));
+    setMaxScore(item.maxScore || 100);
+    setDescription(item.description || '');
+    setAttachmentUrl(item.attachmentUrl || '');
+    setAttachmentName(item.attachmentName || '');
+    setAttachmentSize(item.attachmentSize || '');
+    setExternalLink(item.attachmentUrl && item.attachmentUrl.startsWith('http') ? item.attachmentUrl : '');
+    setIsCreateModalOpen(true);
+  };
+
+  const handleSaveAssignment = async (e) => {
     e.preventDefault();
     if (!title.trim()) {
       alert('Judul tugas wajib diisi!');
@@ -134,28 +170,73 @@ export default function TeacherAssignmentsManagementPage() {
     setIsSubmitting(true);
     try {
       const finalAttachmentUrl = attachmentUrl || externalLink.trim() || null;
-      await elearningApi.createAssignment({
+      const payload = {
         title: title.trim(),
         subject,
         subjectCode,
         className,
         teacherId: user?.id || null,
         teacherName: user?.fullName || user?.full_name || 'Bapak/Ibu Guru',
-        dueDate: new Date(dueDate).toISOString(),
+        dueDate: dueDate ? new Date(dueDate).toISOString() : new Date().toISOString(),
         maxScore: Number(maxScore) || 100,
         description: description.trim(),
         attachmentUrl: finalAttachmentUrl,
         attachmentName: attachmentName || (externalLink ? 'Tautan Tambahan' : null),
         attachmentSize: attachmentSize || null,
         totalStudents: 32,
-      });
+      };
+
+      if (editingAssignmentId) {
+        await elearningApi.updateAssignment(editingAssignmentId, payload);
+      } else {
+        await elearningApi.createAssignment(payload);
+      }
+
       setIsCreateModalOpen(false);
+      setEditingAssignmentId(null);
       loadAssignments();
     } catch (err) {
-      alert('Gagal membuat tugas: ' + err.message);
+      alert('Gagal menyimpan tugas: ' + err.message);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleToggleStatus = async (item) => {
+    try {
+      const nextStatus = item.status === 'COMPLETED' ? 'ACTIVE' : 'COMPLETED';
+      await elearningApi.updateAssignment(item.id, { status: nextStatus });
+      loadAssignments();
+    } catch (e) {
+      alert('Gagal mengubah status tugas: ' + e.message);
+    }
+  };
+
+  const handleDeleteAssignment = (item) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Hapus Tugas',
+      message: `Apakah Anda yakin ingin menghapus tugas "${item.title}"? Seluruh pengumpulan jawaban siswa untuk tugas ini juga akan terhapus.`,
+      confirmText: 'Ya, Hapus Tugas',
+      confirmVariant: 'danger',
+      onConfirm: async () => {
+        try {
+          await elearningApi.deleteAssignment(item.id);
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+          loadAssignments();
+        } catch (e) {
+          alert('Gagal menghapus tugas: ' + e.message);
+        }
+      },
+    });
+  };
+
+  const formatDueDateSafe = (dStr) => {
+    if (!dStr) return '-';
+    const d = new Date(dStr);
+    return isNaN(d.getTime())
+      ? '-'
+      : d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' WIB';
   };
 
   const handleOpenGrading = async (assignment) => {
@@ -189,7 +270,7 @@ export default function TeacherAssignmentsManagementPage() {
 
     setSubmissionsList(updated);
     setSelectedSub(null);
-    alert('Nilai dan umpan balik berhasil disimpan ke database!');
+    alert('Nilai dan umpan balik berhasil disimpan!');
   };
 
   return (
@@ -244,52 +325,91 @@ export default function TeacherAssignmentsManagementPage() {
                   </td>
                 </tr>
               ) : (
-                assignments.map((item) => (
-                  <tr key={item.id} className="hover:bg-neutral-50/80 transition-colors">
-                    <td className="py-3 px-4 font-semibold text-neutral-900">
-                      <div className="space-y-0.5">
-                        <p className="truncate max-w-[260px]">{item.title}</p>
+              assignments.map((item) => (
+                <tr key={item.id} className="hover:bg-neutral-50/80 transition-colors">
+                  <td className="py-3 px-4 font-semibold text-neutral-900">
+                    <div className="space-y-0.5">
+                      <p className="truncate max-w-[260px] font-bold">{item.title}</p>
+                      {item.description && (
                         <p className="text-[11px] text-neutral-400 truncate max-w-[260px]">{item.description}</p>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-secondary-600 font-bold">{item.subject}</td>
-                    <td className="py-3 px-4 text-neutral-600 font-medium">Kelas {item.className}</td>
-                    <td className="py-3 px-4 text-neutral-600">
-                      {new Date(item.dueDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} WIB
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <span className="font-bold text-primary-500">
-                        {item.submittedCount} / {item.totalStudents || 32} Siswa
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <StatusBadge status={item.status} label={item.status === 'ACTIVE' ? 'Aktif' : 'Selesai'} />
-                    </td>
-                    <td className="py-3 px-4 text-right">
+                      )}
+                      {item.attachmentName && (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-primary-600 font-medium">
+                          📎 {item.attachmentName}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-secondary-700 font-bold">{item.subject || 'Mata Pelajaran'}</td>
+                  <td className="py-3 px-4 text-neutral-700 font-medium">
+                    {item.className ? `Kelas ${item.className}` : 'Semua Kelas'}
+                  </td>
+                  <td className="py-3 px-4 text-neutral-600">
+                    {formatDueDateSafe(item.dueDate)}
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    <span className="font-bold text-primary-600">
+                      {item.submittedCount || 0} / {item.totalStudents || 32} Siswa
+                    </span>
+                  </td>
+                  <td className="py-3 px-4">
+                    <StatusBadge status={item.status || 'ACTIVE'} label={item.status === 'COMPLETED' ? 'Selesai' : 'Aktif'} />
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    <div className="flex items-center justify-end gap-1.5 flex-wrap">
                       <Button
-                        variant="secondary"
+                        variant="primary"
                         size="xs"
                         onClick={() => handleOpenGrading(item)}
+                        className="font-bold"
+                        title="Periksa dan beri nilai lembar kerja siswa"
                       >
                         Periksa & Nilai
                       </Button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        onClick={() => handleOpenEditModal(item)}
+                        title="Edit rincian tugas"
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant={item.status === 'COMPLETED' ? 'outline' : 'ghost'}
+                        size="xs"
+                        onClick={() => handleToggleStatus(item)}
+                        className="text-[11px]"
+                        title={item.status === 'COMPLETED' ? 'Buka kembali pengumpulan tugas' : 'Tutup pengumpulan tugas'}
+                      >
+                        {item.status === 'COMPLETED' ? 'Buka' : 'Tutup'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => handleDeleteAssignment(item)}
+                        className="text-danger-600 hover:text-danger-800 hover:bg-danger-50 text-[11px]"
+                        title="Hapus tugas ini"
+                      >
+                        Hapus
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Card>
 
-      {/* Modal Create Assignment */}
-      <Modal
-        isOpen={isCreateModalOpen}
-        onClose={() => !isSubmitting && setIsCreateModalOpen(false)}
-        title="Buat Penugasan Baru"
-        size="lg"
-      >
-        <form onSubmit={handleCreateAssignment} className="space-y-4">
+    {/* Modal Create/Edit Assignment */}
+    <Modal
+      isOpen={isCreateModalOpen}
+      onClose={() => !isSubmitting && setIsCreateModalOpen(false)}
+      title={editingAssignmentId ? 'Edit Penugasan' : 'Buat Penugasan Baru'}
+      size="lg"
+    >
+      <form onSubmit={handleSaveAssignment} className="space-y-4">
           <div className="space-y-1">
             <label className="text-xs font-bold text-neutral-800">Judul Penugasan</label>
             <Input
@@ -461,7 +581,7 @@ export default function TeacherAssignmentsManagementPage() {
               loading={isSubmitting}
               disabled={isSubmitting || subjects.length === 0}
             >
-              Simpan & Terbitkan Tugas
+              {editingAssignmentId ? 'Simpan Perubahan' : 'Simpan & Terbitkan Tugas'}
             </Button>
           </div>
         </form>
@@ -623,6 +743,12 @@ export default function TeacherAssignmentsManagementPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        {...confirmModal}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

@@ -241,12 +241,35 @@ export const elearningApi = {
   // =================== TUGAS ===================
   getAssignments: async (params = {}) => {
     const res = await fetchJson('/assignments');
-    if (res.success && res.data) return res.data;
-    const local = getLocal('assignments', INITIAL_ASSIGNMENTS);
-    if (params.className) {
-      return local.filter((t) => !t.className || t.className === params.className);
+    let rawList = [];
+    if (res.success && Array.isArray(res.data)) {
+      rawList = res.data;
+    } else {
+      rawList = getLocal('assignments', INITIAL_ASSIGNMENTS);
     }
-    return local;
+
+    const normalized = rawList.map((t) => ({
+      id: t.id,
+      title: t.title || t.name || 'Tugas Tanpa Judul',
+      subject: t.subject || t.subject_name || t.course_name || t.courseName || 'Mata Pelajaran',
+      subjectCode: t.subjectCode || t.subject_code || t.course_code || 'MAPEL',
+      className: t.className || t.class_name || t.class_code || t.classCode || '',
+      dueDate: t.dueDate || t.due_date || t.deadline || t.endDateTime || t.end_time || '',
+      maxScore: Number(t.maxScore || t.max_score || 100),
+      description: t.description || t.instruction || '',
+      attachmentUrl: t.attachmentUrl || t.attachment_url || t.file_url || null,
+      attachmentName: t.attachmentName || t.attachment_name || null,
+      attachmentSize: t.attachmentSize || t.attachment_size || null,
+      submittedCount: Number(t.submittedCount || t.submitted_count || 0),
+      totalStudents: Number(t.totalStudents || t.total_students || 32),
+      status: t.status || (t.is_active === false ? 'COMPLETED' : 'ACTIVE'),
+      createdAt: t.createdAt || t.created_at || new Date().toISOString(),
+    }));
+
+    if (params.className) {
+      return normalized.filter((t) => !t.className || t.className === params.className);
+    }
+    return normalized;
   },
 
   getAssignmentById: async (id) => {
@@ -271,6 +294,27 @@ export const elearningApi = {
     };
     setLocal('assignments', [newAssignment, ...local]);
     return res.success ? res.data : newAssignment;
+  },
+
+  updateAssignment: async (id, payload) => {
+    const res = await fetchJson(`/assignments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+    const local = getLocal('assignments', INITIAL_ASSIGNMENTS);
+    const updated = local.map((item) => (item.id === id ? { ...item, ...payload } : item));
+    setLocal('assignments', updated);
+    return res.success ? res.data : payload;
+  },
+
+  deleteAssignment: async (id) => {
+    await fetchJson(`/assignments/${id}`, {
+      method: 'DELETE',
+    });
+    const local = getLocal('assignments', INITIAL_ASSIGNMENTS);
+    const filtered = local.filter((item) => item.id !== id);
+    setLocal('assignments', filtered);
+    return true;
   },
 
   submitAssignment: async (assignmentId, payload) => {
