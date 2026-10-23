@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { gradeApi } from '@/lib/gradeApi';
 import { attendanceApi } from '@/lib/attendanceApi';
-import { accountApiAdapter } from '@/lib/features/accounts/infrastructure/accountApiAdapter';
+import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApiAdapter';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 import { deadlineApiAdapter } from '@/lib/features/deadlines/infrastructure/deadlineApiAdapter';
 
