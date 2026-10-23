@@ -194,13 +194,19 @@ export default function PenilaianPTSPage() {
     return `spenspra_pts_topic_${cls || ''}_${sbj || ''}_${String(yr || '').replace('/', '_')}_${sm || ''}`;
   }, []);
 
+  // Simpan template di ref agar formatDescription stabil (tidak memicu reload data berulang)
+  const predicateTemplatesRef = useRef(predicateTemplates);
+  useEffect(() => {
+    predicateTemplatesRef.current = predicateTemplates;
+  }, [predicateTemplates]);
+
   const formatDescription = useCallback((predicate, customTemplates = null) => {
     if (!predicate || predicate === '-') return '';
-    const activeTemplates = customTemplates || predicateTemplates;
+    const activeTemplates = customTemplates || predicateTemplatesRef.current;
     const template = activeTemplates[predicate] || INITIAL_PREDICATE_DESCRIPTIONS[predicate] || '';
     // Pastikan tidak ada prefix "A: ", "B: ", "C: ", "D: "
     return template.replace(/^[A-D]:\s*/i, '').trim();
-  }, [predicateTemplates]);
+  }, []);
 
   // Bersihkan timer penyimpanan lokal saat unmount
   useEffect(() => {
