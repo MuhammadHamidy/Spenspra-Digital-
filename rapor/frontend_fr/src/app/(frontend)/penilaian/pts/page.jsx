@@ -51,9 +51,6 @@ export default function PenilaianPTSPage() {
   const [predicateTemplates, setPredicateTemplates] = useState(INITIAL_PREDICATE_DESCRIPTIONS);
   const [quickTopic, setQuickTopic] = useState('');
   const [ptsDeadline, setPtsDeadline] = useState(null);
-  const [autoSaving, setAutoSaving] = useState(false);
-  const [autoSavedAt, setAutoSavedAt] = useState(null);
-  const autoSaveTimerRef = useRef(null);
 
   // Filter Tahun Ajaran & Semester sinkron otomatis dengan Super Admin
   const [academicYear, setAcademicYear] = useState(() => getSchoolAcademicPeriod().year);
@@ -74,7 +71,6 @@ export default function PenilaianPTSPage() {
   const [saveStatus, setSaveStatus] = useState('CLOUD_SAVED'); // 'CLOUD_SAVED' | 'LOCAL_DRAFT' | 'SAVING' | 'OFFLINE'
   const [lastSavedTime, setLastSavedTime] = useState(null);
   const [draftRecovery, setDraftRecovery] = useState(null);
-  const [autoCloudSave, setAutoCloudSave] = useState(true);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -206,11 +202,11 @@ export default function PenilaianPTSPage() {
     return template.replace(/^[A-D]:\s*/i, '').trim();
   }, [predicateTemplates]);
 
-  // Bersihkan timer auto-save saat unmount
+  // Bersihkan timer penyimpanan lokal saat unmount
   useEffect(() => {
     return () => {
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
+      if (localDraftTimerRef.current) {
+        clearTimeout(localDraftTimerRef.current);
       }
     };
   }, []);
@@ -331,19 +327,26 @@ export default function PenilaianPTSPage() {
 
   const draftKey = `spenspra_draft_pts_${className}_${subject}_${academicYear.replace('/', '_')}_${semester}`;
 
+  const localDraftTimerRef = useRef(null);
+
   const saveDraftLocally = useCallback((currentRows) => {
-    try {
-      const dataToSave = {
-        rows: currentRows,
-        timestamp: new Date().toISOString(),
-        count: currentRows.filter((r) => r.score !== '' && r.score !== null).length,
-      };
-      localStorage.setItem(draftKey, JSON.stringify(dataToSave));
-      setSaveStatus('LOCAL_DRAFT');
-      setLastSavedTime(new Date().toLocaleTimeString('id-ID'));
-    } catch (err) {
-      console.warn('Gagal menyimpan draf lokal:', err);
+    if (localDraftTimerRef.current) {
+      clearTimeout(localDraftTimerRef.current);
     }
+    localDraftTimerRef.current = setTimeout(() => {
+      try {
+        const dataToSave = {
+          rows: currentRows,
+          timestamp: new Date().toISOString(),
+          count: currentRows.filter((r) => r.score !== '' && r.score !== null).length,
+        };
+        localStorage.setItem(draftKey, JSON.stringify(dataToSave));
+        setSaveStatus('LOCAL_DRAFT');
+        setLastSavedTime(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }));
+      } catch (err) {
+        console.warn('Gagal menyimpan draf lokal ke cache browser:', err);
+      }
+    }, 300);
   }, [draftKey]);
 
   // Cek apakah ada draf lokal tersimpan saat berganti kelas/mapel
@@ -370,12 +373,12 @@ export default function PenilaianPTSPage() {
     }
   }, [draftKey]);
 
-  // Peringatan sebelum meninggalkan halaman jika belum disimpan ke cloud
+  // Peringatan sebelum meninggalkan halaman jika belum disimpan ke server e-Rapor
   useEffect(() => {
     const handleBeforeUnload = (e) => {
       if (saveStatus === 'LOCAL_DRAFT') {
         e.preventDefault();
-        e.returnValue = 'Perubahan nilai Anda belum disimpan ke server e-Rapor. Yakin ingin keluar?';
+        e.returnValue = 'Perubahan nilai Anda tersimpan di cache lokal namun belum disimpan ke database e-Rapor. Yakin ingin keluar?';
         return e.returnValue;
       }
     };
@@ -389,7 +392,7 @@ export default function PenilaianPTSPage() {
       setSaveStatus('LOCAL_DRAFT');
       setDraftRecovery(null);
       setSaved(true);
-      setSaveMessage('Draf lokal berhasil dipulihkan!');
+      setSaveMessage('Draf lokal berhasil dipulihkan dari cache browser!');
     }
   };
 
@@ -399,73 +402,6 @@ export default function PenilaianPTSPage() {
     } catch {}
     setDraftRecovery(null);
   };
-
-  const triggerCloudAutoSave = useCallback((currentRows, customTemplates = null) => {
-    if (isLocked || isKepalaSekolah) return;
-    if (!className || !subject) return;
-
-    if (autoSaveTimerRef.current) {
-      clearTimeout(autoSaveTimerRef.current);
-    }
-
-    setAutoSaving(true);
-    setSaveStatus('SAVING');
-
-    autoSaveTimerRef.current = setTimeout(async () => {
-      try {
-        const currentUser = tokenStorage.getUser();
-        const currentSubjectObj = subjects.find((item) => item.code === subject);
-        const subjectName = currentSubjectObj ? currentSubjectObj.name : subject;
-
-        const validGrades = currentRows.map((r) => {
-          const hasScore = r.score !== '' && r.score !== null && !isNaN(Number(r.score));
-          const numScore = hasScore ? Number(r.score) : null;
-          const pred = hasScore ? getPredicate(numScore) : '-';
-          let desc = r.description;
-          if (!desc && pred !== '-') {
-            const tmpl = customTemplates || predicateTemplates;
-            desc = tmpl[pred] || INITIAL_PREDICATE_DESCRIPTIONS[pred] || '';
-          }
-          return {
-            student_id: r.id,
-            person_id: r.person_id,
-            nisn: r.nisn,
-            student_name: r.name,
-            score: numScore,
-            description: hasScore && numScore >= 0 ? (desc || '') : '',
-          };
-        });
-
-        const payload = {
-          class_name: className,
-          subject_code: subject,
-          subject_name: subjectName,
-          assessment_type: 'PTS',
-          academic_year: academicYear,
-          semester: semester,
-          teacher_id: currentUser?.id || '',
-          teacher_name: currentUser?.fullName || currentUser?.full_name || 'Guru Pengampu',
-          grades: validGrades,
-        };
-
-        const res = await gradeApi.saveBulkGrades(payload);
-        if (res.success) {
-          const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-          setSaveStatus('CLOUD_SAVED');
-          setLastSavedTime(now);
-          setAutoSavedAt(now);
-          try { localStorage.removeItem(draftKey); } catch {}
-        } else {
-          setSaveStatus('LOCAL_DRAFT');
-        }
-      } catch (err) {
-        console.warn('Auto-save ke server e-Rapor gagal:', err);
-        setSaveStatus('LOCAL_DRAFT');
-      } finally {
-        setAutoSaving(false);
-      }
-    }, 2500); // 2.5 detik idle sebelum auto-save
-  }, [isLocked, isKepalaSekolah, className, subject, subjects, academicYear, semester, predicateTemplates, draftKey]);
 
   const handleTopicChange = (e) => {
     const val = e.target.value;
@@ -490,7 +426,7 @@ export default function PenilaianPTSPage() {
     };
     setPredicateTemplates(newTemplates);
 
-    // Otomatis terapkan ke semua siswa yang sudah memiliki nilai & picu simpan otomatis
+    // Otomatis terapkan ke semua siswa yang sudah memiliki nilai & simpan ke cache lokal
     setRows((current) => {
       const updated = current.map((row) => {
         const pred = getPredicate(row.score);
@@ -503,24 +439,30 @@ export default function PenilaianPTSPage() {
         return row;
       });
       saveDraftLocally(updated);
-      triggerCloudAutoSave(updated, newTemplates);
       return updated;
     });
   };
 
   const updateScore = (id, value) => {
     if (isLocked || isKepalaSekolah) return;
-    const score = value === '' ? '' : Math.max(0, Math.min(100, Number(value)));
-    const predicate = getPredicate(score);
-    const autoDesc = score === '' ? '' : formatDescription(predicate);
+    let cleanVal = value;
+    if (cleanVal !== '') {
+      const num = Number(cleanVal);
+      if (!isNaN(num)) {
+        if (num > 100) cleanVal = '100';
+        else if (num < 0) cleanVal = '0';
+        else cleanVal = String(num);
+      }
+    }
+    const predicate = getPredicate(cleanVal);
+    const autoDesc = cleanVal === '' ? '' : formatDescription(predicate);
     setRows((current) => {
       const updated = current.map((row) =>
         row.id === id
-          ? { ...row, score: score === '' ? '' : String(score), description: autoDesc }
+          ? { ...row, score: cleanVal, description: autoDesc }
           : row
       );
       saveDraftLocally(updated);
-      triggerCloudAutoSave(updated);
       return updated;
     });
     setSaved(false);
@@ -531,7 +473,6 @@ export default function PenilaianPTSPage() {
     setRows((current) => {
       const updated = current.map((row) => (row.id === id ? { ...row, description } : row));
       saveDraftLocally(updated);
-      triggerCloudAutoSave(updated);
       return updated;
     });
     setSaved(false);
@@ -548,7 +489,6 @@ export default function PenilaianPTSPage() {
         };
       });
       saveDraftLocally(updated);
-      triggerCloudAutoSave(updated);
       return updated;
     });
     setSaved(false);
@@ -670,11 +610,10 @@ export default function PenilaianPTSPage() {
       alert('Nilai untuk kelas dan mata pelajaran ini telah dikunci/finalisasi. Silakan ajukan pembukaan kunci terlebih dahulu.');
       return;
     }
-    if (autoSaveTimerRef.current) {
-      clearTimeout(autoSaveTimerRef.current);
-      autoSaveTimerRef.current = null;
+    if (localDraftTimerRef.current) {
+      clearTimeout(localDraftTimerRef.current);
+      localDraftTimerRef.current = null;
     }
-    setAutoSaving(false);
     setIsSaving(true);
     setSaved(false);
     setSaveMessage('');
@@ -724,7 +663,6 @@ export default function PenilaianPTSPage() {
         const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         setSaveStatus('CLOUD_SAVED');
         setLastSavedTime(timeStr);
-        setAutoSavedAt(timeStr);
         try { localStorage.removeItem(draftKey); } catch {}
         setSaveMessage(`Berhasil menyimpan ${res.data?.saved || payload.grades.length} nilai siswa ke database e-Rapor.`);
       } else {
@@ -1182,17 +1120,18 @@ export default function PenilaianPTSPage() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2.5">
-              {autoSaving ? (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-700 font-semibold shadow-2xs">
-                  <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
-                  <span>Menyimpan otomatis...</span>
+              {saveStatus === 'LOCAL_DRAFT' ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 font-semibold shadow-2xs">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  <span>Draf tersimpan di cache</span>
+                  {lastSavedTime && <span className="text-[11px] text-amber-600 font-normal">({lastSavedTime} WIB)</span>}
                 </span>
-              ) : autoSavedAt ? (
+              ) : saveStatus === 'CLOUD_SAVED' && lastSavedTime ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-700 font-semibold shadow-2xs">
                   <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
                   </svg>
-                  <span>Otomatis tersimpan ({autoSavedAt} WIB)</span>
+                  <span>Tersimpan di database ({lastSavedTime} WIB)</span>
                 </span>
               ) : null}
 
