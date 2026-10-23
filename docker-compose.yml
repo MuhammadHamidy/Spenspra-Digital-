@@ -113,7 +113,7 @@ services:
       NEXT_PUBLIC_RAPOR_URL: ${RAPOR_PUBLIC_URL:-https://rapor.spenspra.com}
       NEXT_PUBLIC_PERPUS_URL: ${PERPUS_PUBLIC_URL:-https://perpus.spenspra.com}
       DATABASE_URL: postgresql://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${SSO_DB_NAME:-presdig_sso}?schema=public
-      JWT_SECRET: ${JWT_SECRET:-754291dde3a8b01fac3ec84619e4f278d5a6842286747e0652da6100e4391947ac89ed858bb7e1b8d549fefebbd03596}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env.docker}
       WA_API_KEY: ${WA_API_KEY:-}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
@@ -213,7 +213,7 @@ services:
       NEXT_PUBLIC_SSO_LOGIN_URL: ${SSO_LOGIN_URL:-https://sso.spenspra.com/login}
       NEXT_PUBLIC_RAPOR_URL: ${RAPOR_PUBLIC_URL:-https://rapor.spenspra.com}
       DATABASE_URL: postgresql://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${RAPOR_DB_NAME:-presdig_rapor}?schema=public
-      JWT_SECRET: ${JWT_SECRET:-754291dde3a8b01fac3ec84619e4f278d5a6842286747e0652da6100e4391947ac89ed858bb7e1b8d549fefebbd03596}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env.docker}
       WA_API_KEY: ${WA_API_KEY:-}
     ports:
       - "${RAPOR_PORT:-3001}:3000"
@@ -308,7 +308,7 @@ services:
       NEXT_PUBLIC_SSO_LOGIN_URL: ${SSO_LOGIN_URL:-https://sso.spenspra.com/login}
       NEXT_PUBLIC_PERPUS_URL: ${PERPUS_PUBLIC_URL:-https://perpus.spenspra.com}
       DATABASE_URL: postgresql://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${PERPUS_DB_NAME:-perpusdig}?schema=public
-      JWT_SECRET: ${JWT_SECRET:-754291dde3a8b01fac3ec84619e4f278d5a6842286747e0652da6100e4391947ac89ed858bb7e1b8d549fefebbd03596}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env.docker}
       WA_API_KEY: ${WA_API_KEY:-}
     ports:
       - "${PERPUS_PORT:-3002}:3000"
@@ -403,7 +403,7 @@ services:
       NEXT_PUBLIC_SSO_LOGIN_URL: ${SSO_LOGIN_URL:-https://sso.spenspra.com/login}
       NEXT_PUBLIC_ELEARNING_URL: ${ELEARNING_PUBLIC_URL:-https://belajar.spenspra.com}
       DATABASE_URL: postgresql://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${ELEARNING_DB_NAME:-presdig_elearning}?schema=public
-      JWT_SECRET: ${JWT_SECRET:-754291dde3a8b01fac3ec84619e4f278d5a6842286747e0652da6100e4391947ac89ed858bb7e1b8d549fefebbd03596}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env.docker}
     ports:
       - "${ELEARNING_PORT:-3004}:3000"
     command: ["node", "server.js"]
