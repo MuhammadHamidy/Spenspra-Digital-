@@ -39,6 +39,11 @@ export default function CivitasDashboard() {
       fullName: user?.fullName || user?.full_name || '',
       roleName: isKepalaSekolah ? 'KEPALA_SEKOLAH' : (role || 'GURU'),
       nimNip: user?.nimNip || user?.nip || user?.nisn || '',
+      className: user?.className || user?.kelas || '',
+      courseNames: user?.courseNames || user?.course_names || user?.courses || [],
+      courseIds: user?.courseIds || user?.course_ids || [],
+      classCodes: user?.classCodes || user?.class_codes || user?.classes || [],
+      classIds: user?.classIds || user?.class_ids || [],
     };
     const encodedUser = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(userPayload)))) : '';
     const redirectParam = targetPath ? `&redirect=${encodeURIComponent(targetPath)}` : '';
@@ -56,6 +61,11 @@ export default function CivitasDashboard() {
       fullName: user?.fullName || user?.full_name || '',
       roleName: isKepalaSekolah ? 'KEPALA_SEKOLAH' : (role || 'GURU'),
       nimNip: user?.nimNip || user?.nip || user?.nisn || '',
+      className: user?.className || user?.kelas || '',
+      courseNames: user?.courseNames || user?.course_names || user?.courses || [],
+      courseIds: user?.courseIds || user?.course_ids || [],
+      classCodes: user?.classCodes || user?.class_codes || user?.classes || [],
+      classIds: user?.classIds || user?.class_ids || [],
     };
     const encodedUser = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(userPayload)))) : '';
     const redirectParam = targetPath ? `&redirect=${encodeURIComponent(targetPath)}` : '';

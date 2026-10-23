@@ -15,6 +15,7 @@ export default function TeacherExamsManagementPage() {
   const [exams, setExams] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [classes, setClasses] = useState([]);
+  const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -72,43 +73,47 @@ export default function TeacherExamsManagementPage() {
     try {
       const currentUser = tokenStorage.getUser();
       setUser(currentUser);
-      const [exData, subjData, clsData] = await Promise.all([
+      const [exData, teacherScope] = await Promise.all([
         elearningApi.getExams(),
-        elearningApi.getSubjects(),
-        elearningApi.getClasses(),
+        elearningApi.getTeacherScope(currentUser),
       ]);
       setExams(exData || []);
 
-      // Filter mapel yang diampu oleh guru (dari SSO teaching courses)
-      const teacherCourseNames = currentUser?.courseNames || currentUser?.course_names || currentUser?.courses || [];
-      let filteredSubjects = subjData || [];
-      if (Array.isArray(teacherCourseNames) && teacherCourseNames.length > 0) {
-        const matched = subjData.filter((s) =>
-          teacherCourseNames.some((tc) => {
-            const tcName = typeof tc === 'string' ? tc.trim().toLowerCase() : (tc.name || '').trim().toLowerCase();
-            const tcCode = typeof tc === 'string' ? tc.trim().toLowerCase() : (tc.code || '').trim().toLowerCase();
-            return tcName === s.name.trim().toLowerCase() || tcCode === s.code.trim().toLowerCase();
-          })
-        );
-        if (matched.length > 0) {
-          filteredSubjects = matched;
-        }
-      }
+      const validSubjects = teacherScope?.subjects || [];
+      const validClasses = teacherScope?.classes || [];
+      setSubjects(validSubjects);
+      setClasses(validClasses);
+      setAssignments(teacherScope?.assignments || []);
 
-      setSubjects(filteredSubjects);
-      setClasses(clsData || []);
-      if (filteredSubjects && filteredSubjects.length > 0) {
-        setSubject(filteredSubjects[0].name);
-        setSubjectCode(filteredSubjects[0].code);
+      if (validSubjects.length > 0) {
+        setSubject(validSubjects[0].name);
+        setSubjectCode(validSubjects[0].code);
       }
-      if (clsData && clsData.length > 0) {
-        setClassName(clsData[0].name);
+      if (validClasses.length > 0) {
+        setClassName(validClasses[0].name);
       }
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
+  };
+
+  const getClassesForSubject = (subjName) => {
+    if (!subjName || !assignments || assignments.length === 0) return classes;
+    const target = subjName.toLowerCase().trim();
+    const matched = assignments.filter((a) => {
+      const cName = String(a.course_name || '').toLowerCase().trim();
+      const cCode = String(a.course_code || '').toLowerCase().trim();
+      return cName === target || cCode === target || cName.includes(target);
+    });
+    if (matched.length === 0) return classes;
+    const classCodes = new Set(matched.map((m) => String(m.class_code || '').replace(/^Kelas\s*/i, '').trim().toUpperCase()));
+    const filtered = classes.filter((c) => {
+      const clean = String(c.name || '').replace(/^Kelas\s*/i, '').trim().toUpperCase();
+      return classCodes.has(clean);
+    });
+    return filtered.length > 0 ? filtered : classes;
   };
 
   const loadExams = async () => {
@@ -121,12 +126,16 @@ export default function TeacherExamsManagementPage() {
   };
 
   const handleOpenCreateModal = () => {
-    const defaultSubj = subjects[0] || { name: 'Matematika', code: 'MAT' };
+    const defaultSubj = subjects[0] || { name: 'Informatika', code: 'INF' };
     setEditingExamId(null);
     setTitle('');
     setSubject(defaultSubj.name);
     setSubjectCode(defaultSubj.code);
-    setClassName(classes[0]?.name || '7A');
+
+    const relevantClasses = getClassesForSubject(defaultSubj.name);
+    const defaultClass = relevantClasses[0]?.name || classes[0]?.name || '9A';
+    setClassName(defaultClass);
+
     setToken(Math.random().toString(36).substring(2, 8).toUpperCase());
     setExamDate(new Date().toISOString().split('T')[0]);
     setStartTime('08:00');
@@ -1201,21 +1210,27 @@ export default function TeacherExamsManagementPage() {
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-neutral-800">Mata Pelajaran (Diampu)</label>
-                {(user?.courseNames?.length > 0 || user?.courses?.length > 0) && (
-                  <span className="text-[10px] text-primary-700 font-bold bg-primary-50 px-1.5 py-0.5 rounded">
-                    Sesuai SSO Guru
-                  </span>
-                )}
+                <span className="text-[10px] text-primary-700 font-bold bg-primary-50 px-1.5 py-0.5 rounded">
+                  Sesuai Penugasan Guru
+                </span>
               </div>
               <select
                 value={subject}
                 onChange={(e) => {
-                  setSubject(e.target.value);
-                  const matched = subjects.find((s) => s.name === e.target.value);
+                  const newSubj = e.target.value;
+                  setSubject(newSubj);
+                  const matched = subjects.find((s) => s.name === newSubj);
                   setSubjectCode(matched?.code || 'MAPEL');
+                  const relevantClasses = getClassesForSubject(newSubj);
+                  if (relevantClasses.length > 0 && !relevantClasses.some((c) => c.name === className)) {
+                    setClassName(relevantClasses[0].name);
+                  }
                 }}
                 className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium"
               >
+                {subjects.length === 0 && (
+                  <option value="">Belum ada mapel pengampu</option>
+                )}
                 {subjects.map((s) => (
                   <option key={s.id || s.code} value={s.name}>
                     {s.name} ({s.code})
@@ -1231,7 +1246,7 @@ export default function TeacherExamsManagementPage() {
                 onChange={(e) => setClassName(e.target.value)}
                 className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium"
               >
-                {classes.map((cls) => (
+                {getClassesForSubject(subject).map((cls) => (
                   <option key={cls.id || cls.name} value={cls.name}>
                     Kelas {cls.name}
                   </option>

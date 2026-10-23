@@ -44,20 +44,22 @@ export default function TeacherMaterialsManagementPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [matData, subjData, clsData] = await Promise.all([
+      const currentUser = tokenStorage.getUser();
+      const [matData, teacherScope] = await Promise.all([
         elearningApi.getMaterials(),
-        elearningApi.getSubjects(),
-        elearningApi.getClasses(),
+        elearningApi.getTeacherScope(currentUser),
       ]);
       setMaterials(matData || []);
-      setSubjects(subjData || []);
-      setClasses(clsData || []);
-      if (subjData && subjData.length > 0) {
-        setSubject(subjData[0].name);
-        setSubjectCode(subjData[0].code);
+      const validSubjects = teacherScope?.subjects || [];
+      const validClasses = teacherScope?.classes || [];
+      setSubjects(validSubjects);
+      setClasses(validClasses);
+      if (validSubjects.length > 0) {
+        setSubject(validSubjects[0].name);
+        setSubjectCode(validSubjects[0].code);
       }
-      if (clsData && clsData.length > 0) {
-        setClassName(clsData[0].name);
+      if (validClasses.length > 0) {
+        setClassName(validClasses[0].name);
       }
     } catch (e) {
       console.error(e);
@@ -76,11 +78,11 @@ export default function TeacherMaterialsManagementPage() {
   };
 
   const handleOpenCreateModal = () => {
-    const defaultSubj = subjects[0] || { name: 'Matematika', code: 'MAT' };
+    const defaultSubj = subjects[0] || { name: 'Informatika', code: 'INF' };
     setTitle('');
     setSubject(defaultSubj.name);
     setSubjectCode(defaultSubj.code);
-    setClassName('7A');
+    setClassName(classes[0]?.name || '9A');
     setType('PDF');
     setDescription('');
     setFileUrl('');

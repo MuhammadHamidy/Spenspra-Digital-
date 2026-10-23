@@ -10,36 +10,56 @@ function SSOCallbackContent() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const accessToken = searchParams.get('access_token');
-    const institutionId = searchParams.get('institution_id');
-    const encodedUser = searchParams.get('user');
+    try {
+      const accessToken = searchParams.get('access_token');
+      const institutionId = searchParams.get('institution_id') || 'smpn1prambon';
+      const encodedUser = searchParams.get('user');
 
-    if (!accessToken || !institutionId) {
-      setError('Callback SSO tidak lengkap. Token dan institution_id wajib dikirim.');
-      return;
-    }
+      if (!accessToken) {
+        setError('Callback SSO tidak lengkap. Token autentikasi wajib dikirim.');
+        return;
+      }
 
-    let user = { id: searchParams.get('sub') || '', roleName: 'GURU' };
-    if (encodedUser) {
-      try {
-        const decoded = decodeURIComponent(escape(atob(encodedUser)));
-        user = { ...user, ...JSON.parse(decoded) };
-      } catch {
+      let user = { id: searchParams.get('sub') || '', roleName: 'GURU' };
+      if (encodedUser) {
         try {
-          user = { ...user, ...JSON.parse(atob(encodedUser)) };
+          const normalized = encodedUser.replace(/ /g, '+');
+          const decoded = decodeURIComponent(escape(atob(normalized)));
+          user = { ...user, ...JSON.parse(decoded) };
         } catch {
-          setError('Data pengguna dari SSO tidak valid.');
-          return;
+          try {
+            const normalized = encodedUser.replace(/ /g, '+');
+            user = { ...user, ...JSON.parse(atob(normalized)) };
+          } catch (e) {
+            console.warn('Gagal membaca data pengguna dari SSO callback:', e);
+          }
         }
       }
+
+      if (tokenStorage && typeof tokenStorage.setToken === 'function') {
+        tokenStorage.setToken(accessToken);
+      }
+      if (tokenStorage && typeof tokenStorage.setInstitutionId === 'function') {
+        tokenStorage.setInstitutionId(institutionId);
+      }
+      if (tokenStorage && typeof tokenStorage.setUser === 'function') {
+        tokenStorage.setUser(user);
+      }
+
+      // Simpan backup langsung ke local storage
+      try {
+        localStorage.setItem('elearning_auth_token', accessToken);
+        sessionStorage.setItem('elearning_auth_token', accessToken);
+        localStorage.setItem('elearning_auth_user', JSON.stringify(user));
+        sessionStorage.setItem('elearning_auth_user', JSON.stringify(user));
+      } catch (e) {}
+
+      const redirectPath = searchParams.get('redirect');
+      window.location.href = redirectPath || '/';
+    } catch (err) {
+      console.error('Error pada SSO callback e-Learning:', err);
+      setError('Terjadi kendala saat menyelesaikan autentikasi SSO.');
     }
-
-    tokenStorage.setToken(accessToken);
-    tokenStorage.setInstitutionId(institutionId);
-    tokenStorage.setUser(user);
-
-    const redirectPath = searchParams.get('redirect');
-    router.replace(redirectPath || '/');
   }, [router, searchParams]);
 
   if (error) {

@@ -82,6 +82,10 @@ function LoginForm() {
         peran: roleName,
         className: user?.className || user?.kelas || '',
         nimNip: user?.nimNip || user?.nip || user?.nisn || '',
+        courseNames: user?.courseNames || user?.course_names || user?.courses || [],
+        courseIds: user?.courseIds || user?.course_ids || [],
+        classCodes: user?.classCodes || user?.class_codes || user?.classes || [],
+        classIds: user?.classIds || user?.class_ids || [],
       };
       const encodedUser = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(userPayload)))) : '';
       const token = res?.token || '';

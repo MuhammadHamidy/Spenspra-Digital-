@@ -610,6 +610,154 @@ export const elearningApi = {
     return newClass;
   },
 
+  getClassAssignments: async () => {
+    try {
+      const [ssoRes, beRes] = await Promise.all([
+        fetchSsoJson('/school/classes').catch(() => null),
+        fetchJson('/school/classes').catch(() => null),
+      ]);
+      const list = [];
+      if (ssoRes?.success && Array.isArray(ssoRes.data)) list.push(...ssoRes.data);
+      else if (Array.isArray(ssoRes?.data?.classes)) list.push(...ssoRes.data.classes);
+      else if (Array.isArray(ssoRes)) list.push(...ssoRes);
+      if (beRes?.success && Array.isArray(beRes.data)) list.push(...beRes.data);
+      return list;
+    } catch {
+      return [];
+    }
+  },
+
+  getTeacherScope: async (customUser = null) => {
+    const currentUser = customUser || tokenStorage.getUser();
+    const roleUpper = String(currentUser?.roleName || currentUser?.role || currentUser?.peran || '').toUpperCase();
+    const isGuru = roleUpper === 'GURU' || roleUpper.includes('GURU') || roleUpper.includes('TEACHER') || roleUpper.includes('WALI');
+
+    const [subjData, clsData, rawAssignments] = await Promise.all([
+      elearningApi.getSubjects(),
+      elearningApi.getClasses(),
+      elearningApi.getClassAssignments(),
+    ]);
+
+    // Jika bukan guru (Super Admin / Admin), akses semua master data
+    if (!isGuru) {
+      return {
+        isGuru: false,
+        subjects: subjData || [],
+        classes: clsData || [],
+        assignments: rawAssignments || [],
+      };
+    }
+
+    const myId = String(currentUser?.id || currentUser?.person_id || '').toLowerCase().trim();
+    const myNip = String(currentUser?.nimNip || currentUser?.nip || '').toLowerCase().trim();
+    const myName = String(currentUser?.fullName || currentUser?.full_name || currentUser?.username || '').toLowerCase().trim();
+
+    // 1. Filter assignment guru dari tabel penugasan /school/classes yang ditetapkan oleh admin
+    const myAssignments = (rawAssignments || []).filter((a) => {
+      if (!a) return false;
+      const tId = String(a.teacher_id || a.dosen_id || '').toLowerCase().trim();
+      const tNip = String(a.teacher_nip || a.dosen_nip || '').toLowerCase().trim();
+      const tName = String(a.teacher_name || a.dosen_name || '').toLowerCase().trim();
+
+      if (myId && tId && (tId === myId || tId.includes(myId) || myId.includes(tId))) return true;
+      if (myNip && (tNip === myNip || tId === myNip)) return true;
+      if (myName && tName && (tName === myName || tName.includes(myName) || myName.includes(tName))) return true;
+      return false;
+    });
+
+    const teacherCourseNames = new Set();
+    const teacherCourseCodes = new Set();
+    const teacherClassCodes = new Set();
+
+    myAssignments.forEach((a) => {
+      if (a.course_name) teacherCourseNames.add(a.course_name.trim().toLowerCase());
+      if (a.course_code) teacherCourseCodes.add(a.course_code.trim().toUpperCase());
+      if (a.class_code) {
+        const clean = a.class_code.replace(/^Kelas\s*/i, '').trim().toUpperCase();
+        if (clean) teacherClassCodes.add(clean);
+      }
+    });
+
+    // 2. Gabungkan penugasan dari profil SSO (courseNames & classCodes)
+    const ssoCourses = currentUser?.courseNames || currentUser?.course_names || currentUser?.courses || [];
+    if (Array.isArray(ssoCourses)) {
+      ssoCourses.forEach((c) => {
+        const cName = typeof c === 'string' ? c.trim().toLowerCase() : (c.name || '').trim().toLowerCase();
+        const cCode = typeof c === 'string' ? c.trim().toUpperCase() : (c.code || '').trim().toUpperCase();
+        if (cName) teacherCourseNames.add(cName);
+        if (cCode) teacherCourseCodes.add(cCode);
+      });
+    }
+
+    const ssoClasses = currentUser?.classCodes || currentUser?.class_codes || currentUser?.classes || [];
+    if (Array.isArray(ssoClasses)) {
+      ssoClasses.forEach((cls) => {
+        const clean = String(typeof cls === 'string' ? cls : cls.name || cls.code || '').replace(/^Kelas\s*/i, '').trim().toUpperCase();
+        if (clean) teacherClassCodes.add(clean);
+      });
+    }
+
+    // 3. Filter daftar mata pelajaran yang diampu
+    let filteredSubjects = [];
+    if (teacherCourseNames.size > 0 || teacherCourseCodes.size > 0) {
+      filteredSubjects = (subjData || []).filter((s) => {
+        const sName = (s.name || '').trim().toLowerCase();
+        const sCode = (s.code || '').trim().toUpperCase();
+        return teacherCourseNames.has(sName) || teacherCourseCodes.has(sCode);
+      });
+
+      // Jika ada mapel guru di SSO yang belum ada di daftar master subjData, buatkan entitasnya
+      teacherCourseNames.forEach((nameLower) => {
+        const exists = filteredSubjects.some((s) => (s.name || '').toLowerCase() === nameLower);
+        if (!exists) {
+          const matchingCode = Array.from(teacherCourseCodes)[0] || nameLower.slice(0, 3).toUpperCase();
+          filteredSubjects.push({
+            id: `crs-${matchingCode.toLowerCase()}`,
+            code: matchingCode,
+            name: nameLower.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+          });
+        }
+      });
+    }
+
+    // 4. Filter daftar rombel kelas yang diampu
+    let filteredClasses = [];
+    if (teacherClassCodes.size > 0) {
+      filteredClasses = (clsData || []).filter((cls) => {
+        const cleanName = (cls.name || '').replace(/^Kelas\s*/i, '').trim().toUpperCase();
+        return (
+          teacherClassCodes.has(cleanName) ||
+          Array.from(teacherClassCodes).some((tc) => tc.includes(cleanName) || cleanName.includes(tc))
+        );
+      });
+
+      teacherClassCodes.forEach((cName) => {
+        const exists = filteredClasses.some((c) => (c.name || '').toUpperCase() === cName);
+        if (!exists) {
+          filteredClasses.push({
+            id: `cls-${cName.toLowerCase()}`,
+            name: cName,
+          });
+        }
+      });
+    }
+
+    // Jika guru belum memiliki penugasan apapun di database, fallback agar halaman tidak error
+    if (filteredSubjects.length === 0 && (subjData || []).length > 0) {
+      filteredSubjects = subjData;
+    }
+    if (filteredClasses.length === 0 && (clsData || []).length > 0) {
+      filteredClasses = clsData;
+    }
+
+    return {
+      isGuru: true,
+      subjects: filteredSubjects,
+      classes: filteredClasses,
+      assignments: myAssignments,
+    };
+  },
+
   getStudentExamSession: (examId, studentId) => {
     const sessionKey = `exam_session_${examId}_${studentId || 'demo'}`;
     return getLocal(sessionKey, null);
