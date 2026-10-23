@@ -1,22 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 /**
  * ConfirmModal — Modal konfirmasi terpadu sesuai standar DESIGN fix.md.
  * Menggantikan browser native alert() dan confirm().
- * 
- * Props:
- * - isOpen: boolean
- * - title: string
- * - message: string | ReactNode
- * - confirmText: string (default: "Ya, Lanjutkan")
- * - cancelText: string (default: "Batal")
- * - type: 'danger' | 'logout' | 'warning' | 'info'
- * - isDanger: boolean (default: true)
- * - isLoading: boolean
- * - onConfirm: () => void
- * - onCancel: () => void
+ * Menggunakan React Portal ke document.body agar menutupi seluruh layar (termasuk sidebar).
  */
 export default function ConfirmModal({
   isOpen,
@@ -30,17 +20,23 @@ export default function ConfirmModal({
   onConfirm,
   onCancel,
 }) {
-  if (!isOpen) return null;
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!isOpen || !mounted) return null;
 
   const isLogout = type === 'logout' || 
     title.toLowerCase().includes('keluar') || 
     title.toLowerCase().includes('logout') ||
     confirmText.toLowerCase().includes('keluar');
 
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
+  const modalElement = (
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
       <div
-        className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden scale-100 animate-in zoom-in-95 duration-150"
+        className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden scale-100 animate-in zoom-in-95 duration-150"
         role="dialog"
         aria-modal="true"
       >
@@ -133,4 +129,6 @@ export default function ConfirmModal({
       </div>
     </div>
   );
+
+  return createPortal(modalElement, document.body);
 }

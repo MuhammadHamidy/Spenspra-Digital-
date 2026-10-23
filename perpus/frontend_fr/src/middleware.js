@@ -23,13 +23,13 @@ export function middleware(request) {
   const isPublicPath =
     pathname === '/' ||
     pathname.startsWith('/sso/callback') ||
-    pathname === '/perpus' ||
-    pathname === '/kiosk' ||
-    pathname === '/bibliografi' ||
-    pathname === '/bookmark' ||
-    pathname === '/pinjam' ||
-    pathname === '/baca' ||
-    pathname === '/pembelajaran';
+    pathname.startsWith('/perpus') ||
+    pathname.startsWith('/kiosk') ||
+    pathname.startsWith('/bibliografi') ||
+    pathname.startsWith('/bookmark') ||
+    pathname.startsWith('/pinjam') ||
+    pathname.startsWith('/baca') ||
+    pathname.startsWith('/pembelajaran');
 
   // If user is on /login and is authenticated -> redirect based on role
   if (pathname === '/login') {

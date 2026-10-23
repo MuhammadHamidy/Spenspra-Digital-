@@ -22,15 +22,30 @@ export async function httpRequest(endpoint, options = {}) {
     if (!response.ok) {
       if (response.status === 401) {
         tokenStorage.clear();
-        if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-          const isSpenspra = window.location.hostname.includes('spenspra.com');
-          const isSch = window.location.hostname.includes('spenspra.sch.id');
-          const loginUrl = isSpenspra
-            ? 'https://sso.spenspra.com/login?reason=expired'
-            : isSch
-            ? 'https://sso.spenspra.sch.id/login?reason=expired'
-            : (process.env.NEXT_PUBLIC_SSO_LOGIN_URL ? `${process.env.NEXT_PUBLIC_SSO_LOGIN_URL}?reason=expired` : 'http://sso.localhost/login?reason=expired');
-          window.location.href = loginUrl;
+        // Hanya arahkan ke SSO jika sedang mengakses halaman terproteksi khusus staf/pustakawan
+        if (typeof window !== 'undefined') {
+          const pathname = window.location.pathname;
+          const isProtectedAdminPath =
+            pathname.startsWith('/pustakawan') ||
+            pathname.startsWith('/pustakwan') ||
+            pathname.startsWith('/circulation') ||
+            pathname.startsWith('/members') ||
+            pathname.startsWith('/faces') ||
+            pathname.startsWith('/books') ||
+            pathname.startsWith('/visitors') ||
+            pathname.startsWith('/loans') ||
+            pathname.startsWith('/reading-insights');
+
+          if (isProtectedAdminPath || options?.requireAuth) {
+            const isSpenspra = window.location.hostname.includes('spenspra.com');
+            const isSch = window.location.hostname.includes('spenspra.sch.id');
+            const loginUrl = isSpenspra
+              ? 'https://sso.spenspra.com/login?reason=expired'
+              : isSch
+              ? 'https://sso.spenspra.sch.id/login?reason=expired'
+              : (process.env.NEXT_PUBLIC_SSO_LOGIN_URL ? `${process.env.NEXT_PUBLIC_SSO_LOGIN_URL}?reason=expired` : 'http://sso.localhost/login?reason=expired');
+            window.location.href = loginUrl;
+          }
         }
       }
       const errorMsg = data?.error?.message || data?.message || `HTTP Error ${response.status}`;
