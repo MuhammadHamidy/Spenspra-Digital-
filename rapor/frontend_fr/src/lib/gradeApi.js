@@ -18,6 +18,9 @@ async function fetchJson(endpoint, options = {}) {
   try {
     const res = await fetch(url, { ...options, headers });
     const json = await res.json();
+    if (!res.ok) {
+      console.warn(`[Grade API] ${options.method || 'GET'} ${url} returned status ${res.status}:`, json?.error?.message || json?.error || json);
+    }
     return json;
   } catch (err) {
     console.warn(`[Grade API] Endpoint ${url} offline / unreachable:`, err.message);
