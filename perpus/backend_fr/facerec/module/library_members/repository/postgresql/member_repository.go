@@ -3,6 +3,7 @@ package postgresql
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/facerec/facerec-be/facerec/module/library_members/domain"
 	"gorm.io/gorm"
