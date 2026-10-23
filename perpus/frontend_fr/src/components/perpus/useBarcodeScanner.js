@@ -101,10 +101,10 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
     }
   }, [cameraActive, stream]);
 
-  // Load ZXing dynamically fallback
+  // Load ZXing dynamically as dependable fallback for QR and 1D barcodes
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!('BarcodeDetector' in window) && !window.ZXing && !document.getElementById('zxing-script')) {
+    if (!window.ZXing && !document.getElementById('zxing-script')) {
       const script = document.createElement('script');
       script.id = 'zxing-script';
       script.src = 'https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js';
@@ -139,7 +139,7 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
     [lastScannedCode, onScan]
   );
 
-  // Scanning interval loop
+  // Scanning interval loop with dual-engine (native BarcodeDetector + ZXing canvas fallback)
   useEffect(() => {
     if (!cameraActive || disabled || !isScanning) return;
 
@@ -147,7 +147,7 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
     if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
       try {
         detector = new window.BarcodeDetector({
-          formats: ['code_128', 'ean_13', 'ean_8', 'qr_code', 'code_39', 'upc_a', 'upc_e'],
+          formats: ['qr_code', 'code_128', 'ean_13', 'ean_8', 'code_39', 'upc_a', 'upc_e'],
         });
       } catch {
         detector = null;
@@ -160,41 +160,49 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
       const video = videoRef.current;
       if (video.readyState < 2) return;
 
+      isProcessing = true;
+      let detectedText = null;
+
+      // 1. Try Native BarcodeDetector first if available
       if (detector) {
-        isProcessing = true;
         try {
           const barcodes = await detector.detect(video);
-          if (Array.isArray(barcodes) && barcodes.length > 0) {
-            handleDetectedBarcode(barcodes[0].rawValue);
+          if (Array.isArray(barcodes) && barcodes.length > 0 && barcodes[0].rawValue) {
+            detectedText = barcodes[0].rawValue;
           }
         } catch {
-          // silent fallback
-        } finally {
-          isProcessing = false;
+          // Native detector error or unhandled format -> fall through to ZXing
         }
-      } else if (window.ZXing && canvasRef.current) {
-        isProcessing = true;
+      }
+
+      // 2. Fallback to ZXing canvas decoding if native detector didn't find anything
+      if (!detectedText && window.ZXing && canvasRef.current) {
         try {
           const canvas = canvasRef.current;
           canvas.width = video.videoWidth || 640;
           canvas.height = video.videoHeight || 480;
           const ctx = canvas.getContext('2d');
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-          if (!zxingReaderRef.current) {
-            zxingReaderRef.current = new window.ZXing.BrowserMultiFormatReader();
-          }
-          const result = await zxingReaderRef.current.decodeFromCanvas(canvas);
-          if (result && result.getText()) {
-            handleDetectedBarcode(result.getText());
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            if (!zxingReaderRef.current) {
+              zxingReaderRef.current = new window.ZXing.BrowserMultiFormatReader();
+            }
+            const result = await zxingReaderRef.current.decodeFromCanvas(canvas);
+            if (result && result.getText()) {
+              detectedText = result.getText();
+            }
           }
         } catch {
-          // Expected when frame has no barcode
-        } finally {
-          isProcessing = false;
+          // Normal when no barcode in current frame
         }
       }
-    }, 220);
+
+      if (detectedText) {
+        handleDetectedBarcode(detectedText);
+      }
+
+      isProcessing = false;
+    }, 200);
 
     return () => clearInterval(interval);
   }, [cameraActive, disabled, isScanning, handleDetectedBarcode]);

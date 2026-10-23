@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"github.com/facerec/facerec-be/facerec/module/library_attendances/domain"
+	memberDomain "github.com/facerec/facerec-be/facerec/module/library_members/domain"
 	"github.com/google/uuid"
 )
 
 func (u *attendanceUseCase) RecordManualVisit(ctx context.Context, req domain.ManualVisitRequest) (*domain.LibraryAttendance, error) {
-	if req.VisitorName == "" {
-		return nil, errors.New("nama pengunjung wajib diisi")
+	if req.VisitorName == "" && req.MemberCode == "" {
+		return nil, errors.New("nama pengunjung atau kode barcode anggota wajib diisi")
 	}
 
 	now := time.Now()
@@ -23,41 +24,88 @@ func (u *attendanceUseCase) RecordManualVisit(ctx context.Context, req domain.Ma
 	}
 
 	if req.MemberCode != "" {
-		// Strategi resolusi anggota:
-		// 1. Jika token terlihat seperti SSO barcode (awalan PRAMBON-), resolve via SSO API
-		//    lalu temukan anggota berdasarkan person_id.
-		// 2. Fallback: cari via member_code lokal (untuk kompatibilitas mundur).
-		var resolvedMemberID *string
+		cleanCode := strings.TrimSpace(req.MemberCode)
+		var m *memberDomain.Member
 
-		if strings.HasPrefix(req.MemberCode, "PRAMBON-") || len(req.MemberCode) > 20 {
-			// Coba resolve via SSO (sumber kebenaran tunggal)
-			ssoPerson, ssoErr := u.ssoClient.ResolveBarcode(ctx, req.MemberCode)
-			if ssoErr != nil || ssoPerson == nil {
-				return nil, errors.New("barcode tidak valid, tidak aktif, atau sudah dicabut di SSO")
+		// 1. Coba cari di database lokal terlebih dahulu (by member_code, identity_number, id, person_id)
+		localMember, err := u.memberRepo.FindByCode(ctx, cleanCode)
+		if err == nil && localMember != nil {
+			m = localMember
+		} else {
+			m, _ = u.memberRepo.FindByID(ctx, cleanCode)
+		}
+
+		// 2. Jika tidak ditemukan secara lokal, resolve via SSO (sumber kebenaran tunggal untuk civitas/barcode)
+		if m == nil && u.ssoClient != nil {
+			ssoPerson, ssoErr := u.ssoClient.ResolveBarcode(ctx, cleanCode)
+			if ssoErr == nil && ssoPerson != nil && ssoPerson.IsActive {
+				personID := ssoPerson.ID
+				existing, _ := u.memberRepo.FindByPersonID(ctx, personID)
+				if existing == nil {
+					ident := ssoPerson.NISN
+					if ident == "" {
+						ident = ssoPerson.NIP
+					}
+					if ident != "" {
+						existing, _ = u.memberRepo.FindByCode(ctx, ident)
+					}
+				}
+
+				if existing != nil {
+					existing.PersonID = &personID
+					if existing.FullName == "" {
+						existing.FullName = ssoPerson.FullName
+					}
+					_ = u.memberRepo.Update(ctx, existing)
+					m = existing
+				} else {
+					// JIT Auto-Enrollment anggota perpustakaan
+					ident := ssoPerson.NISN
+					if ident == "" {
+						ident = ssoPerson.NIP
+					}
+					memberCode := "MBR-" + ident
+					if ident == "" {
+						memberCode = "MBR-" + ssoPerson.ID[:8]
+					}
+					address := "Warga Sekolah"
+					limit := 3
+					if ssoPerson.PersonType == "GURU" {
+						address = "Guru Pengajar"
+						limit = 5
+					} else if ssoPerson.ClassName != "" {
+						address = "Kelas " + ssoPerson.ClassName
+					}
+
+					newMember := &memberDomain.Member{
+						ID:             "mbr-" + ssoPerson.ID,
+						PersonID:       &personID,
+						MemberCode:     memberCode,
+						FullName:       ssoPerson.FullName,
+						IdentityNumber: ident,
+						Email:          ssoPerson.Email,
+						Phone:          ssoPerson.Phone,
+						Address:        address,
+						MaxBorrowLimit: limit,
+						IsActive:       true,
+						CreatedAt:      now,
+						UpdatedAt:      now,
+					}
+					if storeErr := u.memberRepo.Store(ctx, newMember); storeErr == nil {
+						m = newMember
+					}
+				}
 			}
-			// Cari library_member berdasarkan person_id
-			m, err := u.memberRepo.FindByPersonID(ctx, ssoPerson.ID)
-			if err != nil || m == nil {
-				return nil, errors.New("barcode valid di SSO namun belum terdaftar sebagai anggota perpustakaan")
-			}
+		}
+
+		if m != nil {
 			mid := m.ID
-			resolvedMemberID = &mid
+			memberID = &mid
 			req.VisitorName = m.FullName
 			vType = "MEMBER"
+		} else if strings.HasPrefix(cleanCode, "PRAMBON-") || len(cleanCode) > 20 {
+			return nil, errors.New("barcode tidak valid, tidak aktif, atau tidak terdaftar di sistem sekolah")
 		}
-
-		if resolvedMemberID == nil {
-			// Fallback: cari via member_code lokal
-			m, err := u.memberRepo.FindByCode(ctx, req.MemberCode)
-			if err == nil && m != nil {
-				mid := m.ID
-				resolvedMemberID = &mid
-				vType = "MEMBER"
-				req.VisitorName = m.FullName
-			}
-		}
-
-		memberID = resolvedMemberID
 	}
 
 	// Batasi sesi dalam perpustakaan 1 hari.

@@ -151,11 +151,11 @@ func (r *repository) FindStudentsByClass(ctx context.Context, classID string) ([
 
 func (r *repository) FindStudentByQRToken(ctx context.Context, qrToken string) (*domain.StudentProfile, error) {
 	var s domain.StudentProfile
-	// Cari via school_people (sumber identitas tunggal barcode)
+	// Cari via school_people (sumber identitas tunggal barcode & multi-identifier)
 	err := r.db.WithContext(ctx).Table("accounts").
 		Select("accounts.id, accounts.username, accounts.full_name, accounts.nisn, accounts.class_name, school_people.barcode_token AS qr_code_token, accounts.is_active").
 		Joins("JOIN school_people ON school_people.id = accounts.person_id OR school_people.id = accounts.id").
-		Where("school_people.barcode_token = ? AND school_people.barcode_status = 'ACTIVE' AND school_people.is_active = true", qrToken).
+		Where("(school_people.barcode_token = ? OR accounts.nisn = ? OR school_people.nisn = ? OR accounts.id = ?) AND school_people.barcode_status = 'ACTIVE' AND school_people.is_active = true", qrToken, qrToken, qrToken, qrToken).
 		First(&s).Error
 	if err != nil {
 		return nil, err

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 import { attendanceApi, booksApi, loansApi, membersApi } from '@/lib/features/library/api';
+import { getSsoBaseUrl } from '@/lib/features/beranda/ssoHelper';
 import { playScannerBeep } from './soundUtils';
 
 import PerpusNavbar from './PerpusNavbar';
@@ -317,10 +318,72 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
     };
   }, [currentScreen]);
 
-  // Handle Student Barcode Detection (Kartu Pelajar Barcode)
+  // Support for Physical USB Barcode / QR Handheld & Kiosk Scanners (HID Keyboard Emulation)
+  useEffect(() => {
+    let buffer = '';
+    let lastKeyTime = 0;
+
+    const handleKeyDown = (e) => {
+      // Don't intercept if user is typing normally inside an active form input
+      const activeEl = document.activeElement;
+      const isInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable);
+      if (isInput && !activeEl.classList.contains('scanner-input')) {
+        return;
+      }
+
+      const now = Date.now();
+      const diff = now - lastKeyTime;
+      lastKeyTime = now;
+
+      // Scanners transmit keys rapidly (< 100ms between strokes) and finish with Enter
+      if (e.key === 'Enter') {
+        const scannedText = buffer.trim();
+        buffer = '';
+        if (scannedText.length >= 3) {
+          if (currentScreen === 'attendance') {
+            handleStudentBarcodeDetected(scannedText);
+          } else if (currentScreen === 'scan') {
+            handleBookBarcodeDetected(scannedText);
+          }
+        }
+        return;
+      }
+
+      // If user is typing very slowly (> 150ms between keys), reset buffer
+      if (diff > 150 && buffer.length > 0) {
+        buffer = '';
+      }
+
+      // Collect printable characters
+      if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentScreen, isProcessingBarcodeStudent, detectedStudent, isProcessingBookBarcode, pendingBookModal]);
+
+  // Handle Student Barcode Detection (Kartu Pelajar Barcode / QR Code Tunggal)
   const handleStudentBarcodeDetected = async (rawCode) => {
     if (!rawCode || isProcessingBarcodeStudent || detectedStudent) return;
-    const cleanCode = String(rawCode).trim();
+    
+    // Sanitasi kode QR / Barcode: hilangkan petik, parsing jika format JSON atau query URL
+    let cleanCode = String(rawCode).trim().replace(/^["']|["']$/g, '');
+    if (cleanCode.startsWith('{') && cleanCode.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(cleanCode);
+        cleanCode = parsed.barcode_token || parsed.token || parsed.nisn || parsed.nip || parsed.code || parsed.id || cleanCode;
+      } catch {}
+    }
+    if (cleanCode.includes('://')) {
+      try {
+        const url = new URL(cleanCode);
+        const p = url.searchParams.get('token') || url.searchParams.get('barcode_token') || url.searchParams.get('code') || url.searchParams.get('nisn');
+        if (p) cleanCode = p;
+      } catch {}
+    }
+    cleanCode = String(cleanCode).trim();
     if (!cleanCode) return;
 
     const now = Date.now();
@@ -335,28 +398,62 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
     try {
       let matchedMember = null;
 
-      // 1. Try backend API getMemberByCode
+      // 1. Coba panggil backend API getMemberByCode (didukung resolusi SSO & auto-enrollment JIT)
       try {
         const res = await membersApi.getMemberByCode(cleanCode);
-        if (res && (res.id || res.member_code || res.identity_number)) {
+        if (res && (res.id || res.member_code || res.identity_number || res.full_name)) {
           matchedMember = res;
         }
       } catch (apiErr) {
-        // continue to list search
+        console.warn('Backend getMemberByCode notice:', apiErr);
       }
 
-      // 2. Search in registeredMembers or fetch search
+      // 2. Jika backend perpus belum mengembalikan, coba resolve langsung ke SSO via client
+      if (!matchedMember) {
+        try {
+          const ssoBase = getSsoBaseUrl();
+          const ssoResp = await fetch(`${ssoBase}/api/barcode/resolve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ barcode_token: cleanCode }),
+          });
+          if (ssoResp.ok) {
+            const ssoJson = await ssoResp.json();
+            const p = ssoJson?.data;
+            if (p && (p.is_active ?? true)) {
+              matchedMember = {
+                id: 'mbr-' + p.id,
+                full_name: p.full_name,
+                name: p.full_name,
+                member_code: 'MBR-' + (p.nisn || p.nip || (p.id ? p.id.slice(0, 8) : cleanCode)),
+                identity_number: p.nisn || p.nip || p.id,
+                class_name: p.class_name || (p.person_type === 'GURU' ? 'Guru Pengajar' : 'Siswa'),
+                address: p.class_name ? `Kelas ${p.class_name}` : 'Warga Sekolah',
+                barcode_token: p.barcode_token,
+                photo_url: p.photo_url || null,
+              };
+            }
+          }
+        } catch (ssoErr) {
+          console.warn('Direct SSO barcode resolve notice:', ssoErr);
+        }
+      }
+
+      // 3. Cari di cache registeredMembers
       if (!matchedMember) {
         const upper = cleanCode.toUpperCase();
         matchedMember = registeredMembers.find(
           (m) =>
+            String(m.barcode_token || '').toUpperCase() === upper ||
             String(m.member_code || '').toUpperCase() === upper ||
+            String(m.member_code || '').toUpperCase() === `MBR-${upper}` ||
             String(m.identity_number || '').toUpperCase() === upper ||
+            String(m.person_id || '').toUpperCase() === upper ||
             String(m.id || '').toUpperCase() === upper
         );
       }
 
-      // 3. Fallback to localStorage if not found yet
+      // 4. Fallback ke localStorage jika ada
       if (!matchedMember && typeof window !== 'undefined') {
         try {
           const raw = localStorage.getItem('lib_members_data');
@@ -365,8 +462,11 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
             const upper = cleanCode.toUpperCase();
             matchedMember = parsed.find(
               (m) =>
+                String(m.barcode_token || '').toUpperCase() === upper ||
                 String(m.member_code || '').toUpperCase() === upper ||
+                String(m.member_code || '').toUpperCase() === `MBR-${upper}` ||
                 String(m.identity_number || '').toUpperCase() === upper ||
+                String(m.person_id || '').toUpperCase() === upper ||
                 String(m.id || '').toUpperCase() === upper
             );
           }
@@ -391,10 +491,10 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
           activeSessionTime: sessionTime,
         };
 
-        // Record visit in backend
+        // Rekam kunjungan di backend perpus
         try {
           await attendanceApi.recordManualVisit({
-            member_code: studentProfile.memberCode,
+            member_code: cleanCode,
             member_id: matchedMember.id,
             visitor_name: studentProfile.name,
             visitor_type: 'MEMBER',
@@ -415,12 +515,12 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
         setBarcodeScanError(null);
       } else {
         setBarcodeScanError(
-          `Barcode "${cleanCode}" tidak terdaftar di database anggota perpustakaan. Pastikan kartu pelajar telah didaftarkan pustakawan.`
+          `QR/Barcode "${cleanCode}" tidak terdeteksi atau belum aktif di SSO Spenspra. Pastikan QR code adalah milik siswa yang terdaftar aktif.`
         );
       }
     } catch (err) {
       console.warn('Student barcode verification error:', err);
-      setBarcodeScanError('Terjadi kesalahan saat memverifikasi barcode kartu pelajar.');
+      setBarcodeScanError('Terjadi kesalahan saat memverifikasi QR code siswa.');
     } finally {
       setIsProcessingBarcodeStudent(false);
     }

@@ -41,7 +41,11 @@ func (r *memberRepository) FindByID(ctx context.Context, id string) (*domain.Mem
 
 func (r *memberRepository) FindByCode(ctx context.Context, code string) (*domain.Member, error) {
 	var m domain.Member
-	err := r.db.WithContext(ctx).Where("member_code = ?", code).First(&m).Error
+	clean := strings.TrimSpace(code)
+	err := r.db.WithContext(ctx).
+		Where("member_code = ? OR member_code = ? OR identity_number = ? OR id = ? OR person_id = ?",
+			clean, "MBR-"+clean, clean, clean, clean).
+		First(&m).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}

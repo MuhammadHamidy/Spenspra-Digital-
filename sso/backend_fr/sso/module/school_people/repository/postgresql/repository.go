@@ -34,8 +34,10 @@ func (r *Repository) FindByID(ctx context.Context, id string) (*domain.Person, e
 
 func (r *Repository) FindByBarcode(ctx context.Context, token string) (*domain.Person, error) {
 	var person domain.Person
+	cleanToken := strings.TrimSpace(token)
 	err := r.db.WithContext(ctx).
-		Where("barcode_token = ? AND barcode_status = ? AND is_active = ?", token, "ACTIVE", true).
+		Where("(barcode_token = ? OR nisn = ? OR nip = ? OR id = ?) AND barcode_status = ? AND is_active = ?",
+			cleanToken, cleanToken, cleanToken, cleanToken, "ACTIVE", true).
 		First(&person).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/facerec/facerec-be/facerec/module/library_members/domain"
 )
@@ -30,26 +31,80 @@ func (u *memberUseCase) GetByID(ctx context.Context, id string) (*domain.Member,
 }
 
 func (u *memberUseCase) GetByCode(ctx context.Context, code string) (*domain.Member, error) {
-	if strings.HasPrefix(code, "PRAMBON-") || len(code) > 20 {
-		if u.ssoClient != nil {
-			ssoPerson, ssoErr := u.ssoClient.ResolveBarcode(ctx, code)
-			if ssoErr != nil || ssoPerson == nil {
-				return nil, errors.New("barcode anggota tidak valid, tidak aktif, atau sudah dicabut di SSO")
+	cleanCode := strings.TrimSpace(code)
+	if cleanCode == "" {
+		return nil, errors.New("kode barcode anggota tidak boleh kosong")
+	}
+
+	// 1. Coba cari di database lokal terlebih dahulu
+	m, err := u.repo.FindByCode(ctx, cleanCode)
+	if err == nil && m != nil {
+		return m, nil
+	}
+
+	// 2. Hubungi SSO (sumber kebenaran tunggal untuk civitas & barcode token)
+	if u.ssoClient != nil {
+		ssoPerson, ssoErr := u.ssoClient.ResolveBarcode(ctx, cleanCode)
+		if ssoErr == nil && ssoPerson != nil && ssoPerson.IsActive {
+			personID := ssoPerson.ID
+			existing, _ := u.repo.FindByPersonID(ctx, personID)
+			if existing == nil {
+				ident := ssoPerson.NISN
+				if ident == "" {
+					ident = ssoPerson.NIP
+				}
+				if ident != "" {
+					existing, _ = u.repo.FindByCode(ctx, ident)
+				}
 			}
-			m, err := u.repo.FindByPersonID(ctx, ssoPerson.ID)
-			if err != nil || m == nil {
-				return nil, errors.New("anggota valid di SSO namun belum terdaftar sebagai anggota perpustakaan")
+
+			if existing != nil {
+				existing.PersonID = &personID
+				if existing.FullName == "" {
+					existing.FullName = ssoPerson.FullName
+				}
+				_ = u.repo.Update(ctx, existing)
+				return existing, nil
 			}
-			return m, nil
+
+			// JIT Auto-Enrollment anggota perpustakaan
+			ident := ssoPerson.NISN
+			if ident == "" {
+				ident = ssoPerson.NIP
+			}
+			memberCode := "MBR-" + ident
+			if ident == "" {
+				memberCode = "MBR-" + ssoPerson.ID[:8]
+			}
+			address := "Warga Sekolah"
+			limit := 3
+			if ssoPerson.PersonType == "GURU" {
+				address = "Guru Pengajar"
+				limit = 5
+			} else if ssoPerson.ClassName != "" {
+				address = "Kelas " + ssoPerson.ClassName
+			}
+
+			newMember := &domain.Member{
+				ID:             "mbr-" + ssoPerson.ID,
+				PersonID:       &personID,
+				MemberCode:     memberCode,
+				FullName:       ssoPerson.FullName,
+				IdentityNumber: ident,
+				Email:          ssoPerson.Email,
+				Phone:          ssoPerson.Phone,
+				Address:        address,
+				MaxBorrowLimit: limit,
+				IsActive:       true,
+				CreatedAt:      time.Now(),
+				UpdatedAt:      time.Now(),
+			}
+
+			if storeErr := u.repo.Store(ctx, newMember); storeErr == nil {
+				return newMember, nil
+			}
 		}
 	}
 
-	m, err := u.repo.FindByCode(ctx, code)
-	if err != nil {
-		return nil, err
-	}
-	if m == nil {
-		return nil, errors.New("anggota tidak ditemukan")
-	}
-	return m, nil
+	return nil, errors.New("anggota perpustakaan tidak ditemukan")
 }

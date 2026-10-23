@@ -23,30 +23,79 @@ func (u *loanUseCase) Borrow(ctx context.Context, req domain.BorrowRequest) (*do
 	// 1. Validasi Anggota
 	var member *memberDomain.Member
 	var err error
+	cleanBarcode := strings.TrimSpace(req.MemberBarcode)
 
-	// Coba resolve via SSO jika barcode berformat SSO (PRAMBON-*)
-	if strings.HasPrefix(req.MemberBarcode, "PRAMBON-") || len(req.MemberBarcode) > 20 {
-		if u.ssoClient != nil {
-			ssoPerson, ssoErr := u.ssoClient.ResolveBarcode(ctx, req.MemberBarcode)
-			if ssoErr != nil || ssoPerson == nil {
-				return nil, errors.New("barcode anggota tidak valid, tidak aktif, atau sudah dicabut di SSO")
+	// Coba cari di database lokal terlebih dahulu (by member_code, identity_number, id, person_id)
+	member, err = u.memberRepo.FindByCode(ctx, cleanBarcode)
+	if err != nil || member == nil {
+		member, _ = u.memberRepo.FindByID(ctx, cleanBarcode)
+	}
+
+	// Jika tidak ditemukan secara lokal, resolve via SSO (sumber kebenaran tunggal untuk civitas & barcode token)
+	if member == nil && u.ssoClient != nil {
+		ssoPerson, ssoErr := u.ssoClient.ResolveBarcode(ctx, cleanBarcode)
+		if ssoErr == nil && ssoPerson != nil && ssoPerson.IsActive {
+			personID := ssoPerson.ID
+			existing, _ := u.memberRepo.FindByPersonID(ctx, personID)
+			if existing == nil {
+				ident := ssoPerson.NISN
+				if ident == "" {
+					ident = ssoPerson.NIP
+				}
+				if ident != "" {
+					existing, _ = u.memberRepo.FindByCode(ctx, ident)
+				}
 			}
-			member, _ = u.memberRepo.FindByPersonID(ctx, ssoPerson.ID)
-			if member == nil {
-				return nil, errors.New("anggota valid di SSO namun belum terdaftar sebagai anggota perpustakaan")
+
+			if existing != nil {
+				existing.PersonID = &personID
+				if existing.FullName == "" {
+					existing.FullName = ssoPerson.FullName
+				}
+				_ = u.memberRepo.Update(ctx, existing)
+				member = existing
+			} else {
+				// JIT Auto-Enrollment anggota perpustakaan
+				ident := ssoPerson.NISN
+				if ident == "" {
+					ident = ssoPerson.NIP
+				}
+				memberCode := "MBR-" + ident
+				if ident == "" {
+					memberCode = "MBR-" + ssoPerson.ID[:8]
+				}
+				address := "Warga Sekolah"
+				limit := 3
+				if ssoPerson.PersonType == "GURU" {
+					address = "Guru Pengajar"
+					limit = 5
+				} else if ssoPerson.ClassName != "" {
+					address = "Kelas " + ssoPerson.ClassName
+				}
+
+				newMember := &memberDomain.Member{
+					ID:             "mbr-" + ssoPerson.ID,
+					PersonID:       &personID,
+					MemberCode:     memberCode,
+					FullName:       ssoPerson.FullName,
+					IdentityNumber: ident,
+					Email:          ssoPerson.Email,
+					Phone:          ssoPerson.Phone,
+					Address:        address,
+					MaxBorrowLimit: limit,
+					IsActive:       true,
+					CreatedAt:      time.Now(),
+					UpdatedAt:      time.Now(),
+				}
+				if storeErr := u.memberRepo.Store(ctx, newMember); storeErr == nil {
+					member = newMember
+				}
 			}
 		}
 	}
 
 	if member == nil {
-		member, err = u.memberRepo.FindByCode(ctx, req.MemberBarcode)
-		if err != nil || member == nil {
-			// Try finding by ID
-			member, err = u.memberRepo.FindByID(ctx, req.MemberBarcode)
-			if err != nil || member == nil {
-				return nil, errors.New("anggota dengan barcode/kode tersebut tidak terdaftar")
-			}
-		}
+		return nil, errors.New("anggota dengan barcode/kode tersebut tidak terdaftar atau barcode tidak valid di sistem sekolah")
 	}
 	if !member.IsActive {
 		return nil, errors.New("status keanggotaan sedang tidak aktif")
