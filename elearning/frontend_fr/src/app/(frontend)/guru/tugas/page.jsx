@@ -20,13 +20,16 @@ export default function TeacherAssignmentsManagementPage() {
 
   // Form State Create Assignment
   const [title, setTitle] = useState('');
-  const [subject, setSubject] = useState('Matematika');
-  const [subjectCode, setSubjectCode] = useState('MAT');
-  const [className, setClassName] = useState('7A');
+  const [subject, setSubject] = useState('');
+  const [subjectCode, setSubjectCode] = useState('');
+  const [className, setClassName] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [maxScore, setMaxScore] = useState(100);
   const [description, setDescription] = useState('');
   const [attachmentUrl, setAttachmentUrl] = useState('');
+  const [attachmentName, setAttachmentName] = useState('');
+  const [attachmentSize, setAttachmentSize] = useState('');
+  const [externalLink, setExternalLink] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Grading State
@@ -76,16 +79,44 @@ export default function TeacherAssignmentsManagementPage() {
     }
   };
 
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 15 * 1024 * 1024) {
+      alert('Ukuran berkas melebihi batas maksimal 15MB!');
+      return;
+    }
+
+    setAttachmentName(file.name);
+    setAttachmentSize((file.size / 1024).toFixed(1) + ' KB');
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setAttachmentUrl(event.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveFile = () => {
+    setAttachmentUrl('');
+    setAttachmentName('');
+    setAttachmentSize('');
+  };
+
   const handleOpenCreateModal = () => {
-    const defaultSubj = subjects[0] || { name: 'Informatika', code: 'INF' };
+    const defaultSubj = subjects[0] || { name: '', code: '' };
     setTitle('');
-    setSubject(defaultSubj.name);
-    setSubjectCode(defaultSubj.code);
-    setClassName(classes[0]?.name || '9A');
+    setSubject(defaultSubj.name || '');
+    setSubjectCode(defaultSubj.code || '');
+    setClassName(classes[0]?.name || '');
     setDueDate(new Date(Date.now() + 1000 * 60 * 60 * 24 * 5).toISOString().slice(0, 16));
     setMaxScore(100);
     setDescription('');
     setAttachmentUrl('');
+    setAttachmentName('');
+    setAttachmentSize('');
+    setExternalLink('');
     setIsCreateModalOpen(true);
   };
 
@@ -95,19 +126,27 @@ export default function TeacherAssignmentsManagementPage() {
       alert('Judul tugas wajib diisi!');
       return;
     }
+    if (!subject) {
+      alert('Mata pelajaran wajib dipilih!');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
+      const finalAttachmentUrl = attachmentUrl || externalLink.trim() || null;
       await elearningApi.createAssignment({
-        title,
+        title: title.trim(),
         subject,
         subjectCode,
         className,
+        teacherId: user?.id || null,
         teacherName: user?.fullName || user?.full_name || 'Bapak/Ibu Guru',
         dueDate: new Date(dueDate).toISOString(),
         maxScore: Number(maxScore) || 100,
-        description,
-        attachmentUrl: attachmentUrl || null,
+        description: description.trim(),
+        attachmentUrl: finalAttachmentUrl,
+        attachmentName: attachmentName || (externalLink ? 'Tautan Tambahan' : null),
+        attachmentSize: attachmentSize || null,
         totalStudents: 32,
       });
       setIsCreateModalOpen(false);
@@ -121,32 +160,11 @@ export default function TeacherAssignmentsManagementPage() {
 
   const handleOpenGrading = async (assignment) => {
     setActiveGradingAssignment(assignment);
-    const list = await elearningApi.getSubmissions(assignment.id);
-    if (list && list.length > 0) {
-      setSubmissionsList(list);
-    } else {
-      setSubmissionsList([
-        {
-          id: 'sub-01',
-          studentName: 'Ahmad Raihan Pratama',
-          submittedAt: '2026-10-20T09:15:00Z',
-          notes: 'Sudah mengerjakan 10 soal di lembar kerja sesuai instruksi.',
-          fileUrl: '/docs/jawaban-ahmad.pdf',
-          score: 90,
-          feedback: 'Penyelesaian aljabar sangat rapi dan teliti.',
-          status: 'GRADED',
-        },
-        {
-          id: 'sub-02',
-          studentName: 'Anindya Putri Kirana',
-          submittedAt: '2026-10-20T10:30:00Z',
-          notes: 'Tugas matematika bab 1 terlampir via Google Drive.',
-          fileUrl: 'https://drive.google.com/sample',
-          score: null,
-          feedback: '',
-          status: 'SUBMITTED',
-        },
-      ]);
+    try {
+      const list = await elearningApi.getSubmissions(assignment.id);
+      setSubmissionsList(Array.isArray(list) ? list : []);
+    } catch {
+      setSubmissionsList([]);
     }
   };
 
@@ -286,21 +304,27 @@ export default function TeacherAssignmentsManagementPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-bold text-neutral-800">Mata Pelajaran</label>
-              <select
-                value={subject}
-                onChange={(e) => {
-                  setSubject(e.target.value);
-                  const matched = subjects.find((s) => s.name === e.target.value);
-                  setSubjectCode(matched?.code || 'MAPEL');
-                }}
-                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
-              >
-                {subjects.map((s) => (
-                  <option key={s.id || s.code} value={s.name}>
-                    {s.name} ({s.code})
-                  </option>
-                ))}
-              </select>
+              {subjects.length === 0 ? (
+                <div className="p-2.5 rounded-[8px] bg-amber-50 border border-amber-200 text-[11px] text-amber-800 leading-snug">
+                  ⚠️ Akun Anda belum memiliki mata pelajaran pengampu yang diatur oleh Administrator di SSO / e-Rapor.
+                </div>
+              ) : (
+                <select
+                  value={subject}
+                  onChange={(e) => {
+                    setSubject(e.target.value);
+                    const matched = subjects.find((s) => s.name === e.target.value);
+                    setSubjectCode(matched?.code || 'MAPEL');
+                  }}
+                  className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
+                >
+                  {subjects.map((s) => (
+                    <option key={s.id || s.code} value={s.name}>
+                      {s.name} ({s.code})
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div className="space-y-1">
@@ -308,7 +332,8 @@ export default function TeacherAssignmentsManagementPage() {
               <select
                 value={className}
                 onChange={(e) => setClassName(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white"
+                disabled={subjects.length === 0}
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white disabled:bg-neutral-100 disabled:text-neutral-400"
               >
                 {classes.map((cls) => (
                   <option key={cls.id || cls.name} value={cls.name}>
@@ -352,6 +377,71 @@ export default function TeacherAssignmentsManagementPage() {
             />
           </div>
 
+          {/* Upload Berkas / Lembar Kerja Guru */}
+          <div className="space-y-2 p-3.5 rounded-xl bg-neutral-50 border border-neutral-200">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-neutral-800 flex items-center gap-1.5">
+                <span>📎</span>
+                <span>Upload Berkas / Lembar Kerja (LKPD / PDF / Dokumen)</span>
+              </label>
+              <span className="text-[10px] text-neutral-500 font-medium">Maks. 15MB</span>
+            </div>
+
+            {attachmentUrl ? (
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-white border border-primary-200 shadow-2xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="text-2xl">📑</span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-neutral-900 truncate">
+                      {attachmentName || 'Berkas Terlampir'}
+                    </p>
+                    <p className="text-[10px] text-neutral-500">
+                      {attachmentSize || 'Siap diunduh siswa'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemoveFile}
+                  className="text-xs text-danger-600 hover:text-danger-800 font-bold px-2 py-1 rounded hover:bg-danger-50 transition-colors"
+                >
+                  ✕ Hapus Berkas
+                </button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-neutral-300 hover:border-primary-400 rounded-lg bg-white cursor-pointer transition-colors group">
+                <svg className="w-6 h-6 text-neutral-400 group-hover:text-primary-500 mb-1 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <p className="text-xs font-semibold text-neutral-700 group-hover:text-primary-600">
+                  Klik untuk pilih berkas dari komputer / HP
+                </p>
+                <p className="text-[10px] text-neutral-400 mt-0.5">
+                  Mendukung PDF, Word (DOC/DOCX), Excel, PPT, Gambar, atau ZIP
+                </p>
+                <input
+                  type="file"
+                  onChange={handleFileUpload}
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.zip"
+                  className="hidden"
+                />
+              </label>
+            )}
+
+            <div className="pt-1 space-y-1">
+              <label className="text-[11px] font-semibold text-neutral-600">
+                Atau cantumkan tautan eksternal (Google Drive / Canva / YouTube):
+              </label>
+              <Input
+                type="url"
+                placeholder="https://drive.google.com/file/d/... atau https://canva.com/..."
+                value={externalLink}
+                onChange={(e) => setExternalLink(e.target.value)}
+                className="text-xs"
+              />
+            </div>
+          </div>
+
           <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2 pt-3 border-t border-neutral-100">
             <Button
               type="button"
@@ -369,6 +459,7 @@ export default function TeacherAssignmentsManagementPage() {
               size="md"
               className="w-full sm:w-auto min-h-[42px] font-bold"
               loading={isSubmitting}
+              disabled={isSubmitting || subjects.length === 0}
             >
               Simpan & Terbitkan Tugas
             </Button>
@@ -384,7 +475,11 @@ export default function TeacherAssignmentsManagementPage() {
           setSelectedSub(null);
         }}
         title="Pemeriksaan & Penilaian Tugas Siswa"
-        subtitle={activeGradingAssignment ? `${activeGradingAssignment.title} (${activeGradingAssignment.subject})` : ''}
+        subtitle={
+          activeGradingAssignment
+            ? `${activeGradingAssignment.title} (${activeGradingAssignment.subject || activeGradingAssignment.subjectName || 'Mata Pelajaran'}) - Kelas ${activeGradingAssignment.className || '-'}`
+            : ''
+        }
         size="lg"
       >
         <div className="space-y-4">
@@ -400,25 +495,54 @@ export default function TeacherAssignmentsManagementPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100">
-                {submissionsList.map((sub) => (
-                  <tr key={sub.id} className="hover:bg-neutral-50/80">
-                    <td className="py-2.5 px-3 font-semibold text-neutral-900">{sub.studentName}</td>
-                    <td className="py-2.5 px-3 text-neutral-500">
-                      {new Date(sub.submittedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+                {submissionsList.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-10 text-center">
+                      <div className="flex flex-col items-center justify-center space-y-1.5 text-neutral-400">
+                        <span className="text-3xl">📭</span>
+                        <p className="text-xs font-bold text-neutral-700">Belum Ada Pengumpulan Tugas</p>
+                        <p className="text-[11px] text-neutral-400 max-w-sm">
+                          Siswa di Kelas {activeGradingAssignment?.className || ''} belum ada yang mengumpulkan lembar jawaban untuk tugas ini.
+                        </p>
+                      </div>
                     </td>
-                    <td className="py-2.5 px-3">
-                      <p className="text-[11px] text-neutral-600 line-clamp-1">{sub.notes}</p>
-                    </td>
-                    <td className="py-2.5 px-3 text-center">
-                      {sub.score !== null ? (
-                        <span className="font-bold text-success-600 bg-success-50 px-2 py-0.5 rounded-[999px]">
-                          {sub.score} Poin
-                        </span>
-                      ) : (
-                        <span className="text-neutral-400 font-medium">Belum Dinilai</span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-3 text-right">
+                  </tr>
+                ) : (
+                  submissionsList.map((sub) => (
+                    <tr key={sub.id} className="hover:bg-neutral-50/80">
+                      <td className="py-2.5 px-3 font-semibold text-neutral-900">
+                        {sub.studentName}
+                        {sub.nisn && <span className="block text-[10px] text-neutral-400 font-normal">NISN: {sub.nisn}</span>}
+                      </td>
+                      <td className="py-2.5 px-3 text-neutral-500">
+                        {sub.submittedAt
+                          ? `${new Date(sub.submittedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB`
+                          : '-'}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <p className="text-[11px] text-neutral-700 line-clamp-2">{sub.notes || '-'}</p>
+                        {sub.fileUrl && (
+                          <a
+                            href={sub.fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            download={sub.fileName || 'berkas-tugas-siswa'}
+                            className="inline-flex items-center gap-1 text-[11px] text-primary-600 hover:text-primary-800 font-bold mt-1 bg-primary-50 px-2 py-0.5 rounded border border-primary-100"
+                          >
+                            📎 {sub.fileName || 'Unduh / Lihat Berkas Siswa'}
+                          </a>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        {sub.score !== null && sub.score !== undefined ? (
+                          <span className="font-bold text-success-700 bg-success-50 border border-success-200 px-2.5 py-0.5 rounded-[999px]">
+                            {sub.score} Poin
+                          </span>
+                        ) : (
+                          <span className="text-neutral-400 font-medium">Belum Dinilai</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
                       <Button
                         variant="primary"
                         size="xs"

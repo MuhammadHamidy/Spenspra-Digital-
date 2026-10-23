@@ -19,6 +19,7 @@ export default function StudentAssignmentsPage() {
   // Submission Form State
   const [submissionNotes, setSubmissionNotes] = useState('');
   const [submissionFile, setSubmissionFile] = useState('');
+  const [submissionFileName, setSubmissionFileName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
@@ -52,23 +53,41 @@ export default function StudentAssignmentsPage() {
     setSelectedAssignment(item);
     setSubmissionNotes('');
     setSubmissionFile('');
+    setSubmissionFileName('');
     setSuccessMessage('');
+  };
+
+  const handleStudentFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert('Ukuran berkas melebihi batas maksimal 15MB!');
+      return;
+    }
+    setSubmissionFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setSubmissionFile(event.target.result);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!submissionNotes.trim() && !submissionFile.trim()) {
-      alert('Harap isi catatan pengerjaan atau cantumkan tautan/nama berkas tugas!');
+      alert('Harap isi catatan pengerjaan atau unggah berkas tugas Anda!');
       return;
     }
 
     setIsSubmitting(true);
     try {
       await elearningApi.submitAssignment(selectedAssignment.id, {
-        studentId: user?.id || 'std-demo',
+        studentId: user?.id || user?.person_id || 'std-spenspra',
         studentName: user?.fullName || user?.full_name || 'Siswa Spenspra',
+        nisn: user?.nisn || user?.username || '',
         notes: submissionNotes,
         fileUrl: submissionFile,
+        fileName: submissionFileName || 'Berkas Jawaban',
       });
       setSuccessMessage('Tugas berhasil dikumpulkan ke guru pengampu!');
       setTimeout(() => {
@@ -195,12 +214,17 @@ export default function StudentAssignmentsPage() {
 
                 <div className="shrink-0 flex items-center gap-2">
                   {item.attachmentUrl && (
-                    <a href={item.attachmentUrl} target="_blank" rel="noreferrer">
+                    <a
+                      href={item.attachmentUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      download={item.attachmentName || 'lembar-kerja'}
+                    >
                       <Button variant="outline" size="sm">
                         <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                         </svg>
-                        Lembar Kerja
+                        {item.attachmentName ? `Unduh: ${item.attachmentName}` : 'Lembar Kerja'}
                       </Button>
                     </a>
                   )}
@@ -227,7 +251,11 @@ export default function StudentAssignmentsPage() {
         isOpen={Boolean(selectedAssignment)}
         onClose={() => !isSubmitting && setSelectedAssignment(null)}
         title="Pengumpulan Lembar Tugas"
-        subtitle={selectedAssignment ? `${selectedAssignment.title} (${selectedAssignment.subject})` : ''}
+        subtitle={
+          selectedAssignment
+            ? `${selectedAssignment.title} (${selectedAssignment.subject || selectedAssignment.subjectName || 'Mata Pelajaran'})`
+            : ''
+        }
         size="md"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -245,7 +273,7 @@ export default function StudentAssignmentsPage() {
               Catatan / Jawaban Teks Singkat
             </label>
             <textarea
-              rows={4}
+              rows={3}
               placeholder="Tuliskan jawaban atau catatan untuk guru mengenai pengerjaan tugas Anda di sini..."
               value={submissionNotes}
               onChange={(e) => setSubmissionNotes(e.target.value)}
@@ -253,20 +281,64 @@ export default function StudentAssignmentsPage() {
             />
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-neutral-800">
-              Lampiran Tautan / Berkas Drive (Opsional)
+          <div className="space-y-2 p-3 rounded-xl bg-neutral-50 border border-neutral-200">
+            <label className="text-xs font-bold text-neutral-800 flex items-center justify-between">
+              <span>📎 Upload Berkas Jawaban / Foto Catatan</span>
+              <span className="text-[10px] text-neutral-500 font-normal">Maks. 15MB</span>
             </label>
-            <Input
-              type="text"
-              placeholder="Contoh: https://drive.google.com/... atau Nama_File.pdf"
-              value={submissionFile}
-              onChange={(e) => setSubmissionFile(e.target.value)}
-              className="text-xs"
-            />
-            <p className="text-[11px] text-neutral-400">
-              Anda dapat mengunggah dokumen PDF, foto catatan, atau menyertakan tautan Google Drive / Canva.
-            </p>
+
+            {submissionFileName ? (
+              <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-primary-200">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xl">📄</span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-neutral-900 truncate">{submissionFileName}</p>
+                    <p className="text-[10px] text-success-600 font-medium">Siap dikirim</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSubmissionFile('');
+                    setSubmissionFileName('');
+                  }}
+                  className="text-xs text-danger-600 hover:text-danger-800 font-bold px-2 py-1"
+                >
+                  ✕ Hapus
+                </button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center p-3.5 border-2 border-dashed border-neutral-300 hover:border-primary-400 rounded-lg bg-white cursor-pointer transition-colors group">
+                <svg className="w-5 h-5 text-neutral-400 group-hover:text-primary-500 mb-1 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <p className="text-xs font-semibold text-neutral-700 group-hover:text-primary-600">
+                  Pilih file PDF / Dokumen / Foto Jawaban
+                </p>
+                <input
+                  type="file"
+                  onChange={handleStudentFileUpload}
+                  accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.zip"
+                  className="hidden"
+                />
+              </label>
+            )}
+
+            <div className="pt-1 space-y-1">
+              <label className="text-[11px] font-semibold text-neutral-600">
+                Atau cantumkan tautan Google Drive / Canva:
+              </label>
+              <Input
+                type="text"
+                placeholder="Contoh: https://drive.google.com/..."
+                value={submissionFile.startsWith('data:') ? '' : submissionFile}
+                onChange={(e) => {
+                  setSubmissionFile(e.target.value);
+                  setSubmissionFileName(e.target.value ? 'Tautan Eksternal' : '');
+                }}
+                className="text-xs"
+              />
+            </div>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-100">
