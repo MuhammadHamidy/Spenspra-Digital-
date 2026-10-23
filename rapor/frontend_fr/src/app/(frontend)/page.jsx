@@ -85,16 +85,54 @@ export default function MainPage() {
         }
 
         if (isTeacher && clsRes?.success && Array.isArray(clsRes.data)) {
+          const myId = currentUser.id;
+          const myNip = currentUser.nimNip || currentUser.nip || '';
           const myName = (currentUser.fullName || currentUser.full_name || '').toLowerCase();
+
+          // 1. Dapatkan kelas dan mapel yang benar-benar ditugaskan ke guru ini
           const filtered = clsRes.data.filter((c) =>
-            c.dosen_id === currentUser.id ||
-            c.teacher_id === currentUser.id ||
+            c.dosen_id === myId ||
+            c.teacher_id === myId ||
             (myName && c.teacher_name && c.teacher_name.toLowerCase().includes(myName)) ||
-            (currentUser.nimNip && (c.dosen_id?.includes(currentUser.nimNip) || c.teacher_nip?.includes(currentUser.nimNip)))
+            (myNip && (c.dosen_id?.includes(myNip) || c.teacher_nip?.includes(myNip)))
           );
 
-          const tClasses = new Set(filtered.map((c) => (c.class_code || c.name || '').replace(/^Kelas\s*/i, '').trim()).filter(Boolean));
-          const tSubjects = new Set(filtered.map((c) => (c.course_code || c.course_id || '').toLowerCase().trim()).filter(Boolean));
+          const tClasses = new Set();
+          const tSubjects = new Set();
+          const myTeachingPairs = new Set();
+
+          filtered.forEach((c) => {
+            const cName = (c.class_code || c.name || '').replace(/^Kelas\s*/i, '').trim();
+            const rawSub = (c.course_code || c.course_id || '').toLowerCase().trim();
+            if (cName) tClasses.add(cName);
+            if (rawSub) {
+              const cleanSub = rawSub.replace(/^crs-/, '');
+              tSubjects.add(cleanSub);
+              tSubjects.add(rawSub);
+              if (cName) {
+                myTeachingPairs.add(`${cName.toLowerCase()}__${cleanSub}`);
+                myTeachingPairs.add(`${cName.toLowerCase()}__${rawSub}`);
+              }
+            }
+          });
+
+          // 2. Jika guru pernah menginput nilai sebelumnya, sertakan subject & class yang diinputnya
+          if (allGradesRes?.success && Array.isArray(allGradesRes.data)) {
+            allGradesRes.data.forEach((g) => {
+              if (g.teacher_id && g.teacher_id === myId) {
+                const s = (g.subject_code || '').toLowerCase().trim();
+                const c = (g.class_name || '').replace(/^Kelas\s*/i, '').trim();
+                if (s) {
+                  tSubjects.add(s);
+                  tSubjects.add(s.replace(/^crs-/, ''));
+                }
+                if (c) tClasses.add(c);
+                if (s && c) {
+                  myTeachingPairs.add(`${c.toLowerCase()}__${s}`);
+                }
+              }
+            });
+          }
 
           let myWalas = currentUser.className || currentUser.class_name;
           if (Array.isArray(teachersRes)) {
@@ -111,7 +149,6 @@ export default function MainPage() {
 
           if (myWalas) {
             const cleanWalas = myWalas.replace(/^Kelas\s*/i, '').trim();
-            tClasses.add(cleanWalas);
             setWalasClass(cleanWalas);
           } else {
             setWalasClass(null);
@@ -122,15 +159,23 @@ export default function MainPage() {
           setTeacherClassCodes(classArray);
           setTeacherSubjectCodes(subjectArray);
 
+          // 3. Filter nilai HANYA untuk mata pelajaran dan kelas yang diampu guru ini
           if (allGradesRes?.success && Array.isArray(allGradesRes.data)) {
             const relevantGrades = allGradesRes.data.filter((g) => {
-              const gClass = (g.class_name || '').replace(/^Kelas\s*/i, '').trim();
+              if (g.score === null || g.score === undefined || Number(g.score) < 0) return false;
+              if (g.teacher_id && g.teacher_id === myId) return true;
+
+              const gClass = (g.class_name || '').replace(/^Kelas\s*/i, '').trim().toLowerCase();
               const gSub = (g.subject_code || '').toLowerCase().trim();
-              return (
-                classArray.includes(gClass) ||
-                subjectArray.includes(gSub) ||
-                g.teacher_id === currentUser.id
-              );
+              const cleanSub = gSub.replace(/^crs-/, '');
+
+              // Harus mapel yang diampu guru!
+              const isMySubject = tSubjects.has(gSub) || tSubjects.has(cleanSub);
+              if (!isMySubject) return false;
+
+              // Harus kelas yang diajar guru ini
+              const isMyClass = classArray.some((c) => c.toLowerCase() === gClass);
+              return isMyClass;
             });
             setTeacherGrades(relevantGrades);
           } else {
@@ -157,15 +202,44 @@ export default function MainPage() {
   // Perhitungan Data Murni (Scoped untuk Guru & Wali Kelas)
   // ──────────────────────────────────────────────────────────
   const rawClasses = useMemo(() => {
-    if (!serverSummary?.classes || !Array.isArray(serverSummary.classes)) return [];
-    let classesList = serverSummary.classes;
-    if (isTeacher && teacherClassCodes.length > 0) {
-      classesList = classesList.filter((c) => {
-        const cName = (c.class_name || '').replace(/^Kelas\s*/i, '').trim();
-        return teacherClassCodes.includes(cName);
+    if (isTeacher) {
+      if (!teacherGrades || teacherGrades.length === 0) return [];
+      const classMap = new Map();
+      teacherGrades.forEach((g) => {
+        const cName = (g.class_name || '').replace(/^Kelas\s*/i, '').trim();
+        if (!cName) return;
+        if (!classMap.has(cName)) {
+          classMap.set(cName, { name: cName, scores: [], belowKkm: 0 });
+        }
+        const item = classMap.get(cName);
+        const score = Number(g.score);
+        item.scores.push(score);
+        if (score < schoolKkm) {
+          item.belowKkm++;
+        }
       });
+
+      return Array.from(classMap.values())
+        .map((c) => {
+          const graded = c.scores.length;
+          const sum = c.scores.reduce((acc, val) => acc + val, 0);
+          const avg = graded > 0 ? Number((sum / graded).toFixed(1)) : 0;
+          const passed = Math.max(0, graded - c.belowKkm);
+          const level = c.name.charAt(0);
+          return {
+            name: c.name,
+            level,
+            graded,
+            belowKkm: c.belowKkm,
+            passed,
+            avg,
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
     }
-    return classesList.map((c) => {
+
+    if (!serverSummary?.classes || !Array.isArray(serverSummary.classes)) return [];
+    return serverSummary.classes.map((c) => {
       const graded = Number(c.graded_count) || 0;
       const belowKkm = Number(c.below_kkm) || 0;
       const passed = Math.max(0, graded - belowKkm);
@@ -181,7 +255,7 @@ export default function MainPage() {
         avg,
       };
     });
-  }, [serverSummary, isTeacher, teacherClassCodes]);
+  }, [serverSummary, isTeacher, teacherGrades, schoolKkm]);
 
   const filteredClasses = useMemo(() => {
     if (levelFilter === 'ALL') return rawClasses;
@@ -189,17 +263,36 @@ export default function MainPage() {
   }, [rawClasses, levelFilter]);
 
   const rawSubjects = useMemo(() => {
-    if (!serverSummary?.subjects || !Array.isArray(serverSummary.subjects)) return [];
-    let subjectsList = serverSummary.subjects;
-    if (isTeacher && teacherSubjectCodes.length > 0) {
-      subjectsList = subjectsList.filter((s) => {
-        const sCode = (s.subject_code || '').toLowerCase().trim();
-        return teacherSubjectCodes.some(
-          (tc) => tc === sCode || tc === `crs-${sCode}` || sCode.includes(tc)
-        );
+    if (isTeacher) {
+      if (!teacherGrades || teacherGrades.length === 0) return [];
+      const subMap = new Map();
+      teacherGrades.forEach((g) => {
+        const sCode = (g.subject_code || '').toLowerCase().trim();
+        const sName = g.subject_name || g.subject_code || 'Mata Pelajaran';
+        if (!sCode) return;
+        if (!subMap.has(sCode)) {
+          subMap.set(sCode, { code: sCode, name: sName, scores: [] });
+        }
+        subMap.get(sCode).scores.push(Number(g.score));
       });
+
+      return Array.from(subMap.values())
+        .map((s) => {
+          const graded = s.scores.length;
+          const sum = s.scores.reduce((acc, val) => acc + val, 0);
+          const avg = graded > 0 ? Number((sum / graded).toFixed(1)) : 0;
+          return {
+            code: s.code,
+            name: s.name,
+            avg,
+            graded,
+          };
+        })
+        .sort((a, b) => b.avg - a.avg);
     }
-    return [...subjectsList]
+
+    if (!serverSummary?.subjects || !Array.isArray(serverSummary.subjects)) return [];
+    return [...serverSummary.subjects]
       .map((s) => ({
         code: s.subject_code || '',
         name: s.subject_name || s.subject_code || 'Mata Pelajaran',
@@ -207,7 +300,7 @@ export default function MainPage() {
         graded: Number(s.graded_count) || 0,
       }))
       .sort((a, b) => b.avg - a.avg);
-  }, [serverSummary, isTeacher, teacherSubjectCodes]);
+  }, [serverSummary, isTeacher, teacherGrades]);
 
   // Metrik Sekolah / Scoped Guru
   const metrics = useMemo(() => {
@@ -295,28 +388,79 @@ export default function MainPage() {
 
   // Siswa Berprestasi & Remedial (Murni dari Backend / Scoped Guru)
   const topStudents = useMemo(() => {
-    if (!serverSummary?.top_students || !Array.isArray(serverSummary.top_students)) return [];
-    let list = serverSummary.top_students;
-    if (isTeacher && teacherClassCodes.length > 0) {
-      list = list.filter((s) => {
-        const cName = (s.class_name || '').replace(/^Kelas\s*/i, '').trim();
-        return teacherClassCodes.includes(cName);
+    if (isTeacher) {
+      if (!teacherGrades || teacherGrades.length === 0) return [];
+      const stuMap = new Map();
+      teacherGrades.forEach((g) => {
+        const sid = g.student_id || g.nisn || g.student_name;
+        if (!sid) return;
+        if (!stuMap.has(sid)) {
+          stuMap.set(sid, {
+            student_id: g.student_id,
+            nisn: g.nisn,
+            student_name: g.student_name,
+            class_name: (g.class_name || '').replace(/^Kelas\s*/i, '').trim(),
+            scores: [],
+          });
+        }
+        stuMap.get(sid).scores.push(Number(g.score));
       });
+
+      return Array.from(stuMap.values())
+        .map((s) => {
+          const sum = s.scores.reduce((acc, val) => acc + val, 0);
+          const avg = s.scores.length > 0 ? Number((sum / s.scores.length).toFixed(1)) : 0;
+          return {
+            ...s,
+            average_score: avg,
+          };
+        })
+        .sort((a, b) => b.average_score - a.average_score)
+        .slice(0, 5);
     }
-    return list.slice(0, 5);
-  }, [serverSummary, isTeacher, teacherClassCodes]);
+
+    if (!serverSummary?.top_students || !Array.isArray(serverSummary.top_students)) return [];
+    return serverSummary.top_students.slice(0, 5);
+  }, [serverSummary, isTeacher, teacherGrades]);
 
   const remedialStudents = useMemo(() => {
-    if (!serverSummary?.remedial_students || !Array.isArray(serverSummary.remedial_students)) return [];
-    let list = serverSummary.remedial_students;
-    if (isTeacher && teacherClassCodes.length > 0) {
-      list = list.filter((s) => {
-        const cName = (s.class_name || '').replace(/^Kelas\s*/i, '').trim();
-        return teacherClassCodes.includes(cName);
+    if (isTeacher) {
+      if (!teacherGrades || teacherGrades.length === 0) return [];
+      const belowList = teacherGrades.filter((g) => Number(g.score) >= 0 && Number(g.score) < schoolKkm);
+      const stuMap = new Map();
+      belowList.forEach((g) => {
+        const sid = g.student_id || g.nisn || g.student_name;
+        if (!sid) return;
+        const score = Number(g.score);
+        const subName = g.subject_name || g.subject_code || 'Mapel';
+        if (!stuMap.has(sid)) {
+          stuMap.set(sid, {
+            student_id: g.student_id,
+            nisn: g.nisn,
+            student_name: g.student_name,
+            class_name: (g.class_name || '').replace(/^Kelas\s*/i, '').trim(),
+            lowest_score: score,
+            subjects: [subName],
+          });
+        } else {
+          const item = stuMap.get(sid);
+          if (score < item.lowest_score) {
+            item.lowest_score = score;
+          }
+          if (!item.subjects.includes(subName)) {
+            item.subjects.push(subName);
+          }
+        }
       });
+
+      return Array.from(stuMap.values())
+        .sort((a, b) => a.lowest_score - b.lowest_score)
+        .slice(0, 5);
     }
-    return list.slice(0, 5);
-  }, [serverSummary, isTeacher, teacherClassCodes]);
+
+    if (!serverSummary?.remedial_students || !Array.isArray(serverSummary.remedial_students)) return [];
+    return serverSummary.remedial_students.slice(0, 5);
+  }, [serverSummary, isTeacher, teacherGrades, schoolKkm]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12">
