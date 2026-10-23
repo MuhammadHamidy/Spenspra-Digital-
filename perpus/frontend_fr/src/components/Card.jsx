@@ -1,97 +1,53 @@
 'use client';
 
 import React from 'react';
-import MuiCard from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import { styled } from '@mui/material/styles';
 
-const StyledCard = styled(MuiCard)(() => ({
-  backgroundColor: '#FFFFFF',
-  border: '1px solid #B3CFE5',
-  borderRadius: '20px',
-  boxShadow: '0 4px 20px -2px rgba(26, 61, 99, 0.08)',
-  transition: 'all 0.2s ease-in-out',
-  overflow: 'hidden',
-  '&:hover': {
-    boxShadow: '0 8px 30px -4px rgba(26, 61, 99, 0.12)',
-  },
-}));
-
-export default function Card({ title, subtitle, icon, action, children, className = '', contentSx = {} }) {
+/**
+ * Card — Sesuai standar DESIGN fix.md
+ * - Radius: 12px (LG)
+ * - Border: 1px neutral-300 (#E5E7EB)
+ * - Background: neutral-50 (#FFFFFF)
+ * - Shadow: MD
+ * - Title: Header 3 (20px / 700), text neutral-1000 (#172033)
+ */
+export default function Card({
+  title,
+  subtitle,
+  icon,
+  action,
+  children,
+  className = '',
+  interactive = false,
+}) {
   return (
-    <StyledCard className={className}>
+    <div
+      className={`bg-[var(--color-neutral-50,#FFFFFF)] border border-[var(--color-neutral-300,#E5E7EB)] rounded-[12px] shadow-[var(--shadow-md,0_4px_12px_rgba(23,32,51,0.08))] overflow-hidden transition-all duration-150 ${
+        interactive ? 'hover:border-[var(--color-primary-300,#B9B0D2)] hover:shadow-[var(--shadow-lg,0_12px_24px_rgba(23,32,51,0.12))]' : ''
+      } ${className}`}
+    >
       {(title || icon || action) && (
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            p: 3,
-            pb: children ? 1 : 3,
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-[var(--color-neutral-300,#E5E7EB)]">
+          <div className="flex items-center gap-3">
             {icon && (
-              <Box
-                sx={{
-                  p: 1.25,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  bgcolor: '#F6FAFD',
-                  color: '#1A3D63',
-                  border: '1px solid #B3CFE5',
-                  borderRadius: '14px',
-                  fontSize: '1.25rem',
-                }}
-              >
+              <div className="p-2 rounded-[8px] bg-[var(--color-primary-100,#EDEAF5)] text-[var(--color-primary-700,#3D2E66)] shrink-0">
                 {icon}
-              </Box>
+              </div>
             )}
-            <Box>
+            <div>
               {title && (
-                <Typography
-                  component="h3"
-                  sx={{
-                    fontSize: '1.125rem',
-                    fontWeight: 800,
-                    color: '#0A1931',
-                    lineHeight: 1.25,
-                  }}
-                >
+                <h3 className="text-[18px] sm:text-[20px] font-bold text-[var(--color-neutral-1000,#172033)] leading-tight">
                   {title}
-                </Typography>
+                </h3>
               )}
               {subtitle && (
-                <Typography
-                  variant="body2"
-                  sx={{
-                    fontSize: '0.8rem',
-                    color: '#4A7FA7',
-                    fontWeight: 600,
-                    mt: 0.25,
-                  }}
-                >
-                  {subtitle}
-                </Typography>
+                <p className="text-xs sm:text-sm text-[var(--color-neutral-700,#667085)] mt-0.5">{subtitle}</p>
               )}
-            </Box>
-          </Box>
-          {action && <Box>{action}</Box>}
-        </Box>
+            </div>
+          </div>
+          {action && <div>{action}</div>}
+        </div>
       )}
-      <CardContent
-        sx={{
-          p: (title || icon || action) ? 3 : 3,
-          pt: (title || icon || action) ? 1 : 3,
-          '&:last-child': { pb: 3 },
-          ...contentSx,
-        }}
-      >
-        {children}
-      </CardContent>
-    </StyledCard>
+      <div className="p-4 sm:p-5">{children}</div>
+    </div>
   );
 }

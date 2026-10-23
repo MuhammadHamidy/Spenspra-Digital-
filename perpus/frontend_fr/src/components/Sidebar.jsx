@@ -1,15 +1,17 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/features/auth/presentation/useAuth';
 import { useInactivityTimeout } from '@/hooks/useInactivityTimeout';
+import ConfirmModal from './ConfirmModal';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { logout } = useAuth();
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
 
   useInactivityTimeout(() => {
     logout();
@@ -129,8 +131,8 @@ export default function Sidebar() {
       {/* Logout Footer */}
       <div className="p-4 border-t border-slate-800/80">
         <button
-          onClick={logout}
-          className="w-full flex items-center justify-center gap-2.5 px-4 py-3 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-700 transition-colors shadow-sm cursor-pointer"
+          onClick={() => setIsLogoutConfirmOpen(true)}
+          className="w-full flex items-center justify-center gap-2.5 px-4 py-3 rounded-[8px] text-sm font-bold text-white bg-[var(--color-danger-500,#C0392B)] hover:bg-[var(--color-danger-800,#7D261E)] transition-colors shadow-sm cursor-pointer"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -138,6 +140,18 @@ export default function Sidebar() {
           <span>Keluar</span>
         </button>
       </div>
+
+      {/* Logout Confirmation Modal */}
+      <ConfirmModal
+        isOpen={isLogoutConfirmOpen}
+        title="Konfirmasi Keluar Sesi"
+        message="Apakah Anda yakin ingin keluar dari sistem Perpustakaan? Sesi aktif di peramban ini akan diakhiri."
+        confirmText="Ya, Keluar"
+        cancelText="Batal"
+        isDanger={true}
+        onConfirm={logout}
+        onCancel={() => setIsLogoutConfirmOpen(false)}
+      />
     </aside>
   );
 }

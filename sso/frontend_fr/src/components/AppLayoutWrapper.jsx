@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/features/auth/presentation/useAuth';
 import { getRole } from '@/lib/access/portalAccess';
 import Image from 'next/image';
 import { useInactivityTimeout } from '@/hooks/useInactivityTimeout';
+import ConfirmModal from './ConfirmModal';
 
 export default function AppLayoutWrapper({ children }) {
   const pathname = usePathname();
@@ -15,6 +16,7 @@ export default function AppLayoutWrapper({ children }) {
   const role = getRole(user);
   const isSuperAdmin = role === 'SUPER_ADMIN';
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
 
   // Pantau aktivitas & auto-logout setelah 15 menit idle
   useInactivityTimeout(() => {
@@ -58,11 +60,7 @@ export default function AppLayoutWrapper({ children }) {
             </div>
             <button
               type="button"
-              onClick={() => {
-                if (window.confirm('Keluar dari sesi SSO SMPN 1 Prambon?')) {
-                  logout();
-                }
-              }}
+              onClick={() => setIsLogoutConfirmOpen(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E5E7EB] bg-white text-[#C0392B] hover:bg-[#FFF9F8] hover:border-[#F1B4AC] text-xs font-semibold transition shadow-xs cursor-pointer"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -72,6 +70,17 @@ export default function AppLayoutWrapper({ children }) {
             </button>
           </div>
         </header>
+
+        <ConfirmModal
+          isOpen={isLogoutConfirmOpen}
+          title="Konfirmasi Keluar Sesi"
+          message="Keluar dari sesi portal SSO SMPN 1 Prambon? Seluruh sesi aktif akan diakhiri."
+          confirmText="Ya, Keluar"
+          cancelText="Batal"
+          isDanger={true}
+          onConfirm={logout}
+          onCancel={() => setIsLogoutConfirmOpen(false)}
+        />
 
         {/* Konten Utama Terpusat */}
         <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12">

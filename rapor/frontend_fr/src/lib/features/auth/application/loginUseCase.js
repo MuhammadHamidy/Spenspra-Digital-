@@ -25,6 +25,7 @@ export async function loginUseCase(username, password) {
       courseIds: result.account.course_ids || [],
       classCodes: result.account.class_codes || [],
       classIds: result.account.class_ids || [],
+      className: result.account.class_name || result.account.className || result.account.rombel || (result.account.class_codes?.[0] || ''),
       photoUrl: result.account.photo_url || '',
     });
 

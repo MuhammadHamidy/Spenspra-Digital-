@@ -290,52 +290,133 @@ export const elearningApi = {
 
   // =================== CBT E-UJIAN ===================
   getExams: async (params = {}) => {
-    const res = await fetchJson('/exams');
-    if (res.success && res.data) return res.data;
-    const local = getLocal('exams', INITIAL_EXAMS);
-    if (params.className) {
-      return local.filter((e) => !e.className || e.className === params.className);
+    const query = params.className ? `?class_name=${encodeURIComponent(params.className)}` : '';
+    const res = await fetchJson(`/exams${query}`);
+    const mapExamItem = (e) => {
+      const className = e.className || e.class_code || e.classCode || '';
+      const startDT = e.startDateTime || e.start_time || '';
+      const endDT = e.endDateTime || e.end_time || '';
+      let sDate = e.scheduledDate || '';
+      let sTime = e.startTime || '';
+      let eTime = e.endTime || '';
+      if (!sDate && startDT) sDate = startDT.split('T')[0];
+      if (!sTime && startDT && startDT.includes('T')) sTime = startDT.split('T')[1].slice(0, 5);
+      if (!eTime && endDT && endDT.includes('T')) eTime = endDT.split('T')[1].slice(0, 5);
+
+      return {
+        ...e,
+        className,
+        class_code: className,
+        subject: e.subject || e.course_name || e.courseName || '',
+        subjectCode: e.subjectCode || e.course_id || e.courseId || 'MAPEL',
+        durationMinutes: Number(e.durationMinutes || e.duration_minutes || 60),
+        teacherName: e.teacherName || e.teacher_name || 'Bapak/Ibu Guru',
+        token: (e.token || '').toUpperCase(),
+        startDateTime: startDT,
+        endDateTime: endDT,
+        scheduledDate: sDate || new Date().toISOString().split('T')[0],
+        startTime: sTime || '08:00',
+        endTime: eTime || '09:30',
+        maxViolations: Number(e.maxViolations || e.max_violations || 3),
+        status: e.status || 'UPCOMING',
+      };
+    };
+
+    if (res.success && Array.isArray(res.data)) {
+      return res.data.map(mapExamItem);
     }
-    return local;
+    const local = getLocal('exams', INITIAL_EXAMS);
+    const mappedLocal = local.map(mapExamItem);
+    if (params.className) {
+      return mappedLocal.filter((e) => e.className === params.className);
+    }
+    return mappedLocal;
   },
 
   getExamById: async (id) => {
     const res = await fetchJson(`/exams/${id}`);
-    if (res.success && res.data) return res.data;
+    if (res.success && res.data) {
+      const e = res.data;
+      const className = e.className || e.class_code || e.classCode || '';
+      return {
+        ...e,
+        className,
+        class_code: className,
+        subject: e.subject || e.course_name || e.courseName || '',
+        subjectCode: e.subjectCode || e.course_id || e.courseId || 'MAPEL',
+        durationMinutes: Number(e.durationMinutes || e.duration_minutes || 60),
+        teacherName: e.teacherName || e.teacher_name || 'Bapak/Ibu Guru',
+        token: (e.token || '').toUpperCase(),
+        startDateTime: e.startDateTime || e.start_time || '',
+        endDateTime: e.endDateTime || e.end_time || '',
+        scheduledDate: e.scheduledDate || (e.startDateTime ? e.startDateTime.split('T')[0] : (e.start_time ? String(e.start_time).split('T')[0] : '')),
+        startTime: e.startTime || (e.startDateTime ? e.startDateTime.split('T')[1]?.slice(0, 5) : '08:00'),
+        endTime: e.endTime || (e.endDateTime ? e.endDateTime.split('T')[1]?.slice(0, 5) : '09:30'),
+        maxViolations: Number(e.maxViolations || e.max_violations || 3),
+        status: e.status || 'UPCOMING',
+      };
+    }
     const local = getLocal('exams', INITIAL_EXAMS);
-    return local.find((e) => e.id === id) || null;
+    const found = local.find((e) => e.id === id);
+    if (!found) return null;
+    return {
+      ...found,
+      className: found.className || found.class_code || found.classCode || '',
+      subject: found.subject || found.course_name || found.courseName || '',
+      durationMinutes: Number(found.durationMinutes || found.duration_minutes || 60),
+    };
   },
 
   createExam: async (payload) => {
+    const enhancedPayload = {
+      ...payload,
+      class_code: payload.className || payload.class_code,
+      course_name: payload.subject || payload.course_name,
+      course_id: payload.subjectCode || payload.course_id || 'MAPEL',
+      duration_minutes: Number(payload.durationMinutes || payload.duration_minutes || 60),
+      teacher_name: payload.teacherName || payload.teacher_name || 'Bapak/Ibu Guru',
+      token: (payload.token || '').toUpperCase(),
+    };
     const res = await fetchJson('/exams', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(enhancedPayload),
     });
     const local = getLocal('exams', INITIAL_EXAMS);
     const newExam = {
-      id: `cbt-${Date.now()}`,
+      id: res.data?.id || `cbt-${Date.now()}`,
       createdAt: new Date().toISOString(),
-      status: 'ACTIVE',
+      status: payload.status || 'UPCOMING',
       isActive: true,
-      ...payload,
+      ...enhancedPayload,
+      className: enhancedPayload.class_code,
+      subject: enhancedPayload.course_name,
+      durationMinutes: enhancedPayload.duration_minutes,
+      teacherName: enhancedPayload.teacher_name,
     };
     setLocal('exams', [newExam, ...local]);
-    return res.success ? res.data : newExam;
+    return res.success && res.data ? res.data : newExam;
   },
 
   updateExam: async (id, payload) => {
-    fetchJson(`/exams/${id}`, {
+    const enhancedPayload = {
+      ...payload,
+      ...(payload.className ? { class_code: payload.className } : {}),
+      ...(payload.subject ? { course_name: payload.subject } : {}),
+      ...(payload.durationMinutes ? { duration_minutes: Number(payload.durationMinutes) } : {}),
+      ...(payload.teacherName ? { teacher_name: payload.teacherName } : {}),
+    };
+    await fetchJson(`/exams/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(enhancedPayload),
     }).catch(() => {});
     const local = getLocal('exams', INITIAL_EXAMS);
-    const updated = local.map((e) => (e.id === id ? { ...e, ...payload } : e));
+    const updated = local.map((e) => (e.id === id ? { ...e, ...enhancedPayload, className: enhancedPayload.class_code || e.className } : e));
     setLocal('exams', updated);
     return updated.find((e) => e.id === id) || null;
   },
 
   deleteExam: async (id) => {
-    fetchJson(`/exams/${id}`, { method: 'DELETE' }).catch(() => {});
+    await fetchJson(`/exams/${id}`, { method: 'DELETE' }).catch(() => {});
     const local = getLocal('exams', INITIAL_EXAMS);
     const filtered = local.filter((e) => e.id !== id);
     setLocal('exams', filtered);

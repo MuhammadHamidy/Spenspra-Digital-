@@ -2,6 +2,8 @@ package http
 
 import (
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/rapor/rapor-be/libraries/responses"
@@ -35,6 +37,8 @@ func (h *ELearningHandler) RegisterRoutes(app *fiber.App) {
 	api.Get("/exams", h.ListExams)
 	api.Post("/exams", h.CreateExam)
 	api.Get("/exams/:id", h.GetExamDetail)
+	api.Put("/exams/:id", h.UpdateExam)
+	api.Delete("/exams/:id", h.DeleteExam)
 	api.Get("/exams/:id/questions", h.GetExamQuestions)
 	api.Post("/exams/:id/questions", h.AddExamQuestion)
 
@@ -135,14 +139,195 @@ func (h *ELearningHandler) GradeSubmission(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(responses.Success(fiber.Map{"graded": true}, "Nilai tugas berhasil disimpan"))
 }
 
+type CBTExamInput struct {
+	ID                   string `json:"id"`
+	Title                string `json:"title"`
+	Subject              string `json:"subject"`
+	CourseName           string `json:"course_name"`
+	SubjectCode          string `json:"subjectCode"`
+	CourseID             string `json:"course_id"`
+	ClassName            string `json:"className"`
+	ClassCode            string `json:"class_code"`
+	TeacherName          string `json:"teacherName"`
+	TeacherNameSnake     string `json:"teacher_name"`
+	TeacherID            string `json:"teacherId"`
+	TeacherIDSnake       string `json:"teacher_id"`
+	Token                string `json:"token"`
+	DurationMinutes      int    `json:"durationMinutes"`
+	DurationMinutesSnake int    `json:"duration_minutes"`
+	MaxViolations        int    `json:"maxViolations"`
+	MaxViolationsSnake   int    `json:"max_violations"`
+	ScheduledDate        string `json:"scheduledDate"`
+	StartTime            string `json:"startTime"`
+	EndTime              string `json:"endTime"`
+	StartDateTime        string `json:"startDateTime"`
+	EndDateTime          string `json:"endDateTime"`
+	Description          string `json:"description"`
+	Status               string `json:"status"`
+}
+
+func (in *CBTExamInput) ToDomain() domain.CBTExam {
+	cls := strings.TrimSpace(in.ClassCode)
+	if cls == "" {
+		cls = strings.TrimSpace(in.ClassName)
+	}
+
+	cName := strings.TrimSpace(in.CourseName)
+	if cName == "" {
+		cName = strings.TrimSpace(in.Subject)
+	}
+	if cName == "" {
+		cName = "Matematika"
+	}
+
+	cID := strings.TrimSpace(in.CourseID)
+	if cID == "" {
+		cID = strings.TrimSpace(in.SubjectCode)
+	}
+	if cID == "" {
+		cID = "MAPEL"
+	}
+
+	tName := strings.TrimSpace(in.TeacherNameSnake)
+	if tName == "" {
+		tName = strings.TrimSpace(in.TeacherName)
+	}
+	if tName == "" {
+		tName = "Bapak/Ibu Guru"
+	}
+
+	tID := strings.TrimSpace(in.TeacherIDSnake)
+	if tID == "" {
+		tID = strings.TrimSpace(in.TeacherID)
+	}
+	if tID == "" {
+		tID = "guru-default"
+	}
+
+	dur := in.DurationMinutesSnake
+	if dur <= 0 {
+		dur = in.DurationMinutes
+	}
+	if dur <= 0 {
+		dur = 60
+	}
+
+	maxV := in.MaxViolationsSnake
+	if maxV <= 0 {
+		maxV = in.MaxViolations
+	}
+	if maxV <= 0 {
+		maxV = 3
+	}
+
+	stat := strings.ToUpper(strings.TrimSpace(in.Status))
+	if stat == "" {
+		stat = "UPCOMING"
+	}
+
+	parseTime := func(dtStr, dStr, tStr string) *time.Time {
+		if dtStr != "" {
+			for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02T15:04"} {
+				if t, err := time.ParseInLocation(layout, dtStr, time.Local); err == nil {
+					return &t
+				}
+			}
+		}
+		if dStr != "" && tStr != "" {
+			combined := dStr + "T" + tStr
+			for _, layout := range []string{"2006-01-02T15:04", "2006-01-02T15:04:05"} {
+				if t, err := time.ParseInLocation(layout, combined, time.Local); err == nil {
+					return &t
+				}
+			}
+		}
+		return nil
+	}
+
+	startT := parseTime(in.StartDateTime, in.ScheduledDate, in.StartTime)
+	endT := parseTime(in.EndDateTime, in.ScheduledDate, in.EndTime)
+
+	return domain.CBTExam{
+		ID:              in.ID,
+		Title:           strings.TrimSpace(in.Title),
+		ClassCode:       cls,
+		CourseName:      cName,
+		CourseID:        cID,
+		TeacherName:     tName,
+		TeacherID:       tID,
+		Token:           strings.ToUpper(strings.TrimSpace(in.Token)),
+		DurationMinutes: dur,
+		MaxViolations:   maxV,
+		StartTime:       startT,
+		EndTime:         endT,
+		Description:     strings.TrimSpace(in.Description),
+		Status:          stat,
+	}
+}
+
+func formatExamForFrontend(e domain.CBTExam) fiber.Map {
+	sDate := ""
+	sTime := ""
+	eTime := ""
+	sDateTime := ""
+	eDateTime := ""
+
+	if e.StartTime != nil {
+		sDateTime = e.StartTime.Format(time.RFC3339)
+		sDate = e.StartTime.Format("2006-01-02")
+		sTime = e.StartTime.Format("15:04")
+	}
+	if e.EndTime != nil {
+		eDateTime = e.EndTime.Format(time.RFC3339)
+		eTime = e.EndTime.Format("15:04")
+	}
+
+	return fiber.Map{
+		"id":               e.ID,
+		"title":            e.Title,
+		"class_code":       e.ClassCode,
+		"className":        e.ClassCode,
+		"course_name":      e.CourseName,
+		"subject":          e.CourseName,
+		"course_id":        e.CourseID,
+		"subjectCode":      e.CourseID,
+		"teacher_name":     e.TeacherName,
+		"teacherName":      e.TeacherName,
+		"teacher_id":       e.TeacherID,
+		"token":            e.Token,
+		"duration_minutes": e.DurationMinutes,
+		"durationMinutes":  e.DurationMinutes,
+		"max_violations":   e.MaxViolations,
+		"maxViolations":    e.MaxViolations,
+		"scheduledDate":    sDate,
+		"startTime":        sTime,
+		"endTime":          eTime,
+		"startDateTime":    sDateTime,
+		"endDateTime":      eDateTime,
+		"start_time":       sDateTime,
+		"end_time":         eDateTime,
+		"description":      e.Description,
+		"status":           e.Status,
+		"created_at":       e.CreatedAt,
+		"updated_at":       e.UpdatedAt,
+	}
+}
+
 // CBT Exams Handlers
 func (h *ELearningHandler) ListExams(c *fiber.Ctx) error {
 	classCode := c.Query("class_name")
+	if classCode == "" {
+		classCode = c.Query("class_code")
+	}
 	list, err := h.useCase.GetExams(c.Context(), classCode)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
 	}
-	return c.Status(http.StatusOK).JSON(responses.Success(list, "Daftar ujian CBT berhasil dimuat"))
+	formatted := make([]fiber.Map, len(list))
+	for i, ex := range list {
+		formatted[i] = formatExamForFrontend(ex)
+	}
+	return c.Status(http.StatusOK).JSON(responses.Success(formatted, "Daftar ujian CBT berhasil dimuat"))
 }
 
 func (h *ELearningHandler) GetExamDetail(c *fiber.Ctx) error {
@@ -151,18 +336,40 @@ func (h *ELearningHandler) GetExamDetail(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusNotFound).JSON(responses.Fail("NOT_FOUND", err.Error()))
 	}
-	return c.Status(http.StatusOK).JSON(responses.Success(exam, "Detail ujian dimuat"))
+	return c.Status(http.StatusOK).JSON(responses.Success(formatExamForFrontend(*exam), "Detail ujian dimuat"))
 }
 
 func (h *ELearningHandler) CreateExam(c *fiber.Ctx) error {
-	var req domain.CBTExam
-	if err := c.BodyParser(&req); err != nil {
+	var input CBTExamInput
+	if err := c.BodyParser(&input); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(responses.Fail("INVALID_PAYLOAD", err.Error()))
 	}
+	req := input.ToDomain()
 	if err := h.useCase.AddExam(c.Context(), &req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(responses.Fail("VALIDATION_ERROR", err.Error()))
 	}
-	return c.Status(http.StatusCreated).JSON(responses.Success(req, "Ujian CBT berhasil dibuat"))
+	return c.Status(http.StatusCreated).JSON(responses.Success(formatExamForFrontend(req), "Ujian CBT berhasil dibuat"))
+}
+
+func (h *ELearningHandler) UpdateExam(c *fiber.Ctx) error {
+	id := c.Params("id")
+	var input CBTExamInput
+	if err := c.BodyParser(&input); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(responses.Fail("INVALID_PAYLOAD", err.Error()))
+	}
+	req := input.ToDomain()
+	if err := h.useCase.UpdateExam(c.Context(), id, &req); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
+	}
+	return c.Status(http.StatusOK).JSON(responses.Success(formatExamForFrontend(req), "Ujian CBT berhasil diperbarui"))
+}
+
+func (h *ELearningHandler) DeleteExam(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if err := h.useCase.DeleteExam(c.Context(), id); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
+	}
+	return c.Status(http.StatusOK).JSON(responses.Success(fiber.Map{"deleted": true}, "Ujian CBT berhasil dihapus"))
 }
 
 func (h *ELearningHandler) GetExamQuestions(c *fiber.Ctx) error {

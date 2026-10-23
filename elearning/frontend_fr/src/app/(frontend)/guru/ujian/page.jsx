@@ -6,6 +6,7 @@ import Button from '@/components/Button';
 import Input from '@/components/Input';
 import Modal from '@/components/Modal';
 import StatusBadge from '@/components/StatusBadge';
+import ConfirmModal from '@/components/ConfirmModal';
 import { elearningApi } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
@@ -19,6 +20,15 @@ export default function TeacherExamsManagementPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingExamId, setEditingExamId] = useState(null);
   const [activeQuestionEditorExam, setActiveQuestionEditorExam] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Ya, Lanjutkan',
+    cancelText: 'Batal',
+    isDanger: true,
+    onConfirm: null,
+  });
 
   // Form State: Create / Edit Exam
   const [title, setTitle] = useState('');
@@ -222,29 +232,66 @@ export default function TeacherExamsManagementPage() {
       await elearningApi.updateExam(exam.id, { status: 'ACTIVE' });
       loadExams();
     } catch (err) {
-      alert('Gagal memulai ujian: ' + err.message);
+      console.error(err);
     }
   };
 
-  const handleEndExamNow = async (exam) => {
-    if (!confirm(`Selesaikan sesi ujian "${exam.title}" sekarang? Siswa tidak dapat mengirimkan jawaban lagi.`)) return;
-    try {
-      await elearningApi.updateExam(exam.id, { status: 'COMPLETED' });
-      loadExams();
-    } catch (err) {
-      alert('Gagal menyelesaikan ujian: ' + err.message);
-    }
+  const handleEndExamNow = (exam) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Tutup & Selesaikan Sesi Ujian?',
+      message: `Tutup sesi ujian "${exam.title}" sekarang? Siswa tidak akan dapat mengakses atau mengirimkan jawaban lagi.`,
+      confirmText: 'Ya, Tutup Ujian',
+      cancelText: 'Batal',
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          await elearningApi.updateExam(exam.id, { status: 'COMPLETED' });
+          await loadExams();
+        } catch (err) {
+          console.error(err);
+        }
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+      },
+    });
   };
 
-  const handleDeleteExam = async (examId, examTitle) => {
-    if (!confirm(`Hapus jadwal ujian "${examTitle}" beserta seluruh butir soalnya?`)) return;
-    try {
-      await elearningApi.deleteExam(examId);
-      loadExams();
-    } catch (err) {
-      alert('Gagal menghapus ujian: ' + err.message);
-    }
+  const handleDeleteExam = (examId, examTitle) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Hapus Jadwal Ujian?',
+      message: `Hapus jadwal ujian "${examTitle}" beserta seluruh butir soalnya? Tindakan ini tidak dapat dibatalkan.`,
+      confirmText: 'Ya, Hapus Ujian',
+      cancelText: 'Batal',
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          await elearningApi.deleteExam(examId);
+          await loadExams();
+        } catch (err) {
+          console.error(err);
+        }
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+      },
+    });
   };
+
+  const handleCloseQuestionEditor = () => {
+    setActiveQuestionEditorExam(null);
+    setEditingQuestionId(null);
+    resetQuestionForm();
+    loadExams();
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && activeQuestionEditorExam) {
+        handleCloseQuestionEditor();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeQuestionEditorExam]);
 
   const resetQuestionForm = () => {
     setEditingQuestionId(null);
@@ -374,19 +421,29 @@ export default function TeacherExamsManagementPage() {
     }
   };
 
-  const handleDeleteQuestion = async (qId) => {
-    if (!confirm('Hapus butir soal ini?')) return;
-    const filtered = examQuestions
-      .filter((q) => q.id !== qId)
-      .map((q, idx) => ({ ...q, questionNumber: idx + 1 }));
+  const handleDeleteQuestion = (qId) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Hapus Butir Soal?',
+      message: 'Hapus butir soal ini dari bank soal ujian?',
+      confirmText: 'Hapus Soal',
+      cancelText: 'Batal',
+      isDanger: true,
+      onConfirm: async () => {
+        const filtered = examQuestions
+          .filter((q) => q.id !== qId)
+          .map((q, idx) => ({ ...q, questionNumber: idx + 1 }));
 
-    setExamQuestions(filtered);
-    if (activeQuestionEditorExam?.id) {
-      await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, filtered);
-    }
-    if (editingQuestionId === qId) {
-      resetQuestionForm();
-    }
+        setExamQuestions(filtered);
+        if (activeQuestionEditorExam?.id) {
+          await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, filtered);
+        }
+        if (editingQuestionId === qId) {
+          resetQuestionForm();
+        }
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+      },
+    });
   };
 
   if (activeQuestionEditorExam) {
@@ -400,12 +457,9 @@ export default function TeacherExamsManagementPage() {
           <div className="flex items-start sm:items-center gap-3">
             <button
               type="button"
-              onClick={() => {
-                setActiveQuestionEditorExam(null);
-                loadExams();
-              }}
+              onClick={handleCloseQuestionEditor}
               className="p-2.5 rounded-xl border border-neutral-200 bg-neutral-50 hover:bg-neutral-100 text-neutral-700 font-bold text-xs flex items-center gap-1.5 transition-all hover:-translate-x-0.5 cursor-pointer shrink-0"
-              title="Kembali ke Daftar Ujian"
+              title="Kembali ke Daftar Ujian (Esc)"
             >
               <span>←</span>
               <span className="hidden sm:inline">Daftar Ujian</span>
@@ -416,17 +470,19 @@ export default function TeacherExamsManagementPage() {
                   Kelola Butir Soal: {activeQuestionEditorExam.title}
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-primary-50 text-primary-700 border border-primary-200">
-                  {activeQuestionEditorExam.subject}
+                  {activeQuestionEditorExam.subject || activeQuestionEditorExam.course_name || 'Mata Pelajaran'}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-[11px] text-neutral-500 font-medium">
                 <span className="bg-neutral-100 px-2 py-0.5 rounded font-semibold text-neutral-700">
-                  Kelas {activeQuestionEditorExam.className}
+                  Kelas {activeQuestionEditorExam.className || activeQuestionEditorExam.class_code || 'Semua'}
                 </span>
                 <span className="bg-amber-50 border border-amber-200 px-2 py-0.5 rounded font-mono font-bold text-amber-800">
                   Token: {activeQuestionEditorExam.token}
                 </span>
-                <span className="text-neutral-500">⏱️ {activeQuestionEditorExam.durationMinutes} Menit</span>
+                <span className="text-neutral-500">
+                  ⏱️ {activeQuestionEditorExam.durationMinutes || activeQuestionEditorExam.duration_minutes || 60} Menit
+                </span>
                 <span>•</span>
                 <span className="text-neutral-700 font-semibold">{examQuestions.length} Butir Soal ({mcqCount} PG, {essayCount} Esai)</span>
               </div>
@@ -437,10 +493,7 @@ export default function TeacherExamsManagementPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                setActiveQuestionEditorExam(null);
-                loadExams();
-              }}
+              onClick={handleCloseQuestionEditor}
               className="cursor-pointer font-bold"
             >
               ✓ Selesai & Kembali
@@ -937,10 +990,7 @@ export default function TeacherExamsManagementPage() {
                   variant="outline"
                   size="sm"
                   className="w-full font-bold cursor-pointer"
-                  onClick={() => {
-                    setActiveQuestionEditorExam(null);
-                    loadExams();
-                  }}
+                  onClick={handleCloseQuestionEditor}
                 >
                   ✓ Selesai & Simpan Semua
                 </Button>
@@ -948,6 +998,11 @@ export default function TeacherExamsManagementPage() {
             </Card>
           </div>
         </div>
+
+        <ConfirmModal
+          {...confirmModal}
+          onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+        />
       </div>
     );
   }
@@ -1069,7 +1124,7 @@ export default function TeacherExamsManagementPage() {
                               ▶ Mulai
                             </Button>
                           )}
-                          {currentStatus === 'ACTIVE' && (
+                          {(currentStatus === 'ACTIVE' || currentStatus === 'UPCOMING') && (
                             <Button
                               variant="outline"
                               size="xs"
@@ -1316,6 +1371,12 @@ export default function TeacherExamsManagementPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        {...confirmModal}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

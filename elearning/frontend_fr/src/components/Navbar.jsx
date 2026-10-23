@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 import ProfileModal from './ProfileModal';
+import ConfirmModal from './ConfirmModal';
 
 export default function Navbar({ onToggleMobileSidebar = () => {} }) {
   const router = useRouter();
@@ -15,6 +16,7 @@ export default function Navbar({ onToggleMobileSidebar = () => {} }) {
   // Profile menu state
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [modalTab, setModalTab] = useState('profile'); // 'profile' | 'password'
 
   const dropdownRef = useRef(null);
@@ -280,10 +282,13 @@ export default function Navbar({ onToggleMobileSidebar = () => {} }) {
                 <div className="pt-1.5 border-t border-slate-100 px-2">
                   <button
                     type="button"
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 font-medium transition cursor-pointer text-left text-xs"
+                    onClick={() => {
+                      setIsDropdownOpen(false);
+                      setIsLogoutConfirmOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[8px] text-danger-500 hover:bg-danger-50 font-medium transition cursor-pointer text-left text-xs"
                   >
-                    <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 text-danger-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                     </svg>
                     <span>Keluar (Logout)</span>
@@ -300,6 +305,18 @@ export default function Navbar({ onToggleMobileSidebar = () => {} }) {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         initialTab={modalTab}
+      />
+
+      {/* Logout Confirmation Modal */}
+      <ConfirmModal
+        isOpen={isLogoutConfirmOpen}
+        title="Konfirmasi Keluar Sesi"
+        message="Apakah Anda yakin ingin keluar dari sistem e-Learning? Seluruh sesi aktif di peramban ini akan diakhiri."
+        confirmText="Ya, Keluar"
+        cancelText="Batal"
+        isDanger={true}
+        onConfirm={handleLogout}
+        onCancel={() => setIsLogoutConfirmOpen(false)}
       />
     </>
   );

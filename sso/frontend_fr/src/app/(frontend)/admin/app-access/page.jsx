@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApiAdapter';
 import { schoolPeopleApi } from '@/lib/features/schoolPeopleApi';
+import ConfirmModal from '@/components/ConfirmModal';
 
 const APPS = [
   {
@@ -73,6 +74,15 @@ export default function AppAccessMatrixPage() {
 
   // Credential Modal State
   const [credentialModal, setCredentialModal] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Ya, Hapus',
+    cancelText: 'Batal',
+    isDanger: true,
+    onConfirm: null,
+  });
   const [sendingEmail, setSendingEmail] = useState(false);
   const [showPasswordInModal, setShowPasswordInModal] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
@@ -336,39 +346,42 @@ export default function AppAccessMatrixPage() {
   };
 
   // Hapus Akun & Master Terpadu
-  const handleDeleteUser = async (user) => {
+  const handleDeleteUser = (user) => {
     const name = user.fullName || user.username;
-    if (
-      !window.confirm(
-        `Hapus ${name}?\nTindakan ini menghapus akun login SSO, hak akses aplikasi, serta data master civitas terkait secara permanen.`
-      )
-    ) {
-      return;
-    }
-
-    try {
-      if (user.hasAccount) {
+    setConfirmModal({
+      isOpen: true,
+      title: `Hapus Akun & Data: ${name}`,
+      message: `Tindakan ini menghapus akun login SSO, hak akses aplikasi, serta data master civitas terkait secara permanen. Apakah Anda yakin?`,
+      confirmText: 'Ya, Hapus Permanen',
+      cancelText: 'Batal',
+      isDanger: true,
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
         try {
-          await accountApiAdapter.delete(user.id);
-        } catch (e) {
-          console.warn('Gagal hapus akun:', e.message);
-        }
-      }
+          if (user.hasAccount) {
+            try {
+              await accountApiAdapter.delete(user.id);
+            } catch (e) {
+              console.warn('Gagal hapus akun:', e.message);
+            }
+          }
 
-      if (user.person_id) {
-        try {
-          await schoolPeopleApi.delete(user.person_id);
-        } catch (e) {
-          console.warn('Gagal hapus person:', e.message);
-        }
-      }
+          if (user.person_id) {
+            try {
+              await schoolPeopleApi.delete(user.person_id);
+            } catch (e) {
+              console.warn('Gagal hapus person:', e.message);
+            }
+          }
 
-      setSavedNotice(`Seluruh data & akses ${name} berhasil dihapus dari sistem.`);
-      setTimeout(() => setSavedNotice(null), 3000);
-      loadUsers();
-    } catch (err) {
-      setErrorMessage(err.message || 'Gagal menghapus akun.');
-    }
+          setSavedNotice(`Seluruh data & akses ${name} berhasil dihapus dari sistem.`);
+          setTimeout(() => setSavedNotice(null), 3000);
+          loadUsers();
+        } catch (err) {
+          setErrorMessage(err.message || 'Gagal menghapus akun.');
+        }
+      },
+    });
   };
 
   // Pengiriman & Pengaturan Kredensial Langsung dari Akses Aplikasi
@@ -915,6 +928,12 @@ export default function AppAccessMatrixPage() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        {...confirmModal}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

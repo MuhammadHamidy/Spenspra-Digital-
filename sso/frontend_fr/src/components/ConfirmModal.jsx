@@ -3,7 +3,8 @@
 import React from 'react';
 
 /**
- * ConfirmModal — Modal konfirmasi modern pengganti window.confirm bawaan browser.
+ * ConfirmModal — Modal konfirmasi terpadu sesuai standar DESIGN fix.md.
+ * Menggantikan browser native alert() dan confirm().
  * 
  * Props:
  * - isOpen: boolean
@@ -30,19 +31,19 @@ export default function ConfirmModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-neutral-1000/50 backdrop-blur-xs animate-in fade-in duration-150">
       <div
-        className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden scale-100 animate-in zoom-in-95 duration-200"
+        className="w-full max-w-md bg-neutral-50 rounded-[16px] shadow-lg border border-neutral-300 overflow-hidden scale-100 animate-in zoom-in-95 duration-150"
         role="dialog"
         aria-modal="true"
       >
         <div className="p-6">
           <div className="flex items-start gap-4">
             <div
-              className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+              className={`w-12 h-12 rounded-[12px] flex items-center justify-center shrink-0 ${
                 isDanger
-                  ? 'bg-rose-100 text-rose-600'
-                  : 'bg-amber-100 text-amber-600'
+                  ? 'bg-danger-50 text-danger-500 border border-danger-300'
+                  : 'bg-accent-50 text-accent-800 border border-accent-300'
               }`}
             >
               {isDanger ? (
@@ -65,21 +66,21 @@ export default function ConfirmModal({
                 </svg>
               )}
             </div>
-            <div className="flex-1">
-              <h3 className="text-lg font-bold text-slate-800 leading-snug">{title}</h3>
-              <div className="mt-2 text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base sm:text-lg font-bold text-neutral-1000 leading-snug">{title}</h3>
+              <div className="mt-2 text-xs sm:text-sm text-neutral-700 leading-relaxed whitespace-pre-line">
                 {message}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-slate-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-slate-100">
+        <div className="bg-neutral-100 px-6 py-3.5 flex items-center justify-end gap-2.5 border-t border-neutral-300">
           <button
             type="button"
             disabled={isLoading}
             onClick={onCancel}
-            className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200/60 transition cursor-pointer disabled:opacity-50"
+            className="px-4 py-2 rounded-[8px] text-xs sm:text-sm font-semibold text-neutral-800 bg-neutral-50 border border-neutral-300 hover:bg-neutral-100 active:bg-neutral-300 transition shadow-sm cursor-pointer disabled:opacity-50"
           >
             {cancelText}
           </button>
@@ -87,14 +88,14 @@ export default function ConfirmModal({
             type="button"
             disabled={isLoading}
             onClick={onConfirm}
-            className={`px-5 py-2.5 rounded-xl text-sm font-semibold text-white shadow-md transition cursor-pointer flex items-center gap-2 disabled:opacity-50 ${
+            className={`px-4 py-2 rounded-[8px] text-xs sm:text-sm font-semibold text-neutral-50 transition shadow-sm cursor-pointer flex items-center gap-1.5 disabled:opacity-50 ${
               isDanger
-                ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/20'
-                : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20'
+                ? 'bg-danger-500 hover:bg-danger-700 active:bg-danger-800'
+                : 'bg-primary-500 hover:bg-primary-700 active:bg-primary-800'
             }`}
           >
             {isLoading && (
-              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+              <svg className="animate-spin -ml-1 mr-1.5 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
               </svg>

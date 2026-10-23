@@ -112,7 +112,7 @@ func (r *repository) ListExams(ctx context.Context, classCode string) ([]domain.
 	var list []domain.CBTExam
 	q := r.db.WithContext(ctx).Table("cbt_exams").Order("start_time desc")
 	if classCode != "" {
-		q = q.Where("class_code = ? OR class_code = ''", classCode)
+		q = q.Where("class_code = ?", classCode)
 	}
 	err := q.Find(&list).Error
 	return list, err
@@ -134,6 +134,15 @@ func (r *repository) CreateExam(ctx context.Context, e *domain.CBTExam) error {
 	e.CreatedAt = time.Now()
 	e.UpdatedAt = time.Now()
 	return r.db.WithContext(ctx).Table("cbt_exams").Create(e).Error
+}
+
+func (r *repository) UpdateExam(ctx context.Context, id string, e *domain.CBTExam) error {
+	e.UpdatedAt = time.Now()
+	return r.db.WithContext(ctx).Table("cbt_exams").Where("id = ?", id).Updates(e).Error
+}
+
+func (r *repository) DeleteExam(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Table("cbt_exams").Where("id = ?", id).Delete(&domain.CBTExam{}).Error
 }
 
 func (r *repository) ListQuestions(ctx context.Context, examID string, includeAnswer bool) ([]domain.CBTQuestion, error) {

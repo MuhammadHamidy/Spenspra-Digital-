@@ -6,6 +6,7 @@ import AttendanceBadge from '@/components/AttendanceBadge';
 import QRViewfinder from '@/components/QRViewfinder';
 import Modal from '@/components/Modal';
 import Button from '@/components/Button';
+import ConfirmModal from '@/components/ConfirmModal';
 import { attendanceApi } from '@/lib/attendanceApi';
 import { attendanceAudio } from '@/lib/attendanceAudio';
 import { findStudentByTokenOrNisn } from '@/lib/studentDirectory';
@@ -21,6 +22,7 @@ function classScheduleTime(item) {
 export default function GuruMobilePortal({ user, onLogout }) {
   // Navigation Tabs: 'beranda' | 'scan' | 'absensi'
   const [activeTab, setActiveTab] = useState('beranda');
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
 
   // Sesi Data
   const [sessions, setSessions] = useState([]);
@@ -425,7 +427,7 @@ export default function GuruMobilePortal({ user, onLogout }) {
 
           <button
             type="button"
-            onClick={onLogout}
+            onClick={() => setIsLogoutConfirmOpen(true)}
             title="Keluar"
             className="w-7 h-7 rounded-[6px] border border-[#CBD5E1] bg-white hover:bg-[#F1F5F9] flex items-center justify-center text-xs text-[#BE123C] cursor-pointer"
           >
@@ -1168,6 +1170,18 @@ export default function GuruMobilePortal({ user, onLogout }) {
           </div>
         )}
       </Modal>
+
+      {/* Logout Confirmation */}
+      <ConfirmModal
+        isOpen={isLogoutConfirmOpen}
+        title="Konfirmasi Keluar Sesi"
+        message="Apakah Anda yakin ingin keluar dari sesi guru ini? Sesi presensi aktif akan tetap tersimpan."
+        confirmText="Ya, Keluar"
+        cancelText="Batal"
+        isDanger={true}
+        onConfirm={onLogout}
+        onCancel={() => setIsLogoutConfirmOpen(false)}
+      />
     </div>
   );
 }

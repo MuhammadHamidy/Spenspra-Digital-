@@ -76,6 +76,23 @@ func (u *useCase) AddExam(ctx context.Context, e *domain.CBTExam) error {
 	return u.repo.CreateExam(ctx, e)
 }
 
+func (u *useCase) UpdateExam(ctx context.Context, id string, e *domain.CBTExam) error {
+	if id == "" {
+		return errors.New("id ujian diperlukan")
+	}
+	if e.Token != "" {
+		e.Token = strings.ToUpper(strings.TrimSpace(e.Token))
+	}
+	return u.repo.UpdateExam(ctx, id, e)
+}
+
+func (u *useCase) DeleteExam(ctx context.Context, id string) error {
+	if id == "" {
+		return errors.New("id ujian diperlukan")
+	}
+	return u.repo.DeleteExam(ctx, id)
+}
+
 func (u *useCase) GetExamQuestions(ctx context.Context, examID string, isTeacher bool) ([]domain.CBTQuestion, error) {
 	return u.repo.ListQuestions(ctx, examID, isTeacher)
 }

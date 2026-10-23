@@ -6,6 +6,7 @@ import Card from '@/components/Card';
 import Button from '@/components/Button';
 import StatusBadge from '@/components/StatusBadge';
 import Input from '@/components/Input';
+import ConfirmModal from '@/components/ConfirmModal';
 import { elearningApi } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
@@ -22,6 +23,17 @@ export default function StudentExamsHubPage() {
   const [tokenError, setTokenError] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [prepWarning, setPrepWarning] = useState('');
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+
+  // Live timer ticking every 5 seconds to automatically activate/complete exams at scheduled times
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const currentUser = tokenStorage.getUser();
@@ -67,21 +79,95 @@ export default function StudentExamsHubPage() {
     return norm;
   };
 
-  // Filter exams strictly to student's enrolled class (Requirement 9)
-  const studentClass = user?.className || user?.class_name || user?.rombel || '';
+  // Filter exams strictly to student's enrolled class
+  const studentClass =
+    user?.className ||
+    user?.class_name ||
+    user?.rombel ||
+    (Array.isArray(user?.classCodes) && user.classCodes.length > 0 ? user.classCodes[0] : '') ||
+    '';
   const studentClassNorm = normalizeClass(studentClass);
 
   const filteredExams = useMemo(() => {
-    if (!studentClassNorm) return exams; // Fallback if no class in profile
     return exams.filter((ex) => {
-      const examClassNorm = normalizeClass(ex.className);
-      return (
-        examClassNorm === studentClassNorm ||
-        examClassNorm.startsWith(studentClassNorm) ||
-        studentClassNorm.startsWith(examClassNorm)
-      );
+      const examClassRaw = ex.className || ex.class_code || ex.classCode || '';
+      const examClassNorm = normalizeClass(examClassRaw);
+
+      // Jika ujian diset untuk semua rombel
+      if (!examClassNorm || examClassNorm === 'semua' || examClassNorm === 'all' || examClassNorm === 'umum') {
+        return true;
+      }
+
+      // Jika siswa belum memiliki data kelas, jangan bocorkan ujian kelas spesifik
+      if (!studentClassNorm) {
+        return false;
+      }
+
+      // Strict matching: Siswa kelas 7A HANYA boleh mengakses ujian kelas 7A, bukan kelas 9A
+      return examClassNorm === studentClassNorm;
     });
   }, [exams, studentClassNorm]);
+
+  // Evaluasi jadwal pengerjaan sesuai jam ujian secara real-time
+  const getExamLiveStatus = (exam) => {
+    const s = String(exam.status || '').toUpperCase();
+    if (s === 'COMPLETED' || s === 'CLOSED') {
+      return { status: 'COMPLETED', label: 'Waktu Ujian Berakhir', canStart: false };
+    }
+
+    let startDate = null;
+    let endDate = null;
+
+    if (exam.startDateTime) {
+      startDate = new Date(exam.startDateTime);
+    } else if (exam.scheduledDate && exam.startTime) {
+      startDate = new Date(`${exam.scheduledDate}T${exam.startTime}:00`);
+    } else if (exam.start_time) {
+      startDate = new Date(exam.start_time);
+    }
+
+    if (exam.endDateTime) {
+      endDate = new Date(exam.endDateTime);
+    } else if (exam.scheduledDate && exam.endTime) {
+      endDate = new Date(`${exam.scheduledDate}T${exam.endTime}:00`);
+    } else if (exam.end_time) {
+      endDate = new Date(exam.end_time);
+    }
+
+    // Jika guru memulai secara manual (ACTIVE)
+    if (s === 'ACTIVE' && (!endDate || isNaN(endDate.getTime()) || currentTime <= endDate)) {
+      return { status: 'ACTIVE', label: 'Aktif / Tersedia', canStart: true };
+    }
+
+    if (startDate && !isNaN(startDate.getTime())) {
+      if (currentTime < startDate) {
+        const timeDiffMs = startDate.getTime() - currentTime.getTime();
+        const minsLeft = Math.ceil(timeDiffMs / (1000 * 60));
+        let label = 'Akan Datang';
+        if (minsLeft <= 60 && minsLeft > 0) {
+          label = `Mulai ${minsLeft} mnt lagi`;
+        } else {
+          label = `Mulai pkl ${exam.startTime || '08:00'}`;
+        }
+        return { status: 'UPCOMING', label, canStart: false };
+      }
+
+      if (endDate && !isNaN(endDate.getTime())) {
+        if (currentTime > endDate) {
+          return { status: 'COMPLETED', label: 'Waktu Ujian Berakhir', canStart: false };
+        }
+      }
+
+      // Pada jam yang ditentukan (startDate <= currentTime <= endDate): status AKTIF & TERSEDIA
+      return { status: 'ACTIVE', label: 'Aktif / Tersedia', canStart: true };
+    }
+
+    if (s === 'ACTIVE') {
+      return { status: 'ACTIVE', label: 'Aktif / Tersedia', canStart: true };
+    }
+
+    return { status: 'UPCOMING', label: 'Akan Datang', canStart: false };
+  };
 
   // Kunci Layar sejak siswa memilih ujian
   const handleOpenTokenModal = async (exam) => {
@@ -248,8 +334,8 @@ export default function StudentExamsHubPage() {
                       </span>
                     ) : (
                       <StatusBadge
-                        status={exam.status || 'ACTIVE'}
-                        label={exam.status === 'ACTIVE' ? 'Sedang Berlangsung' : 'Akan Datang'}
+                        status={getExamLiveStatus(exam).status}
+                        label={getExamLiveStatus(exam).label}
                       />
                     )}
                   </div>
@@ -346,7 +432,7 @@ export default function StudentExamsHubPage() {
                     >
                       ⚡ Lanjutkan Pengerjaan Ujian
                     </Button>
-                  ) : (
+                  ) : getExamLiveStatus(exam).canStart ? (
                     <Button
                       variant="primary"
                       size="md"
@@ -354,6 +440,25 @@ export default function StudentExamsHubPage() {
                       onClick={() => handleOpenTokenModal(exam)}
                     >
                       🔑 Masukkan Token & Mulai Ujian
+                    </Button>
+                  ) : getExamLiveStatus(exam).status === 'UPCOMING' ? (
+                    <Button
+                      variant="outline"
+                      size="md"
+                      disabled
+                      className="w-full min-h-[42px] font-bold bg-neutral-100 text-neutral-500 border-neutral-300 cursor-not-allowed"
+                      title="Ujian belum dapat dimulai sebelum jam yang ditentukan"
+                    >
+                      ⏳ Ujian Belum Dimulai ({getExamLiveStatus(exam).label})
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="md"
+                      disabled
+                      className="w-full min-h-[42px] font-bold bg-neutral-100 text-neutral-400 border-neutral-200 cursor-not-allowed"
+                    >
+                      ⏹️ Waktu Pengerjaan Telah Berakhir
                     </Button>
                   )}
                 </div>
@@ -436,14 +541,7 @@ export default function StudentExamsHubPage() {
                   variant="outline"
                   size="md"
                   disabled={isVerifying}
-                  onClick={() => {
-                    if (confirm('Batalkan persiapan ujian dan buka kembali layar?')) {
-                      setSelectedExam(null);
-                      if (typeof document !== 'undefined' && document.fullscreenElement && document.exitFullscreen) {
-                        document.exitFullscreen().catch(() => {});
-                      }
-                    }
-                  }}
+                  onClick={() => setCancelModalOpen(true)}
                   className="w-full sm:w-1/3 min-h-[42px] cursor-pointer"
                 >
                   Batal
@@ -462,6 +560,24 @@ export default function StudentExamsHubPage() {
           </div>
         </div>
       )}
+
+      {/* Confirm Modal Batal Persiapan Ujian */}
+      <ConfirmModal
+        isOpen={cancelModalOpen}
+        title="Batalkan Persiapan Ujian?"
+        message="Anda akan keluar dari mode persiapan ujian dan kembali ke daftar jadwal ujian."
+        confirmText="Ya, Batalkan"
+        cancelText="Lanjutkan Persiapan"
+        isDanger={false}
+        onCancel={() => setCancelModalOpen(false)}
+        onConfirm={() => {
+          setCancelModalOpen(false);
+          setSelectedExam(null);
+          if (typeof document !== 'undefined' && document.fullscreenElement && document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+          }
+        }}
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import Card from '@/components/Card';
 import Button from '@/components/Button';
 import StatusBadge from '@/components/StatusBadge';
 import Modal from '@/components/Modal';
+import ConfirmModal from '@/components/ConfirmModal';
 import { elearningApi } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
@@ -18,6 +19,16 @@ export default function LiveProctoringMonitoringPage() {
   const [activeStudentAudit, setActiveStudentAudit] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('ALL'); // ALL, VIOLATION, LOCKED, IN_PROGRESS, SUBMITTED, NOT_STARTED
+  const [notice, setNotice] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Ya, Buka Kunci',
+    cancelText: 'Batal',
+    isDanger: false,
+    onConfirm: null,
+  });
 
   useEffect(() => {
     setUser(tokenStorage.getUser());
@@ -89,19 +100,27 @@ export default function LiveProctoringMonitoringPage() {
     }
   }, [selectedExamId, exams]);
 
-  const handleUnlockStudent = async (studentItem) => {
-    const confirmUnlock = confirm(
-      `Buka kunci lembar ujian untuk siswa: ${studentItem.studentName}?\nSiswa akan diberikan dispensasi untuk melanjutkan pengerjaan.`
-    );
-    if (!confirmUnlock) return;
-
-    try {
-      await elearningApi.unlockStudentSession(selectedExamId, studentItem.sessionId);
-      alert(`Kunci ujian untuk ${studentItem.studentName} berhasil dibuka.`);
-      loadProctoringData();
-    } catch (e) {
-      alert('Gagal membuka kunci: ' + e.message);
-    }
+  const handleUnlockStudent = (studentItem) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Buka Kunci Layar Siswa',
+      message: `Buka kunci lembar ujian untuk siswa: ${studentItem.studentName}?\nSiswa akan diberikan dispensasi untuk melanjutkan pengerjaan.`,
+      confirmText: 'Ya, Berikan Dispensasi',
+      cancelText: 'Batal',
+      isDanger: false,
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        try {
+          await elearningApi.unlockStudentSession(selectedExamId, studentItem.sessionId);
+          setNotice(`Kunci ujian untuk ${studentItem.studentName} berhasil dibuka.`);
+          setTimeout(() => setNotice(null), 4000);
+          loadProctoringData();
+        } catch (e) {
+          setNotice(`Gagal membuka kunci: ${e.message}`);
+          setTimeout(() => setNotice(null), 4000);
+        }
+      },
+    });
   };
 
   // Merge official class roster with live student sessions
@@ -583,6 +602,18 @@ export default function LiveProctoringMonitoringPage() {
           </div>
         </div>
       </Modal>
+
+      {notice && (
+        <div className="fixed bottom-5 right-5 z-50 bg-neutral-900 text-white px-4 py-2.5 rounded-[8px] text-xs font-medium shadow-lg animate-in fade-in">
+          {notice}
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        {...confirmModal}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

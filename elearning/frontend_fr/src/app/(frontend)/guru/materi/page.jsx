@@ -5,6 +5,7 @@ import Card from '@/components/Card';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
 import Modal from '@/components/Modal';
+import ConfirmModal from '@/components/ConfirmModal';
 import { elearningApi } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
@@ -25,6 +26,15 @@ export default function TeacherMaterialsManagementPage() {
   const [description, setDescription] = useState('');
   const [fileUrl, setFileUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Ya, Hapus',
+    cancelText: 'Batal',
+    isDanger: true,
+    onConfirm: null,
+  });
 
   useEffect(() => {
     setUser(tokenStorage.getUser());
@@ -106,14 +116,24 @@ export default function TeacherMaterialsManagementPage() {
     }
   };
 
-  const handleDelete = async (id, title) => {
-    if (!confirm(`Hapus materi: "${title}"?`)) return;
-    try {
-      await elearningApi.deleteMaterial(id);
-      loadMaterials();
-    } catch (err) {
-      alert('Gagal menghapus: ' + err.message);
-    }
+  const handleDelete = (id, title) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Hapus Materi Pembelajaran',
+      message: `Apakah Anda yakin ingin menghapus materi: "${title}"?\nSiswa tidak akan dapat mengakses materi ini lagi.`,
+      confirmText: 'Ya, Hapus Materi',
+      cancelText: 'Batal',
+      isDanger: true,
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        try {
+          await elearningApi.deleteMaterial(id);
+          loadMaterials();
+        } catch (err) {
+          console.error('Gagal menghapus materi:', err);
+        }
+      },
+    });
   };
 
   return (
@@ -317,6 +337,12 @@ export default function TeacherMaterialsManagementPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        {...confirmModal}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

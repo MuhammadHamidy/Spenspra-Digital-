@@ -12,6 +12,7 @@ export class UserEntity {
     courseIds = [],
     classCodes = [],
     classIds = [],
+    className = '',
     photoUrl = '',
   }) {
     this.id = id;
@@ -26,6 +27,9 @@ export class UserEntity {
     this.courseIds = courseIds;
     this.classCodes = classCodes;
     this.classIds = classIds;
+    this.className = className || (classCodes.length > 0 ? classCodes[0] : '');
+    this.class_name = this.className;
+    this.rombel = this.className;
     this.photoUrl = photoUrl;
     // Keep snake_case aliases for compatibility
     this.course_names = courseNames;

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/features/auth/presentation/useAuth';
 import { getRole } from '@/lib/access/portalAccess';
+import ConfirmModal from './ConfirmModal';
 
 export default function Navbar({ onToggleMobileSidebar = () => {} }) {
   const pathname = usePathname();
@@ -12,6 +13,7 @@ export default function Navbar({ onToggleMobileSidebar = () => {} }) {
   const role = getRole(user);
   const [currentDateStr, setCurrentDateStr] = useState('');
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const dropdownRef = useRef(null);
 
   useEffect(() => {
@@ -167,13 +169,11 @@ export default function Navbar({ onToggleMobileSidebar = () => {} }) {
                 type="button"
                 onClick={() => {
                   setIsProfileDropdownOpen(false);
-                  if (window.confirm('Apakah Anda yakin ingin keluar dari sesi SSO?')) {
-                    logout();
-                  }
+                  setIsLogoutConfirmOpen(true);
                 }}
-                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition cursor-pointer text-left"
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-danger-500 hover:bg-danger-50 hover:text-danger-700 transition cursor-pointer text-left"
               >
-                <svg className="w-4 h-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-danger-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
                 <span>Keluar Sesi (Logout)</span>
@@ -182,6 +182,18 @@ export default function Navbar({ onToggleMobileSidebar = () => {} }) {
           </div>
         )}
       </div>
+
+      {/* Logout Confirmation Modal */}
+      <ConfirmModal
+        isOpen={isLogoutConfirmOpen}
+        title="Konfirmasi Keluar Sesi"
+        message="Apakah Anda yakin ingin keluar dari Single Sign-On (SSO)? Seluruh akses portal sekolah aktif akan diakhiri."
+        confirmText="Ya, Keluar"
+        cancelText="Batal"
+        isDanger={true}
+        onConfirm={logout}
+        onCancel={() => setIsLogoutConfirmOpen(false)}
+      />
     </header>
   );
 }

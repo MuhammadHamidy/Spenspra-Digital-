@@ -58,6 +58,7 @@ function AdminMonitoringContent() {
   const [formIsOpen, setFormIsOpen] = useState(true);
   const [formAnnouncement, setFormAnnouncement] = useState('');
   const [isSubmittingDeadline, setIsSubmittingDeadline] = useState(false);
+  const [deleteConfirmConfig, setDeleteConfirmConfig] = useState(null);
   const [deadlineSuccessMsg, setDeadlineSuccessMsg] = useState('');
 
   const loadData = async () => {
@@ -530,18 +531,23 @@ function AdminMonitoringContent() {
     setIsDeadlineModalOpen(true);
   };
 
-  const handleDeleteDeadline = async (dl) => {
-    const isConfirm = window.confirm(`Apakah Anda yakin ingin menghapus jadwal batas waktu "${dl.title}"?`);
-    if (!isConfirm) return;
-
-    try {
-      const updated = await deadlineApiAdapter.deleteDeadline(dl.id || dl.type);
-      setDeadlines(updated);
-      setDeadlineSuccessMsg(`Jadwal batas waktu "${dl.title}" berhasil dihapus.`);
-      setTimeout(() => setDeadlineSuccessMsg(''), 4000);
-    } catch (err) {
-      alert(`Gagal menghapus jadwal tenggat: ${err.message}`);
-    }
+  const handleDeleteDeadline = (dl) => {
+    setDeleteConfirmConfig({
+      title: 'Hapus Batas Waktu',
+      message: `Apakah Anda yakin ingin menghapus jadwal batas waktu "${dl.title}"?`,
+      isDanger: true,
+      onConfirm: async () => {
+        setDeleteConfirmConfig(null);
+        try {
+          const updated = await deadlineApiAdapter.deleteDeadline(dl.id || dl.type);
+          setDeadlines(updated);
+          setDeadlineSuccessMsg(`Jadwal batas waktu "${dl.title}" berhasil dihapus.`);
+          setTimeout(() => setDeadlineSuccessMsg(''), 4000);
+        } catch (err) {
+          console.error(`Gagal menghapus jadwal tenggat: ${err.message}`);
+        }
+      },
+    });
   };
 
   const handleSaveDeadline = async (e) => {
@@ -1638,9 +1644,9 @@ function AdminMonitoringContent() {
           isOpen={true}
           title={deleteConfirmConfig.title}
           message={deleteConfirmConfig.message}
-          type={deleteConfirmConfig.type || 'danger'}
+          isDanger={deleteConfirmConfig.isDanger !== false}
           onConfirm={deleteConfirmConfig.onConfirm}
-          onClose={() => setDeleteConfirmConfig(null)}
+          onCancel={() => setDeleteConfirmConfig(null)}
         />
       )}
     </div>

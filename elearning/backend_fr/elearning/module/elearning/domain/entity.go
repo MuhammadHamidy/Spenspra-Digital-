@@ -146,6 +146,8 @@ type Repository interface {
 	ListExams(ctx context.Context, classCode string) ([]CBTExam, error)
 	GetExamByID(ctx context.Context, id string) (*CBTExam, error)
 	CreateExam(ctx context.Context, e *CBTExam) error
+	UpdateExam(ctx context.Context, id string, e *CBTExam) error
+	DeleteExam(ctx context.Context, id string) error
 	ListQuestions(ctx context.Context, examID string, includeAnswer bool) ([]CBTQuestion, error)
 	SaveQuestion(ctx context.Context, q *CBTQuestion) error
 
@@ -175,6 +177,8 @@ type UseCase interface {
 	GetExams(ctx context.Context, classCode string) ([]CBTExam, error)
 	GetExamDetail(ctx context.Context, id string) (*CBTExam, error)
 	AddExam(ctx context.Context, e *CBTExam) error
+	UpdateExam(ctx context.Context, id string, e *CBTExam) error
+	DeleteExam(ctx context.Context, id string) error
 	GetExamQuestions(ctx context.Context, examID string, isTeacher bool) ([]CBTQuestion, error)
 	AddExamQuestion(ctx context.Context, q *CBTQuestion) error
 

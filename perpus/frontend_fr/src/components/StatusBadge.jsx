@@ -1,89 +1,124 @@
 'use client';
 
 import React from 'react';
-import Chip from '@mui/material/Chip';
-import { styled } from '@mui/material/styles';
 
-const StyledChip = styled(Chip, {
-  shouldForwardProp: (prop) => prop !== 'statusType',
-})(({ statusType }) => {
-  const styles = {
-    HADIR: {
-      backgroundColor: '#ECFDF5',
-      color: '#047857',
-      borderColor: '#A7F3D0',
-      fontWeight: 800,
-    },
-    TERLAMBAT: {
-      backgroundColor: '#FFF7ED',
-      color: '#C2410C',
-      borderColor: '#FDBA74',
-      fontWeight: 800,
-    },
-    IZIN: {
-      backgroundColor: '#FFFBEB',
-      color: '#B45309',
-      borderColor: '#FDE68A',
-      fontWeight: 800,
-    },
-    SAKIT: {
-      backgroundColor: '#EFF6FF',
-      color: '#1D4ED8',
-      borderColor: '#BFDBFE',
-      fontWeight: 800,
-    },
-    ALPA: {
-      backgroundColor: '#FFF1F2',
-      color: '#BE123C',
-      borderColor: '#FECDD3',
-      fontWeight: 800,
-    },
-    OPEN: {
-      backgroundColor: '#059669',
-      color: '#FFFFFF',
-      borderColor: '#059669',
-      fontWeight: 800,
-      boxShadow: '0 2px 8px rgba(5, 150, 105, 0.35)',
-    },
-    CLOSED: {
-      backgroundColor: '#F6FAFD',
-      color: '#4A7FA7',
-      borderColor: '#B3CFE5',
-      fontWeight: 700,
-    },
-    UPCOMING: {
-      backgroundColor: '#E0F2FE',
-      color: '#0369A1',
-      borderColor: '#BAE6FD',
-      fontWeight: 800,
-    },
+/**
+ * StatusBadge — Sesuai token standar DESIGN fix.md
+ * - Radius: 999px (FULL)
+ * - Typography: Small (12px / 600)
+ * - Warna: {warna}-100 background, {warna}-800 teks
+ */
+const STATUS_MAP = {
+  // Status Presensi Siswa
+  HADIR: {
+    bg: 'var(--color-success-50, #F7FCF9)',
+    color: 'var(--color-success-800, #1C5038)',
+    border: 'var(--color-success-300, #A9D8BC)',
+    label: 'Hadir',
+  },
+  TERLAMBAT: {
+    bg: 'var(--color-accent-100, #FFF6D6)',
+    color: 'var(--color-accent-800, #A97E0D)',
+    border: 'var(--color-accent-300, #F9DD82)',
+    label: 'Terlambat',
+  },
+  IZIN: {
+    bg: 'var(--color-secondary-100, #E4F1F8)',
+    color: 'var(--color-secondary-800, #2E607C)',
+    border: 'var(--color-secondary-300, #A8CBDD)',
+    label: 'Izin',
+  },
+  SAKIT: {
+    bg: 'var(--color-secondary-100, #E4F1F8)',
+    color: 'var(--color-secondary-700, #397394)',
+    border: 'var(--color-secondary-300, #A8CBDD)',
+    label: 'Sakit',
+  },
+  ALPHA: {
+    bg: 'var(--color-danger-50, #FFF9F8)',
+    color: 'var(--color-danger-800, #7D261E)',
+    border: 'var(--color-danger-300, #F1B4AC)',
+    label: 'Alpha',
+  },
+  ALPA: {
+    bg: 'var(--color-danger-50, #FFF9F8)',
+    color: 'var(--color-danger-800, #7D261E)',
+    border: 'var(--color-danger-300, #F1B4AC)',
+    label: 'Alpha',
+  },
+
+  // Status Peminjaman Buku Perpustakaan
+  DIPINJAM: {
+    bg: 'var(--color-secondary-100, #E4F1F8)',
+    color: 'var(--color-secondary-800, #2E607C)',
+    border: 'var(--color-secondary-300, #A8CBDD)',
+    label: 'Dipinjam',
+  },
+  KEMBALI: {
+    bg: 'var(--color-success-50, #F7FCF9)',
+    color: 'var(--color-success-800, #1C5038)',
+    border: 'var(--color-success-300, #A9D8BC)',
+    label: 'Dikembalikan',
+  },
+  TERLAMBAT_KEMBALI: {
+    bg: 'var(--color-danger-50, #FFF9F8)',
+    color: 'var(--color-danger-800, #7D261E)',
+    border: 'var(--color-danger-300, #F1B4AC)',
+    label: 'Terlambat (Denda)',
+  },
+  HILANG: {
+    bg: 'var(--color-danger-50, #FFF9F8)',
+    color: 'var(--color-danger-800, #7D261E)',
+    border: 'var(--color-danger-300, #F1B4AC)',
+    label: 'Buku Hilang',
+  },
+  TERSEDIA: {
+    bg: 'var(--color-success-50, #F7FCF9)',
+    color: 'var(--color-success-800, #1C5038)',
+    border: 'var(--color-success-300, #A9D8BC)',
+    label: 'Tersedia',
+  },
+
+  // Status Sesi Ujian / Presensi
+  OPEN: {
+    bg: 'var(--color-success-50, #F7FCF9)',
+    color: 'var(--color-success-800, #1C5038)',
+    border: 'var(--color-success-300, #A9D8BC)',
+    label: 'Sesi Aktif',
+  },
+  CLOSED: {
+    bg: 'var(--color-neutral-100, #F8F9FC)',
+    color: 'var(--color-neutral-700, #667085)',
+    border: 'var(--color-neutral-300, #E5E7EB)',
+    label: 'Sesi Ditutup',
+  },
+  UPCOMING: {
+    bg: 'var(--color-secondary-100, #E4F1F8)',
+    color: 'var(--color-secondary-800, #2E607C)',
+    border: 'var(--color-secondary-300, #A8CBDD)',
+    label: 'Akan Datang',
+  },
+};
+
+export default function StatusBadge({ status, label, className = '' }) {
+  const normStatus = String(status || '').toUpperCase().replace(/[\s-]/g, '_');
+  const config = STATUS_MAP[normStatus] || {
+    bg: 'var(--color-neutral-100, #F8F9FC)',
+    color: 'var(--color-neutral-700, #667085)',
+    border: 'var(--color-neutral-300, #E5E7EB)',
+    label: status || '-',
   };
 
-  const current = styles[statusType] || {
-    backgroundColor: '#F6FAFD',
-    color: '#0A1931',
-    borderColor: '#B3CFE5',
-    fontWeight: 600,
-  };
-
-  return {
-    borderRadius: '10px',
-    border: '1px solid',
-    fontSize: '0.75rem',
-    height: '24px',
-    padding: '0 4px',
-    ...current,
-  };
-});
-
-export default function StatusBadge({ status, className = '', size = 'small' }) {
-  const normStatus = (status || '').toUpperCase();
   return (
-    <StyledChip
-      statusType={normStatus}
-      label={status}
-      size={size}
-      className={className}
-    />
+    <span
+      style={{
+        backgroundColor: config.bg,
+        color: config.color,
+        borderColor: config.border,
+      }}
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full border text-xs font-semibold select-none ${className}`}
+    >
+      {label || config.label}
+    </span>
   );
 }

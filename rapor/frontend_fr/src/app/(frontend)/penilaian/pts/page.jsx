@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { gradeApi } from '@/lib/gradeApi';
 import { attendanceApi } from '@/lib/attendanceApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
@@ -45,10 +45,13 @@ export default function PenilaianPTSPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [search, setSearch] = useState('');
-  const [showTemplateConfig, setShowTemplateConfig] = useState(false);
+  const [showTemplateConfig, setShowTemplateConfig] = useState(true);
   const [predicateTemplates, setPredicateTemplates] = useState(INITIAL_PREDICATE_DESCRIPTIONS);
   const [quickTopic, setQuickTopic] = useState('');
   const [ptsDeadline, setPtsDeadline] = useState(null);
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [autoSavedAt, setAutoSavedAt] = useState(null);
+  const autoSaveTimerRef = useRef(null);
 
   // Filter Tahun Ajaran & Semester sinkron otomatis dengan Super Admin
   const [academicYear, setAcademicYear] = useState(() => getSchoolAcademicPeriod().year);
@@ -158,23 +161,26 @@ export default function PenilaianPTSPage() {
     fetchMasterData();
   }, []);
 
-  const formatDescription = useCallback((predicate) => {
+  const getTopicStorageKey = useCallback((cls, sbj, yr, sm) => {
+    return `spenspra_pts_topic_${cls || ''}_${sbj || ''}_${String(yr || '').replace('/', '_')}_${sm || ''}`;
+  }, []);
+
+  const formatDescription = useCallback((predicate, customTemplates = null) => {
     if (!predicate || predicate === '-') return '';
-    const template = predicateTemplates[predicate] || INITIAL_PREDICATE_DESCRIPTIONS[predicate] || '';
+    const activeTemplates = customTemplates || predicateTemplates;
+    const template = activeTemplates[predicate] || INITIAL_PREDICATE_DESCRIPTIONS[predicate] || '';
     // Pastikan tidak ada prefix "A: ", "B: ", "C: ", "D: "
     return template.replace(/^[A-D]:\s*/i, '').trim();
   }, [predicateTemplates]);
 
-  const handleApplyQuickTopic = () => {
-    if (!quickTopic.trim()) return;
-    const topic = quickTopic.trim();
-    setPredicateTemplates({
-      A: `Sangat baik dalam ${topic}`,
-      B: `Baik dalam ${topic}`,
-      C: `Cukup dalam ${topic}`,
-      D: `Kurang dalam ${topic}`,
-    });
-  };
+  // Bersihkan timer auto-save saat unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, []);
 
   const loadStudentsAndGrades = useCallback(async () => {
     setSaved(false);
@@ -211,12 +217,46 @@ export default function PenilaianPTSPage() {
         setLockDetails(null);
       }
 
+      // 1. Pulihkan materi pokok / TP dari localStorage akun guru
+      const topicKey = getTopicStorageKey(className, subject, academicYear, semester);
+      let loadedTopic = '';
+      try {
+        loadedTopic = localStorage.getItem(topicKey) || '';
+      } catch {}
+
+      // 2. Jika di localStorage kosong (misal baru login di perangkat baru), ekstrak dari deskripsi nilai siswa di database
+      if (!loadedTopic && res.success && Array.isArray(res.data) && res.data.length > 0) {
+        for (const g of res.data) {
+          if (g.description) {
+            const m = g.description.match(/^(?:Sangat baik dalam|Baik dalam|Cukup dalam|Kurang dalam)\s+(.+)$/i);
+            if (m && m[1]) {
+              const candidate = m[1].trim();
+              if (!candidate.startsWith('memahami materi pembelajaran')) {
+                loadedTopic = candidate;
+                try { localStorage.setItem(topicKey, loadedTopic); } catch {}
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      setQuickTopic(loadedTopic);
+      const tTrim = loadedTopic.trim();
+      const effectiveTemplates = {
+        A: tTrim ? `Sangat baik dalam ${tTrim}` : INITIAL_PREDICATE_DESCRIPTIONS.A,
+        B: tTrim ? `Baik dalam ${tTrim}` : INITIAL_PREDICATE_DESCRIPTIONS.B,
+        C: tTrim ? `Cukup dalam ${tTrim}` : INITIAL_PREDICATE_DESCRIPTIONS.C,
+        D: tTrim ? `Kurang dalam ${tTrim}` : INITIAL_PREDICATE_DESCRIPTIONS.D,
+      };
+      setPredicateTemplates(effectiveTemplates);
+
       if (res.success && Array.isArray(res.data) && res.data.length > 0) {
         setRows(
           res.data.map((g) => {
             const hasScore = g.score !== undefined && g.score !== null && Number(g.score) >= 0;
             const pred = hasScore ? getPredicate(g.score) : '-';
-            const defaultDesc = formatDescription(pred);
+            const defaultDesc = pred !== '-' ? (effectiveTemplates[pred] || formatDescription(pred, effectiveTemplates)) : '';
             const cleanDesc = g.description ? g.description.replace(/^[A-D]:\s*/i, '').trim() : '';
             return {
               id: g.student_id,
@@ -236,7 +276,7 @@ export default function PenilaianPTSPage() {
       console.warn('Gagal memuat nilai dari server:', err);
       setRows([]);
     }
-  }, [className, subject, academicYear, semester, formatDescription]);
+  }, [className, subject, academicYear, semester, formatDescription, getTopicStorageKey]);
 
   useEffect(() => {
     loadStudentsAndGrades();
@@ -327,8 +367,122 @@ export default function PenilaianPTSPage() {
     setDraftRecovery(null);
   };
 
+  const triggerCloudAutoSave = useCallback((currentRows, customTemplates = null) => {
+    if (isLocked || isKepalaSekolah) return;
+    if (!className || !subject) return;
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    setAutoSaving(true);
+    setSaveStatus('SAVING');
+
+    autoSaveTimerRef.current = setTimeout(async () => {
+      try {
+        const currentUser = tokenStorage.getUser();
+        const currentSubjectObj = subjects.find((item) => item.code === subject);
+        const subjectName = currentSubjectObj ? currentSubjectObj.name : subject;
+
+        const validGrades = currentRows
+          .filter((r) => r.score !== '' && r.score !== null && !isNaN(Number(r.score)))
+          .map((r) => {
+            const pred = getPredicate(r.score);
+            let desc = r.description;
+            if (!desc && pred !== '-') {
+              const tmpl = customTemplates || predicateTemplates;
+              desc = tmpl[pred] || INITIAL_PREDICATE_DESCRIPTIONS[pred] || '';
+            }
+            return {
+              student_id: r.id,
+              person_id: r.person_id,
+              nisn: r.nisn,
+              student_name: r.name,
+              score: Number(r.score),
+              description: desc || '',
+            };
+          });
+
+        if (validGrades.length === 0) {
+          setAutoSaving(false);
+          setSaveStatus('CLOUD_SAVED');
+          return;
+        }
+
+        const payload = {
+          class_name: className,
+          subject_code: subject,
+          subject_name: subjectName,
+          assessment_type: 'PTS',
+          academic_year: academicYear,
+          semester: semester,
+          teacher_id: currentUser?.id || '',
+          teacher_name: currentUser?.fullName || currentUser?.full_name || 'Guru Pengampu',
+          grades: validGrades,
+        };
+
+        const res = await gradeApi.saveBulkGrades(payload);
+        if (res.success) {
+          const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          setSaveStatus('CLOUD_SAVED');
+          setLastSavedTime(now);
+          setAutoSavedAt(now);
+          try { localStorage.removeItem(draftKey); } catch {}
+        } else {
+          setSaveStatus('LOCAL_DRAFT');
+        }
+      } catch (err) {
+        console.warn('Auto-save ke server e-Rapor gagal:', err);
+        setSaveStatus('LOCAL_DRAFT');
+      } finally {
+        setAutoSaving(false);
+      }
+    }, 1200);
+  }, [isLocked, isKepalaSekolah, className, subject, subjects, academicYear, semester, predicateTemplates, draftKey]);
+
+  const handleTopicChange = (e) => {
+    const val = e.target.value;
+    setQuickTopic(val);
+
+    // Simpan permanen ke localStorage setiap pergantian isian materi pokok / TP
+    if (className && subject) {
+      const topicKey = getTopicStorageKey(className, subject, academicYear, semester);
+      try {
+        localStorage.setItem(topicKey, val);
+      } catch (err) {
+        console.warn('Gagal menyimpan materi pokok ke localStorage:', err);
+      }
+    }
+
+    const topicTrim = val.trim();
+    const newTemplates = {
+      A: topicTrim ? `Sangat baik dalam ${topicTrim}` : INITIAL_PREDICATE_DESCRIPTIONS.A,
+      B: topicTrim ? `Baik dalam ${topicTrim}` : INITIAL_PREDICATE_DESCRIPTIONS.B,
+      C: topicTrim ? `Cukup dalam ${topicTrim}` : INITIAL_PREDICATE_DESCRIPTIONS.C,
+      D: topicTrim ? `Kurang dalam ${topicTrim}` : INITIAL_PREDICATE_DESCRIPTIONS.D,
+    };
+    setPredicateTemplates(newTemplates);
+
+    // Otomatis terapkan ke semua siswa yang sudah memiliki nilai & picu simpan otomatis
+    setRows((current) => {
+      const updated = current.map((row) => {
+        const pred = getPredicate(row.score);
+        if (pred && pred !== '-') {
+          return {
+            ...row,
+            description: newTemplates[pred],
+          };
+        }
+        return row;
+      });
+      saveDraftLocally(updated);
+      triggerCloudAutoSave(updated, newTemplates);
+      return updated;
+    });
+  };
+
   const updateScore = (id, value) => {
-    if (isLocked) return;
+    if (isLocked || isKepalaSekolah) return;
     const score = value === '' ? '' : Math.max(0, Math.min(100, Number(value)));
     const predicate = getPredicate(score);
     const autoDesc = formatDescription(predicate);
@@ -339,32 +493,37 @@ export default function PenilaianPTSPage() {
           : row
       );
       saveDraftLocally(updated);
+      triggerCloudAutoSave(updated);
       return updated;
     });
     setSaved(false);
   };
 
   const updateDescription = (id, description) => {
-    if (isLocked) return;
+    if (isLocked || isKepalaSekolah) return;
     setRows((current) => {
       const updated = current.map((row) => (row.id === id ? { ...row, description } : row));
       saveDraftLocally(updated);
+      triggerCloudAutoSave(updated);
       return updated;
     });
     setSaved(false);
   };
 
   const applyTemplateToAllStudents = () => {
-    if (isLocked) return;
-    setRows((current) =>
-      current.map((row) => {
+    if (isLocked || isKepalaSekolah) return;
+    setRows((current) => {
+      const updated = current.map((row) => {
         const predicate = getPredicate(row.score);
         return {
           ...row,
           description: formatDescription(predicate),
         };
-      })
-    );
+      });
+      saveDraftLocally(updated);
+      triggerCloudAutoSave(updated);
+      return updated;
+    });
     setSaved(false);
   };
 
@@ -484,6 +643,11 @@ export default function PenilaianPTSPage() {
       alert('Nilai untuk kelas dan mata pelajaran ini telah dikunci/finalisasi. Silakan ajukan pembukaan kunci terlebih dahulu.');
       return;
     }
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    setAutoSaving(false);
     setIsSaving(true);
     setSaved(false);
     setSaveMessage('');
@@ -523,8 +687,10 @@ export default function PenilaianPTSPage() {
     try {
       const res = await gradeApi.saveBulkGrades(payload);
       if (res.success) {
+        const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         setSaveStatus('CLOUD_SAVED');
-        setLastSavedTime(new Date().toLocaleTimeString('id-ID'));
+        setLastSavedTime(timeStr);
+        setAutoSavedAt(timeStr);
         try { localStorage.removeItem(draftKey); } catch {}
         setSaveMessage(`Berhasil menyimpan ${res.data?.saved || payload.grades.length} nilai siswa ke database e-Rapor.`);
       } else {
@@ -831,111 +997,122 @@ export default function PenilaianPTSPage() {
             onClick={() => setShowTemplateConfig(!showTemplateConfig)}
             className="px-3.5 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"
           >
-            <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <svg className={`w-3.5 h-3.5 text-slate-500 transition-transform ${showTemplateConfig ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
             </svg>
-            <span>{showTemplateConfig ? 'Tutup Pengaturan' : 'Template Deskripsi'}</span>
+            <span>{showTemplateConfig ? 'Sembunyikan Pengaturan Deskripsi' : 'Buka Pengaturan Deskripsi'}</span>
           </button>
         )}
       </div>
 
-      {/* Panel Pengaturan Template Deskripsi Capaian */}
+      {/* Panel Pengaturan Template Deskripsi Capaian (Terbuka Otomatis Tanpa Perlu Ditekan) */}
       {showTemplateConfig && (
-        <section className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 shadow-sm space-y-4">
-          <div className="border-b border-blue-200 pb-2 flex flex-wrap items-center justify-between gap-2">
+        <section className="rounded-xl border border-blue-200 bg-linear-to-b from-blue-50/80 to-indigo-50/30 p-4 shadow-xs space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-blue-200 pb-3">
             <div>
-              <h3 className="text-xs font-bold text-blue-900">
-                Pengaturan Default Deskripsi Capaian — Kelas {className} ({subjects.find((s) => s.code === subject)?.name || subject})
-              </h3>
-              <p className="text-[11px] text-blue-700 mt-0.5">
-                Format deskripsi rapor langsung berupa uraian capaian kompetensi siswa (tanpa label kode predikat seperti &quot;C:&quot;).
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-bold text-blue-950">
+                  Pengaturan Default Deskripsi Capaian — Kelas {className} ({subjects.find((s) => s.code === subject)?.name || subject})
+                </h3>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                  Tersimpan Otomatis
+                </span>
+              </div>
+              <p className="text-[11px] text-blue-800/80 mt-0.5">
+                Cukup isi 1 input <strong>Materi Pokok / TP</strong> di bawah. Uraian capaian untuk semua predikat (A, B, C, D) otomatis terisi secara real-time dan selalu tersimpan di akun Anda.
               </p>
             </div>
-          </div>
 
-          {/* Quick Generator dari Materi Pokok / TP */}
-          <div className="rounded-lg bg-white p-3 border border-blue-200 flex flex-wrap items-center gap-2">
-            <span className="text-xs font-bold text-slate-700 shrink-0">Materi Pokok / TP:</span>
-            <input
-              type="text"
-              value={quickTopic}
-              onChange={(e) => setQuickTopic(e.target.value)}
-              placeholder="Contoh: memahami makna ghibah, tabayun dan ruksah di kehidupan sehari-hari"
-              className="flex-1 min-w-[240px] border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-blue-500"
-            />
-            <button
-              type="button"
-              onClick={handleApplyQuickTopic}
-              className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-[#193D9B] border border-blue-200 text-xs font-bold transition cursor-pointer"
-            >
-              Isi ke 4 Predikat
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-            <div className="rounded-lg bg-white p-3 border border-slate-200">
-              <label className="font-bold text-emerald-800 flex items-center gap-1.5 mb-1">
-                <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-[10px]">Predikat A (86–100)</span>
-                Deskripsi Sangat Baik:
-              </label>
-              <textarea
-                rows={2}
-                value={predicateTemplates.A}
-                onChange={(e) => setPredicateTemplates((prev) => ({ ...prev, A: e.target.value }))}
-                className="w-full border border-slate-200 rounded p-2 text-xs text-slate-700 focus:ring-1 focus:ring-blue-500 outline-none"
-              />
-            </div>
-
-            <div className="rounded-lg bg-white p-3 border border-slate-200">
-              <label className="font-bold text-blue-800 flex items-center gap-1.5 mb-1">
-                <span className="px-1.5 py-0.5 rounded bg-blue-100 text-[10px]">Predikat B (76–85)</span>
-                Deskripsi Baik:
-              </label>
-              <textarea
-                rows={2}
-                value={predicateTemplates.B}
-                onChange={(e) => setPredicateTemplates((prev) => ({ ...prev, B: e.target.value }))}
-                className="w-full border border-slate-200 rounded p-2 text-xs text-slate-700 focus:ring-1 focus:ring-blue-500 outline-none"
-              />
-            </div>
-
-            <div className="rounded-lg bg-white p-3 border border-slate-200">
-              <label className="font-bold text-amber-800 flex items-center gap-1.5 mb-1">
-                <span className="px-1.5 py-0.5 rounded bg-amber-100 text-[10px]">Predikat C (66–75)</span>
-                Deskripsi Cukup:
-              </label>
-              <textarea
-                rows={2}
-                value={predicateTemplates.C}
-                onChange={(e) => setPredicateTemplates((prev) => ({ ...prev, C: e.target.value }))}
-                className="w-full border border-slate-200 rounded p-2 text-xs text-slate-700 focus:ring-1 focus:ring-blue-500 outline-none"
-              />
-            </div>
-
-            <div className="rounded-lg bg-white p-3 border border-slate-200">
-              <label className="font-bold text-rose-800 flex items-center gap-1.5 mb-1">
-                <span className="px-1.5 py-0.5 rounded bg-rose-100 text-[10px]">Predikat D (0–65)</span>
-                Deskripsi Kurang:
-              </label>
-              <textarea
-                rows={2}
-                value={predicateTemplates.D}
-                onChange={(e) => setPredicateTemplates((prev) => ({ ...prev, D: e.target.value }))}
-                className="w-full border border-slate-200 rounded p-2 text-xs text-slate-700 focus:ring-1 focus:ring-blue-500 outline-none"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end pt-2 border-t border-blue-200">
             <button
               type="button"
               disabled={isLocked}
               onClick={applyTemplateToAllStudents}
-              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
+              className="px-3.5 py-1.5 rounded-lg bg-[#193D9B] hover:bg-[#153280] disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
+              title="Terapkan template deskripsi ini ke seluruh siswa kelas"
             >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
               <span>🔄 Terapkan ke Semua Siswa Kelas {className}</span>
             </button>
+          </div>
+
+          {/* 1 Input Materi Pokok / TP (Tanpa button "Isi ke 4 Predikat", auto-fill & auto-save) */}
+          <div className="rounded-xl bg-white p-3.5 border border-blue-200 shadow-2xs space-y-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label htmlFor="input-materi-tp" className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#193D9B]" />
+                <span>Materi Pokok / Tujuan Pembelajaran (TP):</span>
+              </label>
+              <span className="text-[11px] text-slate-500 font-medium">
+                Ketik langsung di sini — tersimpan permanen & auto terisi ke 4 predikat
+              </span>
+            </div>
+            <input
+              id="input-materi-tp"
+              type="text"
+              disabled={isLocked || isKepalaSekolah}
+              value={quickTopic}
+              onChange={handleTopicChange}
+              placeholder="Contoh: memahami makna ghibah, tabayun dan ruksah di kehidupan sehari-hari"
+              className="w-full border border-slate-300 rounded-lg px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#193D9B] focus:ring-2 focus:ring-blue-100 transition font-medium"
+            />
+          </div>
+
+          {/* Pratinjau 4 Rentang Predikat (Otomatis Terisi & Sesuai Kurikulum Merdeka) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            {/* Predikat A */}
+            <div className="rounded-xl bg-white p-3 border border-emerald-200 shadow-2xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                  Predikat A (86–100) • Sangat Baik
+                </span>
+                <span className="text-[10px] text-emerald-700 font-semibold">Otomatis Terisi</span>
+              </div>
+              <p className="text-xs text-slate-700 leading-relaxed font-medium bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-100 min-h-[46px] flex items-center">
+                {predicateTemplates.A}
+              </p>
+            </div>
+
+            {/* Predikat B */}
+            <div className="rounded-xl bg-white p-3 border border-blue-200 shadow-2xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 font-bold text-[10px]">
+                  Predikat B (76–85) • Baik
+                </span>
+                <span className="text-[10px] text-blue-700 font-semibold">Otomatis Terisi</span>
+              </div>
+              <p className="text-xs text-slate-700 leading-relaxed font-medium bg-blue-50/50 p-2.5 rounded-lg border border-blue-100 min-h-[46px] flex items-center">
+                {predicateTemplates.B}
+              </p>
+            </div>
+
+            {/* Predikat C */}
+            <div className="rounded-xl bg-white p-3 border border-amber-200 shadow-2xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-bold text-[10px]">
+                  Predikat C (66–75) • Cukup
+                </span>
+                <span className="text-[10px] text-amber-700 font-semibold">Otomatis Terisi</span>
+              </div>
+              <p className="text-xs text-slate-700 leading-relaxed font-medium bg-amber-50/50 p-2.5 rounded-lg border border-amber-100 min-h-[46px] flex items-center">
+                {predicateTemplates.C}
+              </p>
+            </div>
+
+            {/* Predikat D */}
+            <div className="rounded-xl bg-white p-3 border border-rose-200 shadow-2xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 font-bold text-[10px]">
+                  Predikat D (0–65) • Kurang
+                </span>
+                <span className="text-[10px] text-rose-700 font-semibold">Otomatis Terisi</span>
+              </div>
+              <p className="text-xs text-slate-700 leading-relaxed font-medium bg-rose-50/50 p-2.5 rounded-lg border border-rose-100 min-h-[46px] flex items-center">
+                {predicateTemplates.D}
+              </p>
+            </div>
           </div>
         </section>
       )}
@@ -964,7 +1141,21 @@ export default function PenilaianPTSPage() {
                 {visibleRows.length} siswa terdata • Tahun {academicYear} Semester {semester}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2.5">
+              {autoSaving ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-700 font-semibold shadow-2xs">
+                  <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
+                  <span>Menyimpan otomatis...</span>
+                </span>
+              ) : autoSavedAt ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-700 font-semibold shadow-2xs">
+                  <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Otomatis tersimpan ({autoSavedAt} WIB)</span>
+                </span>
+              ) : null}
+
               {isKepalaSekolah ? (
                 <span className="rounded-lg bg-blue-100 border border-blue-200 px-3.5 py-2 text-xs font-bold text-blue-900 flex items-center gap-1.5 shadow-2xs">
                   <span>👑</span>
@@ -975,13 +1166,25 @@ export default function PenilaianPTSPage() {
                   type="button"
                   disabled={isSaving || isLocked}
                   onClick={handleSaveGrades}
-                  className={`rounded-lg px-4 py-2 text-xs font-bold text-white shadow-xs transition ${
+                  className={`rounded-lg px-4 py-2 text-xs font-bold text-white shadow-xs transition flex items-center gap-1.5 ${
                     isLocked
                       ? 'bg-slate-400 cursor-not-allowed'
                       : 'bg-[#193D9B] hover:bg-[#153280] cursor-pointer disabled:opacity-50'
                   }`}
                 >
-                  {isLocked ? '🔒 Nilai Terkunci (Final)' : isSaving ? 'Menyimpan...' : 'Simpan Nilai USTS'}
+                  {isSaving ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                      </svg>
+                      <span>Simpan Nilai USTS</span>
+                    </>
+                  )}
                 </button>
               )}
             </div>
