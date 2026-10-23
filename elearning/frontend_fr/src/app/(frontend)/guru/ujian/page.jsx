@@ -126,14 +126,14 @@ export default function TeacherExamsManagementPage() {
   };
 
   const handleOpenCreateModal = () => {
-    const defaultSubj = subjects[0] || { name: 'Informatika', code: 'INF' };
+    const defaultSubj = subjects[0] || { name: '', code: '' };
     setEditingExamId(null);
     setTitle('');
-    setSubject(defaultSubj.name);
-    setSubjectCode(defaultSubj.code);
+    setSubject(defaultSubj.name || '');
+    setSubjectCode(defaultSubj.code || '');
 
-    const relevantClasses = getClassesForSubject(defaultSubj.name);
-    const defaultClass = relevantClasses[0]?.name || classes[0]?.name || '9A';
+    const relevantClasses = defaultSubj.name ? getClassesForSubject(defaultSubj.name) : classes;
+    const defaultClass = relevantClasses[0]?.name || classes[0]?.name || '';
     setClassName(defaultClass);
 
     setToken(Math.random().toString(36).substring(2, 8).toUpperCase());
@@ -1214,29 +1214,32 @@ export default function TeacherExamsManagementPage() {
                   Sesuai Penugasan Guru
                 </span>
               </div>
-              <select
-                value={subject}
-                onChange={(e) => {
-                  const newSubj = e.target.value;
-                  setSubject(newSubj);
-                  const matched = subjects.find((s) => s.name === newSubj);
-                  setSubjectCode(matched?.code || 'MAPEL');
-                  const relevantClasses = getClassesForSubject(newSubj);
-                  if (relevantClasses.length > 0 && !relevantClasses.some((c) => c.name === className)) {
-                    setClassName(relevantClasses[0].name);
-                  }
-                }}
-                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium"
-              >
-                {subjects.length === 0 && (
-                  <option value="">Belum ada mapel pengampu</option>
-                )}
-                {subjects.map((s) => (
-                  <option key={s.id || s.code} value={s.name}>
-                    {s.name} ({s.code})
-                  </option>
-                ))}
-              </select>
+              {subjects.length === 0 ? (
+                <div className="p-2.5 rounded-[8px] bg-amber-50 border border-amber-200 text-[11px] text-amber-800 leading-snug">
+                  ⚠️ Akun Anda belum memiliki mata pelajaran pengampu yang diatur oleh Administrator di SSO / e-Rapor. Hubungi Administrator untuk mengatur penugasan mapel Anda.
+                </div>
+              ) : (
+                <select
+                  value={subject}
+                  onChange={(e) => {
+                    const newSubj = e.target.value;
+                    setSubject(newSubj);
+                    const matched = subjects.find((s) => s.name === newSubj);
+                    setSubjectCode(matched?.code || 'MAPEL');
+                    const relevantClasses = getClassesForSubject(newSubj);
+                    if (relevantClasses.length > 0 && !relevantClasses.some((c) => c.name === className)) {
+                      setClassName(relevantClasses[0].name);
+                    }
+                  }}
+                  className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium"
+                >
+                  {subjects.map((s) => (
+                    <option key={s.id || s.code} value={s.name}>
+                      {s.name} ({s.code})
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div className="space-y-1">
@@ -1244,7 +1247,8 @@ export default function TeacherExamsManagementPage() {
               <select
                 value={className}
                 onChange={(e) => setClassName(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium"
+                disabled={subjects.length === 0}
+                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium disabled:bg-neutral-100 disabled:text-neutral-400"
               >
                 {getClassesForSubject(subject).map((cls) => (
                   <option key={cls.id || cls.name} value={cls.name}>
@@ -1380,6 +1384,7 @@ export default function TeacherExamsManagementPage() {
               size="md"
               className="w-full sm:w-auto min-h-[42px] font-bold"
               loading={isSubmitting}
+              disabled={isSubmitting || subjects.length === 0}
             >
               {editingExamId ? 'Simpan Perubahan' : 'Terbitkan Jadwal Ujian'}
             </Button>

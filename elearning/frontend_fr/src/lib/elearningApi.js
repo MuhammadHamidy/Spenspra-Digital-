@@ -45,6 +45,30 @@ export function getSsoApiBase() {
   return process.env.NEXT_PUBLIC_SSO_API_URL || 'https://sso.spenspra.com/api';
 }
 
+export function getRaporApiBase() {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host.includes('spenspra.com')) return 'https://rapor.spenspra.com/api';
+    if (host.includes('spenspra.sch.id')) return 'https://rapor.spenspra.sch.id/api';
+    if (host.includes('localhost') || host === '127.0.0.1') return 'http://localhost:8080/api';
+  }
+  return process.env.NEXT_PUBLIC_RAPOR_API_URL || 'https://rapor.spenspra.com/api';
+}
+
+async function fetchPublicJson(url) {
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.data || json;
+  } catch (err) {
+    return null;
+  }
+}
+
 async function fetchSsoJson(endpoint, options = {}) {
   const ssoBase = getSsoApiBase();
   const url = `${ssoBase}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
@@ -612,15 +636,23 @@ export const elearningApi = {
 
   getClassAssignments: async () => {
     try {
-      const [ssoRes, beRes] = await Promise.all([
-        fetchSsoJson('/school/classes').catch(() => null),
-        fetchJson('/school/classes').catch(() => null),
+      const ssoBase = getSsoApiBase();
+      const raporBase = getRaporApiBase();
+      const [ssoRes, raporRes, beRes] = await Promise.all([
+        fetchPublicJson(`${ssoBase}/school/classes`),
+        fetchPublicJson(`${raporBase}/school/classes`),
+        fetchJson('/school/classes').then((r) => r?.data || r).catch(() => null),
       ]);
       const list = [];
-      if (ssoRes?.success && Array.isArray(ssoRes.data)) list.push(...ssoRes.data);
-      else if (Array.isArray(ssoRes?.data?.classes)) list.push(...ssoRes.data.classes);
-      else if (Array.isArray(ssoRes)) list.push(...ssoRes);
-      if (beRes?.success && Array.isArray(beRes.data)) list.push(...beRes.data);
+      const appendList = (res) => {
+        if (!res) return;
+        if (Array.isArray(res)) list.push(...res);
+        else if (Array.isArray(res?.data)) list.push(...res.data);
+        else if (Array.isArray(res?.classes)) list.push(...res.classes);
+      };
+      appendList(ssoRes);
+      appendList(raporRes);
+      appendList(beRes);
       return list;
     } catch {
       return [];
@@ -632,10 +664,15 @@ export const elearningApi = {
     const roleUpper = String(currentUser?.roleName || currentUser?.role || currentUser?.peran || '').toUpperCase();
     const isGuru = roleUpper === 'GURU' || roleUpper.includes('GURU') || roleUpper.includes('TEACHER') || roleUpper.includes('WALI');
 
-    const [subjData, clsData, rawAssignments] = await Promise.all([
+    const ssoBase = getSsoApiBase();
+    const raporBase = getRaporApiBase();
+
+    const [subjData, clsData, rawAssignments, ssoAccountsRes, raporTeachersRes] = await Promise.all([
       elearningApi.getSubjects(),
       elearningApi.getClasses(),
       elearningApi.getClassAssignments(),
+      fetchPublicJson(`${ssoBase}/accounts?role=GURU`),
+      fetchPublicJson(`${raporBase}/school/teachers`),
     ]);
 
     // Jika bukan guru (Super Admin / Admin), akses semua master data
@@ -650,17 +687,30 @@ export const elearningApi = {
 
     const myId = String(currentUser?.id || currentUser?.person_id || '').toLowerCase().trim();
     const myNip = String(currentUser?.nimNip || currentUser?.nip || '').toLowerCase().trim();
-    const myName = String(currentUser?.fullName || currentUser?.full_name || currentUser?.username || '').toLowerCase().trim();
+    const myUsername = String(currentUser?.username || '').toLowerCase().trim();
+    const myName = String(currentUser?.fullName || currentUser?.full_name || '').toLowerCase().trim();
 
-    // 1. Filter assignment guru dari tabel penugasan /school/classes yang ditetapkan oleh admin
-    const myAssignments = (rawAssignments || []).filter((a) => {
-      if (!a) return false;
-      const tId = String(a.teacher_id || a.dosen_id || '').toLowerCase().trim();
-      const tNip = String(a.teacher_nip || a.dosen_nip || '').toLowerCase().trim();
-      const tName = String(a.teacher_name || a.dosen_name || '').toLowerCase().trim();
+    // Kumpulkan seluruh data guru terdaftar dari SSO & e-Rapor untuk mencari profil aktif
+    const teacherProfiles = [];
+    const appendProfiles = (res) => {
+      if (!res) return;
+      if (Array.isArray(res)) teacherProfiles.push(...res);
+      else if (Array.isArray(res?.data)) teacherProfiles.push(...res.data);
+      else if (Array.isArray(res?.teachers)) teacherProfiles.push(...res.teachers);
+    };
+    appendProfiles(ssoAccountsRes);
+    appendProfiles(raporTeachersRes);
 
-      if (myId && tId && (tId === myId || tId.includes(myId) || myId.includes(tId))) return true;
-      if (myNip && (tNip === myNip || tId === myNip)) return true;
+    const matchedProfile = teacherProfiles.find((t) => {
+      if (!t) return false;
+      const tId = String(t.id || t.person_id || '').toLowerCase().trim();
+      const tNip = String(t.nim_nip || t.nimNip || t.nip || '').toLowerCase().trim();
+      const tUsername = String(t.username || '').toLowerCase().trim();
+      const tName = String(t.full_name || t.fullName || t.name || '').toLowerCase().trim();
+
+      if (myId && tId && (tId === myId || myId.includes(tId) || tId.includes(myId))) return true;
+      if (myNip && tNip && (tNip === myNip || tId === myNip)) return true;
+      if (myUsername && tUsername && tUsername === myUsername) return true;
       if (myName && tName && (tName === myName || tName.includes(myName) || myName.includes(tName))) return true;
       return false;
     });
@@ -669,16 +719,43 @@ export const elearningApi = {
     const teacherCourseCodes = new Set();
     const teacherClassCodes = new Set();
 
-    myAssignments.forEach((a) => {
-      if (a.course_name) teacherCourseNames.add(a.course_name.trim().toLowerCase());
-      if (a.course_code) teacherCourseCodes.add(a.course_code.trim().toUpperCase());
-      if (a.class_code) {
-        const clean = a.class_code.replace(/^Kelas\s*/i, '').trim().toUpperCase();
-        if (clean) teacherClassCodes.add(clean);
+    // A. Ambil dari matchedProfile (profil SSO / e-Rapor)
+    if (matchedProfile) {
+      const pCourses = matchedProfile.course_names || matchedProfile.courseNames || [];
+      if (Array.isArray(pCourses)) {
+        pCourses.forEach((c) => {
+          const cName = typeof c === 'string' ? c.trim().toLowerCase() : (c.name || '').trim().toLowerCase();
+          const cCode = typeof c === 'string' ? c.trim().toUpperCase() : (c.code || '').trim().toUpperCase();
+          if (cName) teacherCourseNames.add(cName);
+          if (cCode) teacherCourseCodes.add(cCode);
+        });
       }
-    });
+      const pClasses = matchedProfile.class_codes || matchedProfile.classCodes || [];
+      if (Array.isArray(pClasses)) {
+        pClasses.forEach((cc) => {
+          const clean = String(typeof cc === 'string' ? cc : cc.name || cc.code || '').replace(/^Kelas\s*/i, '').trim().toUpperCase();
+          if (clean) teacherClassCodes.add(clean);
+        });
+      }
+      if (matchedProfile.class_name) {
+        const cleanWalas = String(matchedProfile.class_name).replace(/^Kelas\s*/i, '').trim().toUpperCase();
+        if (cleanWalas) teacherClassCodes.add(cleanWalas);
+      }
 
-    // 2. Gabungkan penugasan dari profil SSO (courseNames & classCodes)
+      // Self-heal local session agar tidak perlu logout/login ulang
+      try {
+        const updatedUser = {
+          ...currentUser,
+          courseNames: Array.from(teacherCourseNames),
+          course_names: Array.from(teacherCourseNames),
+          classCodes: Array.from(teacherClassCodes),
+          class_codes: Array.from(teacherClassCodes),
+        };
+        tokenStorage.setUser(updatedUser);
+      } catch (e) {}
+    }
+
+    // B. Ambil dari session tokenStorage (jika ada)
     const ssoCourses = currentUser?.courseNames || currentUser?.course_names || currentUser?.courses || [];
     if (Array.isArray(ssoCourses)) {
       ssoCourses.forEach((c) => {
@@ -697,18 +774,44 @@ export const elearningApi = {
       });
     }
 
-    // 3. Filter daftar mata pelajaran yang diampu
+    // C. Ambil dari tabel penugasan /school/classes (e-Rapor schedule / SSO classes)
+    const myAssignments = (rawAssignments || []).filter((a) => {
+      if (!a) return false;
+      const tId = String(a.teacher_id || a.dosen_id || '').toLowerCase().trim();
+      const tNip = String(a.teacher_nip || a.dosen_nip || '').toLowerCase().trim();
+      const tName = String(a.teacher_name || a.dosen_name || '').toLowerCase().trim();
+
+      if (myId && tId && (tId === myId || tId.includes(myId) || myId.includes(tId))) return true;
+      if (myNip && (tNip === myNip || tId === myNip)) return true;
+      if (myName && tName && (tName === myName || tName.includes(myName) || myName.includes(tName))) return true;
+      return false;
+    });
+
+    myAssignments.forEach((a) => {
+      if (a.course_name) teacherCourseNames.add(a.course_name.trim().toLowerCase());
+      if (a.course_code) teacherCourseCodes.add(a.course_code.trim().toUpperCase());
+      if (a.class_code) {
+        const clean = a.class_code.replace(/^Kelas\s*/i, '').trim().toUpperCase();
+        if (clean) teacherClassCodes.add(clean);
+      }
+    });
+
+    // Filter daftar mata pelajaran yang diampu
     let filteredSubjects = [];
     if (teacherCourseNames.size > 0 || teacherCourseCodes.size > 0) {
       filteredSubjects = (subjData || []).filter((s) => {
         const sName = (s.name || '').trim().toLowerCase();
         const sCode = (s.code || '').trim().toUpperCase();
-        return teacherCourseNames.has(sName) || teacherCourseCodes.has(sCode);
+        return (
+          teacherCourseNames.has(sName) ||
+          teacherCourseCodes.has(sCode) ||
+          Array.from(teacherCourseNames).some((tc) => tc.includes(sName) || sName.includes(tc))
+        );
       });
 
-      // Jika ada mapel guru di SSO yang belum ada di daftar master subjData, buatkan entitasnya
+      // Tambahkan subject yang ada di penugasan guru tapi belum ada di master subjData
       teacherCourseNames.forEach((nameLower) => {
-        const exists = filteredSubjects.some((s) => (s.name || '').toLowerCase() === nameLower);
+        const exists = filteredSubjects.some((s) => (s.name || '').toLowerCase() === nameLower || (s.name || '').toLowerCase().includes(nameLower));
         if (!exists) {
           const matchingCode = Array.from(teacherCourseCodes)[0] || nameLower.slice(0, 3).toUpperCase();
           filteredSubjects.push({
@@ -720,7 +823,7 @@ export const elearningApi = {
       });
     }
 
-    // 4. Filter daftar rombel kelas yang diampu
+    // Filter daftar rombel kelas yang diampu
     let filteredClasses = [];
     if (teacherClassCodes.size > 0) {
       filteredClasses = (clsData || []).filter((cls) => {
@@ -740,14 +843,6 @@ export const elearningApi = {
           });
         }
       });
-    }
-
-    // Jika guru belum memiliki penugasan apapun di database, fallback agar halaman tidak error
-    if (filteredSubjects.length === 0 && (subjData || []).length > 0) {
-      filteredSubjects = subjData;
-    }
-    if (filteredClasses.length === 0 && (clsData || []).length > 0) {
-      filteredClasses = clsData;
     }
 
     return {

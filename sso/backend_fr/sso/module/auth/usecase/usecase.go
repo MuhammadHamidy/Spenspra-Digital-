@@ -223,11 +223,16 @@ func (u *useCase) Login(ctx context.Context, req domain.LoginRequest) (*domain.L
 		"aud":       aud,
 		"id":        account.Id,
 		"username":  account.Username,
-		"role_id":   account.RoleId,
-		"role_name": account.RoleName,
-		"full_name": account.FullName,
-		"exp":       expiresAt.Unix(),
-		"iat":       time.Now().Unix(),
+		"role_id":      account.RoleId,
+		"role_name":    account.RoleName,
+		"full_name":    account.FullName,
+		"course_names": account.CourseNames,
+		"course_ids":   account.CourseIds,
+		"class_codes":  account.ClassCodes,
+		"class_ids":    account.ClassIds,
+		"class_name":   account.ClassName,
+		"exp":          expiresAt.Unix(),
+		"iat":          time.Now().Unix(),
 	}
 
 	var tokenString string

@@ -110,6 +110,11 @@ function parseJwtUser(token) {
       roleId: parsed.role_id || parsed.roleId || '',
       nimNip: parsed.nim_nip || parsed.nimNip || '',
       nim_nip: parsed.nim_nip || parsed.nimNip || '',
+      courseNames: parsed.course_names || parsed.courseNames || [],
+      course_names: parsed.course_names || parsed.courseNames || [],
+      classCodes: parsed.class_codes || parsed.classCodes || [],
+      class_codes: parsed.class_codes || parsed.classCodes || [],
+      className: parsed.class_name || parsed.className || '',
     };
   } catch {
     return null;
