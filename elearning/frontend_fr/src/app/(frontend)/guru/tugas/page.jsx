@@ -663,20 +663,21 @@ export default function TeacherAssignmentsManagementPage() {
                         )}
                       </td>
                       <td className="py-2.5 px-3 text-right">
-                      <Button
-                        variant="primary"
-                        size="xs"
-                        onClick={() => {
-                          setSelectedSub(sub);
-                          setGradeScore(sub.score || '');
-                          setGradeFeedback(sub.feedback || '');
-                        }}
-                      >
-                        Beri Nilai
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                        <Button
+                          variant="primary"
+                          size="xs"
+                          onClick={() => {
+                            setSelectedSub(sub);
+                            setGradeScore(sub.score || '');
+                            setGradeFeedback(sub.feedback || '');
+                          }}
+                        >
+                          Beri Nilai
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
