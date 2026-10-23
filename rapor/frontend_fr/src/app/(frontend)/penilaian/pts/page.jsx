@@ -287,25 +287,51 @@ export default function PenilaianPTSPage() {
       setPredicateTemplates(effectiveTemplates);
 
       if (res.success && Array.isArray(res.data) && res.data.length > 0) {
-        setRows(
-          res.data.map((g) => {
-            const hasScore = g.score !== undefined && g.score !== null && Number(g.score) >= 0;
-            const pred = hasScore ? getPredicate(g.score) : '-';
-            const defaultDesc = pred !== '-' ? (effectiveTemplates[pred] || formatDescription(pred, effectiveTemplates)) : '';
-            const cleanDesc = g.description ? g.description.replace(/^[A-D]:\s*/i, '').trim() : '';
-            return {
-              id: g.student_id,
-              person_id: g.person_id || null,
-              nisn: g.nisn,
-              name: g.student_name,
-              className: g.class_name,
-              score: hasScore ? String(g.score) : '',
-              description: cleanDesc || defaultDesc,
-            };
-          })
-        );
+        let loadedRows = res.data.map((g) => {
+          const hasScore = g.score !== undefined && g.score !== null && Number(g.score) >= 0;
+          const pred = hasScore ? getPredicate(g.score) : '-';
+          const defaultDesc = pred !== '-' ? (effectiveTemplates[pred] || formatDescription(pred, effectiveTemplates)) : '';
+          const cleanDesc = g.description ? g.description.replace(/^[A-D]:\s*/i, '').trim() : '';
+          return {
+            id: g.student_id,
+            person_id: g.person_id || null,
+            nisn: g.nisn,
+            name: g.student_name,
+            className: g.class_name,
+            score: hasScore ? String(g.score) : '',
+            description: cleanDesc || defaultDesc,
+          };
+        });
+
+        // 3. Pulihkan otomatis draf dari cache browser (nilai/deskripsi yang belum disimpan ke database)
+        const currentDraftKey = `spenspra_draft_pts_${className}_${subject}_${String(academicYear).replace('/', '_')}_${semester}`;
+        let restoredDraft = null;
+        try {
+          const rawDraft = localStorage.getItem(currentDraftKey);
+          if (rawDraft) {
+            const parsed = JSON.parse(rawDraft);
+            if (Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+              const draftMap = new Map(parsed.rows.map((r) => [r.id, r]));
+              loadedRows = loadedRows.map((row) => {
+                const d = draftMap.get(row.id);
+                return d ? { ...row, score: d.score ?? '', description: d.description ?? '' } : row;
+              });
+              restoredDraft = {
+                time: parsed.timestamp
+                  ? new Date(parsed.timestamp).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })
+                  : '-',
+                count: parsed.count ?? 0,
+              };
+            }
+          }
+        } catch {}
+
+        setRows(loadedRows);
+        setDraftRecovery(restoredDraft);
+        setSaveStatus(restoredDraft ? 'LOCAL_DRAFT' : 'CLOUD_SAVED');
       } else {
         setRows([]);
+        setDraftRecovery(null);
       }
     } catch (err) {
       console.warn('Gagal memuat nilai dari server:', err);
@@ -355,29 +381,7 @@ export default function PenilaianPTSPage() {
     }, 300);
   }, [draftKey]);
 
-  // Cek apakah ada draf lokal tersimpan saat berganti kelas/mapel
-  useEffect(() => {
-    try {
-      const rawDraft = localStorage.getItem(draftKey);
-      if (rawDraft) {
-        const parsed = JSON.parse(rawDraft);
-        if (parsed.timestamp && parsed.count > 0 && Array.isArray(parsed.rows)) {
-          const draftDate = new Date(parsed.timestamp);
-          setDraftRecovery({
-            time: draftDate.toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }),
-            count: parsed.count,
-            rows: parsed.rows,
-          });
-        } else {
-          setDraftRecovery(null);
-        }
-      } else {
-        setDraftRecovery(null);
-      }
-    } catch {
-      setDraftRecovery(null);
-    }
-  }, [draftKey]);
+  // Catatan: draf lokal dipulihkan otomatis di loadStudentsAndGrades
 
   // Peringatan sebelum meninggalkan halaman jika belum disimpan ke server e-Rapor
   useEffect(() => {
@@ -392,21 +396,17 @@ export default function PenilaianPTSPage() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [saveStatus]);
 
-  const handleRestoreDraft = () => {
-    if (draftRecovery?.rows && Array.isArray(draftRecovery.rows)) {
-      setRows(draftRecovery.rows);
-      setSaveStatus('LOCAL_DRAFT');
-      setDraftRecovery(null);
-      setSaved(true);
-      setSaveMessage('Draf lokal berhasil dipulihkan dari cache browser!');
-    }
-  };
-
   const handleDiscardDraft = () => {
+    if (!confirm('Buang draf yang belum disimpan dan muat ulang nilai dari database?')) return;
+    if (localDraftTimerRef.current) {
+      clearTimeout(localDraftTimerRef.current);
+      localDraftTimerRef.current = null;
+    }
     try {
       localStorage.removeItem(draftKey);
     } catch {}
     setDraftRecovery(null);
+    loadStudentsAndGrades();
   };
 
   const handleTopicChange = (e) => {
@@ -749,7 +749,7 @@ export default function PenilaianPTSPage() {
         </div>
       )}
 
-      {/* Banner Pemulihan Draf Tersimpan Lokal (Autosave Safeguard) */}
+      {/* Banner Informasi Draf Tersimpan Lokal Otomatis Dimuat */}
       {draftRecovery && (
         <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/80 flex flex-wrap items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-3">
@@ -758,10 +758,10 @@ export default function PenilaianPTSPage() {
             </div>
             <div>
               <h4 className="text-xs font-bold text-blue-900">
-                Ditemukan Draf Nilai Tersimpan Otomatis ({draftRecovery.time})
+                Draf Nilai Lokal Berhasil Dimuat Otomatis ({draftRecovery.time})
               </h4>
               <p className="text-[11px] text-blue-800 mt-0.5">
-                Terdapat <strong>{draftRecovery.count} nilai siswa</strong> yang belum tersinkronisasi ke server dari sesi sebelumnya. Ingin memulihkan data tersebut?
+                Terdapat <strong>{draftRecovery.count} nilai siswa</strong> dari cache browser yang belum disimpan ke database server. Jangan lupa klik <strong>Simpan Nilai USTS</strong>.
               </p>
             </div>
           </div>
@@ -771,14 +771,14 @@ export default function PenilaianPTSPage() {
               onClick={handleDiscardDraft}
               className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold cursor-pointer"
             >
-              Abaikan Draf
+              Buang Draf & Reset
             </button>
             <button
               type="button"
-              onClick={handleRestoreDraft}
-              className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+              onClick={() => setDraftRecovery(null)}
+              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs cursor-pointer"
             >
-              <span>Pulihkan Draf Sekarang</span>
+              Mengerti
             </button>
           </div>
         </div>

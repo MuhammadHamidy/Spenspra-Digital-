@@ -124,7 +124,13 @@ export default function Navbar({ onToggleMobileSidebar = () => {} }) {
     try {
       tokenStorage.clear();
       sessionStorage.clear();
-      localStorage.clear();
+      // Hapus data sesi, tapi PERTAHANKAN draf nilai & deskripsi capaian guru
+      const PRESERVED_PREFIXES = ['spenspra_draft_', 'spenspra_pts_', 'spenspra_uas_', 'spenspra_topic_'];
+      Object.keys(localStorage).forEach((key) => {
+        if (!PRESERVED_PREFIXES.some((p) => key.startsWith(p))) {
+          localStorage.removeItem(key);
+        }
+      });
     } catch (e) {}
     setIsDropdownOpen(false);
     const isProd = typeof window !== 'undefined' && window.location.hostname.includes('spenspra.com');
