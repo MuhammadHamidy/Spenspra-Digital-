@@ -81,6 +81,7 @@ func (u *useCase) SaveBulk(ctx context.Context, req domain.BulkGradeRequest, rea
 	now := time.Now()
 	rows := make([]*domain.StudentGrade, 0, len(req.Grades))
 	changeLogs := make([]*domain.GradeChangeLog, 0)
+	deleteIDs := make([]string, 0)
 
 	logReason := strings.TrimSpace(reason)
 	if logReason == "" {
@@ -88,19 +89,14 @@ func (u *useCase) SaveBulk(ctx context.Context, req domain.BulkGradeRequest, rea
 	}
 
 	for _, g := range req.Grades {
-		if g.Score == nil || g.StudentID == "" {
-			continue // nilai kosong dilewati
-		}
-		score := *g.Score
-		if score < 0 || score > 100 {
-			return 0, fmt.Errorf("nilai %s harus 0-100", g.StudentName)
+		if g.StudentID == "" {
+			continue
 		}
 
-		// Deteksi apakah nilai berubah dari yang tersimpan
-		if old, exists := existingMap[g.StudentID]; exists {
-			if old.Score >= 0 && (old.Score != score || old.Description != g.Description) {
+		// Tangani jika nilai dikosongkan (Score nil atau < 0)
+		if g.Score == nil || *g.Score < 0 {
+			if old, exists := existingMap[g.StudentID]; exists && old.Score >= 0 {
 				oldScoreVal := old.Score
-				newScoreVal := score
 				changeLogs = append(changeLogs, &domain.GradeChangeLog{
 					ID:             uuid.New().String(),
 					StudentID:      g.StudentID,
@@ -112,6 +108,47 @@ func (u *useCase) SaveBulk(ctx context.Context, req domain.BulkGradeRequest, rea
 					AcademicYear:   req.AcademicYear,
 					Semester:       req.Semester,
 					OldScore:       &oldScoreVal,
+					NewScore:       nil,
+					OldDescription: old.Description,
+					NewDescription: "",
+					ChangedByID:    req.TeacherID,
+					ChangedByName:  req.TeacherName,
+					Reason:         "Nilai dikosongkan oleh guru pengampu",
+					CreatedAt:      now,
+				})
+
+				if old.ID != "" {
+					deleteIDs = append(deleteIDs, old.ID)
+				}
+			}
+			continue
+		}
+
+		score := *g.Score
+		if score < 0 || score > 100 {
+			return 0, fmt.Errorf("nilai %s harus 0-100", g.StudentName)
+		}
+
+		// Deteksi apakah nilai berubah dari yang tersimpan
+		if old, exists := existingMap[g.StudentID]; exists {
+			if old.Score != score || old.Description != g.Description {
+				var oldScorePtr *float64
+				if old.Score >= 0 {
+					oldScoreVal := old.Score
+					oldScorePtr = &oldScoreVal
+				}
+				newScoreVal := score
+				changeLogs = append(changeLogs, &domain.GradeChangeLog{
+					ID:             uuid.New().String(),
+					StudentID:      g.StudentID,
+					StudentName:    g.StudentName,
+					ClassName:      req.ClassName,
+					SubjectCode:    req.SubjectCode,
+					SubjectName:    req.SubjectName,
+					AssessmentType: req.AssessmentType,
+					AcademicYear:   req.AcademicYear,
+					Semester:       req.Semester,
+					OldScore:       oldScorePtr,
 					NewScore:       &newScoreVal,
 					OldDescription: old.Description,
 					NewDescription: g.Description,
@@ -123,8 +160,13 @@ func (u *useCase) SaveBulk(ctx context.Context, req domain.BulkGradeRequest, rea
 			}
 		}
 
+		gradeID := uuid.New().String()
+		if old, exists := existingMap[g.StudentID]; exists && old.ID != "" {
+			gradeID = old.ID
+		}
+
 		rows = append(rows, &domain.StudentGrade{
-			ID:             uuid.New().String(),
+			ID:             gradeID,
 			StudentID:      g.StudentID,
 			PersonID:       g.PersonID,
 			NISN:           g.NISN,
@@ -145,11 +187,21 @@ func (u *useCase) SaveBulk(ctx context.Context, req domain.BulkGradeRequest, rea
 		})
 	}
 
-	if err := u.repo.Upsert(ctx, rows); err != nil {
-		return 0, fmt.Errorf("gagal menyimpan nilai: %w", err)
+	// 1. Hapus nilai siswa yang dikosongkan dari tabel student_grades
+	if len(deleteIDs) > 0 {
+		if err := u.repo.DeleteByIDs(ctx, deleteIDs); err != nil {
+			return 0, fmt.Errorf("gagal menghapus nilai yang dikosongkan: %w", err)
+		}
 	}
 
-	// Simpan audit log perubahan jika ada
+	// 2. Simpan nilai yang valid (0 <= score <= 100)
+	if len(rows) > 0 {
+		if err := u.repo.Upsert(ctx, rows); err != nil {
+			return 0, fmt.Errorf("gagal menyimpan nilai: %w", err)
+		}
+	}
+
+	// 3. Simpan audit log perubahan jika ada
 	if len(changeLogs) > 0 {
 		_ = u.repo.CreateChangeLogs(ctx, changeLogs)
 	}

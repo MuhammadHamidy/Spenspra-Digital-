@@ -270,6 +270,7 @@ type Repository interface {
 
 	// Hapus / Reset Nilai
 	DeleteGrades(ctx context.Context, f GradeFilter, all bool) (int64, error)
+	DeleteByIDs(ctx context.Context, ids []string) error
 }
 
 type UseCase interface {

@@ -81,6 +81,7 @@ func (u *useCase) SaveBulk(ctx context.Context, req domain.BulkGradeRequest, rea
 	now := time.Now()
 	rows := make([]*domain.StudentGrade, 0, len(req.Grades))
 	changeLogs := make([]*domain.GradeChangeLog, 0)
+	deleteIDs := make([]string, 0)
 
 	logReason := strings.TrimSpace(reason)
 	if logReason == "" {
@@ -116,26 +117,9 @@ func (u *useCase) SaveBulk(ctx context.Context, req domain.BulkGradeRequest, rea
 					CreatedAt:      now,
 				})
 
-				rows = append(rows, &domain.StudentGrade{
-					ID:             old.ID,
-					StudentID:      g.StudentID,
-					PersonID:       g.PersonID,
-					NISN:           g.NISN,
-					StudentName:    g.StudentName,
-					ClassName:      req.ClassName,
-					SubjectCode:    req.SubjectCode,
-					SubjectName:    req.SubjectName,
-					AssessmentType: req.AssessmentType,
-					AcademicYear:   req.AcademicYear,
-					Semester:       req.Semester,
-					Score:          -1,
-					Predicate:      "-",
-					Description:    "",
-					TeacherID:      req.TeacherID,
-					TeacherName:    req.TeacherName,
-					CreatedAt:      now,
-					UpdatedAt:      now,
-				})
+				if old.ID != "" {
+					deleteIDs = append(deleteIDs, old.ID)
+				}
 			}
 			continue
 		}
@@ -203,11 +187,21 @@ func (u *useCase) SaveBulk(ctx context.Context, req domain.BulkGradeRequest, rea
 		})
 	}
 
-	if err := u.repo.Upsert(ctx, rows); err != nil {
-		return 0, fmt.Errorf("gagal menyimpan nilai: %w", err)
+	// 1. Hapus nilai siswa yang dikosongkan dari tabel student_grades
+	if len(deleteIDs) > 0 {
+		if err := u.repo.DeleteByIDs(ctx, deleteIDs); err != nil {
+			return 0, fmt.Errorf("gagal menghapus nilai yang dikosongkan: %w", err)
+		}
 	}
 
-	// Simpan audit log perubahan jika ada
+	// 2. Simpan nilai yang valid (0 <= score <= 100)
+	if len(rows) > 0 {
+		if err := u.repo.Upsert(ctx, rows); err != nil {
+			return 0, fmt.Errorf("gagal menyimpan nilai: %w", err)
+		}
+	}
+
+	// 3. Simpan audit log perubahan jika ada
 	if len(changeLogs) > 0 {
 		_ = u.repo.CreateChangeLogs(ctx, changeLogs)
 	}

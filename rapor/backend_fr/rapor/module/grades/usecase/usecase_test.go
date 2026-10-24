@@ -78,6 +78,9 @@ func (m *mockRepository) RestoreBackup(ctx context.Context, data *domain.BackupD
 func (m *mockRepository) DeleteGrades(ctx context.Context, f domain.GradeFilter, all bool) (int64, error) {
 	return 0, nil
 }
+func (m *mockRepository) DeleteByIDs(ctx context.Context, ids []string) error {
+	return nil
+}
 
 func TestPredicateCalculation(t *testing.T) {
 	assert.Equal(t, "A", usecase.Predicate(95.0))

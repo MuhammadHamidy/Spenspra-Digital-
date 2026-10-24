@@ -248,21 +248,24 @@ export default function PenilaianUASPage() {
       semester: 'GENAP',
       teacher_id: currentUser?.id || '',
       teacher_name: currentUser?.fullName || currentUser?.full_name || 'Guru Pengampu',
-      grades: rows
-        .filter((r) => r.score !== '' && r.score !== null && !isNaN(Number(r.score)))
-        .map((r) => ({
+      grades: rows.map((r) => {
+        const hasScore = r.score !== '' && r.score !== null && !isNaN(Number(r.score)) && Number(r.score) >= 0;
+        const numScore = hasScore ? Math.min(100, Math.max(0, Number(r.score))) : null;
+        const pred = hasScore ? getPredicate(numScore) : '-';
+        return {
           student_id: r.id,
           person_id: r.person_id,
           nisn: r.nisn,
           student_name: r.name,
-          score: Number(r.score),
-          description: r.description || (getPredicate(r.score) === '-' ? '' : DEFAULT_DESCRIPTIONS[getPredicate(r.score)]),
-        })),
+          score: numScore,
+          description: r.description || (pred !== '-' ? DEFAULT_DESCRIPTIONS[pred] : ''),
+        };
+      }),
     };
 
     if (payload.grades.length === 0) {
       setIsSaving(false);
-      setSaveMessage('Belum ada nilai yang diinput untuk disimpan.');
+      setSaveMessage('Belum ada siswa di kelas ini.');
       setSaved(true);
       return;
     }

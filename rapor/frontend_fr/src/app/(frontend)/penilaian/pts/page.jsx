@@ -650,8 +650,8 @@ export default function PenilaianPTSPage() {
       teacher_id: currentUser?.id || '',
       teacher_name: currentUser?.fullName || currentUser?.full_name || 'Guru Pengampu',
       grades: rows.map((r) => {
-        const hasScore = r.score !== '' && r.score !== null && !isNaN(Number(r.score));
-        const numScore = hasScore ? Number(r.score) : null;
+        const hasScore = r.score !== '' && r.score !== null && !isNaN(Number(r.score)) && Number(r.score) >= 0;
+        const numScore = hasScore ? Math.min(100, Math.max(0, Number(r.score))) : null;
         const pred = hasScore ? getPredicate(numScore) : '-';
         let desc = r.description;
         if (!desc && pred !== '-') {

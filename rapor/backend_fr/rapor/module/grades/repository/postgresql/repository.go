@@ -645,3 +645,10 @@ func (r *repository) DeleteGrades(ctx context.Context, f domain.GradeFilter, all
 	res := q.Delete(nil)
 	return res.RowsAffected, res.Error
 }
+
+func (r *repository) DeleteByIDs(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Table("student_grades").Where("id IN (?)", ids).Delete(nil).Error
+}
