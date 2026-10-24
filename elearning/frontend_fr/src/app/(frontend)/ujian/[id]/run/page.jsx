@@ -351,16 +351,53 @@ export default function CBTExamRunnerPage({ params }) {
               <span>Mata Pelajaran:</span>
               <span className="font-bold text-primary-500">{exam?.subject}</span>
             </div>
-            <div className="flex items-center justify-between text-xs text-neutral-600">
-              <span>Jawaban Benar (PG):</span>
-              <span className="font-bold text-success-600">
-                {finishResult.correctCount} / {finishResult.totalMcq} Soal
-              </span>
-            </div>
-            <div className="pt-2 border-t border-neutral-200 flex items-center justify-between text-sm">
-              <span className="font-bold text-neutral-800">Skor Pilihan Ganda:</span>
-              <span className="text-2xl font-black text-primary-500">{finishResult.score}</span>
-            </div>
+
+            {/* Jika Ujian Murni Esai / Tidak Ada Soal PG */}
+            {finishResult.totalMcq === 0 ? (
+              <div className="pt-2 border-t border-neutral-200 space-y-2 text-left">
+                <div className="flex items-center justify-between text-xs text-neutral-600">
+                  <span>Tipe Ujian:</span>
+                  <span className="font-bold text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full">
+                    Uraian / Esai ({finishResult.totalEssay || questions.length} Soal)
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+                    <span>✓</span>
+                    <span>Jawaban Esai Berhasil Disimpan</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-700 leading-relaxed">
+                    Seluruh lembar jawaban esai Anda telah tersimpan di sistem. Skor akhir akan dinilai dan dipublikasikan oleh Guru Pengampu setelah proses koreksi.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              /* Jika Ada Soal Pilihan Ganda (PG) */
+              <>
+                <div className="flex items-center justify-between text-xs text-neutral-600">
+                  <span>Jawaban Benar (PG):</span>
+                  <span className="font-bold text-success-600">
+                    {finishResult.correctCount} / {finishResult.totalMcq} Soal
+                  </span>
+                </div>
+
+                {finishResult.totalEssay > 0 && (
+                  <div className="flex items-center justify-between text-xs text-neutral-600">
+                    <span>Soal Uraian / Esai:</span>
+                    <span className="font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                      {finishResult.totalEssay} Soal (Koreksi Manual)
+                    </span>
+                  </div>
+                )}
+
+                <div className="pt-2 border-t border-neutral-200 flex items-center justify-between text-sm">
+                  <span className="font-bold text-neutral-800">
+                    {finishResult.totalEssay > 0 ? 'Skor Sementara (PG):' : 'Skor Pilihan Ganda:'}
+                  </span>
+                  <span className="text-2xl font-black text-primary-500">{finishResult.score}</span>
+                </div>
+              </>
+            )}
           </div>
 
           <Button
@@ -378,8 +415,13 @@ export default function CBTExamRunnerPage({ params }) {
 
   // Answer status summary
   const totalQuestions = questions.length;
-  const answeredCount = Object.keys(answers).length;
-  const doubtfulCount = Object.values(doubtfuls).filter(Boolean).length;
+  const answeredCount = questions.filter((q) =>
+    Boolean(
+      (answers[q.id]?.selectedOption && String(answers[q.id]?.selectedOption).trim() !== '') ||
+      (answers[q.id]?.essayAnswer && String(answers[q.id]?.essayAnswer).trim() !== '')
+    )
+  ).length;
+  const doubtfulCount = questions.filter((q) => Boolean(doubtfuls[q.id])).length;
   const unansweredCount = Math.max(0, totalQuestions - answeredCount);
 
   return (
@@ -613,39 +655,47 @@ export default function CBTExamRunnerPage({ params }) {
             <div className="grid grid-cols-5 gap-2">
               {questions.map((q, idx) => {
                 const isCurrent = idx === currentIndex;
-                const isAnswered = Boolean(answers[q.id]?.selectedOption || answers[q.id]?.essayAnswer);
+                const isAnswered = Boolean(
+                  (answers[q.id]?.selectedOption && String(answers[q.id]?.selectedOption).trim() !== '') ||
+                  (answers[q.id]?.essayAnswer && String(answers[q.id]?.essayAnswer).trim() !== '')
+                );
                 const isDoubtful = Boolean(doubtfuls[q.id]);
 
-                let bgClass = 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200';
+                let bgClass = 'bg-neutral-100 text-neutral-800 hover:bg-neutral-200 border border-neutral-300';
                 if (isDoubtful) {
-                  bgClass = 'bg-accent-500 text-neutral-900 font-bold';
+                  bgClass = 'bg-accent-500 text-neutral-900 font-bold border border-accent-600 shadow-xs';
                 } else if (isAnswered) {
-                  bgClass = 'bg-success-600 text-white font-bold';
+                  bgClass = 'bg-success-600 text-white font-bold border border-success-700 shadow-xs';
                 }
 
                 return (
                   <button
-                    key={q.id}
+                    key={q.id || idx}
                     type="button"
                     onClick={() => setCurrentIndex(idx)}
-                    className={`h-9 rounded-[8px] text-xs transition-all flex items-center justify-center cursor-pointer ${bgClass} ${
-                      isCurrent ? 'ring-2 ring-primary-500 ring-offset-2 font-black' : ''
+                    className={`w-full h-10 rounded-[8px] text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${bgClass} ${
+                      isCurrent
+                        ? 'ring-2 ring-primary-500 ring-offset-2 scale-105 font-black shadow-sm'
+                        : ''
                     }`}
+                    title={`Pindah ke Soal No. ${idx + 1}`}
                   >
-                    {idx + 1}
+                    <span className="leading-none text-current font-bold text-xs sm:text-sm">
+                      {idx + 1}
+                    </span>
                   </button>
                 );
               })}
             </div>
 
             {/* Legend */}
-            <div className="pt-3 border-t border-neutral-100 space-y-2 text-[11px] text-neutral-500">
+            <div className="pt-3 border-t border-neutral-100 space-y-2 text-[11px] text-neutral-600 font-medium">
               <div className="flex items-center gap-2">
-                <span className="w-3.5 h-3.5 rounded bg-success-600 shrink-0" />
+                <span className="w-3.5 h-3.5 rounded bg-success-600 border border-success-700 shrink-0" />
                 <span>Sudah Dijawab ({answeredCount})</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-3.5 h-3.5 rounded bg-accent-500 shrink-0" />
+                <span className="w-3.5 h-3.5 rounded bg-accent-500 border border-accent-600 shrink-0" />
                 <span>Ragu-Ragu ({doubtfulCount})</span>
               </div>
               <div className="flex items-center gap-2">

@@ -59,6 +59,7 @@ export default function TeacherExamsManagementPage() {
   const [optC, setOptC] = useState('');
   const [optD, setOptD] = useState('');
   const [correctOption, setCorrectOption] = useState('A');
+  const [mcqPoints, setMcqPoints] = useState(10);
   const [essayPoints, setEssayPoints] = useState(10);
   const [essayRubric, setEssayRubric] = useState('');
   const [isSavingQuestion, setIsSavingQuestion] = useState(false);
@@ -333,6 +334,7 @@ export default function TeacherExamsManagementPage() {
     setOptC('');
     setOptD('');
     setCorrectOption('A');
+    setMcqPoints(10);
     setEssayPoints(10);
     setEssayRubric('');
     setSaveSuccessMsg('');
@@ -366,6 +368,7 @@ export default function TeacherExamsManagementPage() {
       setOptC(optMap['C'] || '');
       setOptD(optMap['D'] || '');
       setCorrectOption(q.correctOption || 'A');
+      setMcqPoints(q.points || 10);
     } else {
       setEssayPoints(q.points || 10);
       setEssayRubric(q.essayRubric || '');
@@ -420,7 +423,7 @@ export default function TeacherExamsManagementPage() {
               ]
             : [],
         correctOption: newQuestionType === 'MCQ' ? correctOption : '',
-        points: newQuestionType === 'ESSAY' ? Number(essayPoints) || 10 : undefined,
+        points: Number(newQuestionType === 'MCQ' ? mcqPoints : essayPoints) || 10,
         essayRubric: newQuestionType === 'ESSAY' ? essayRubric.trim() || undefined : undefined,
       };
 
@@ -836,6 +839,29 @@ export default function TeacherExamsManagementPage() {
                         );
                       })}
                     </div>
+
+                    {/* Bobot Skor Pilihan Ganda Per Butir Soal */}
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-primary-50/70 border border-primary-200">
+                      <div>
+                        <label className="text-xs font-bold text-neutral-800">
+                          Bobot Skor / Nilai Butir Soal Ini:
+                        </label>
+                        <p className="text-[11px] text-neutral-500">
+                          Poin yang diperoleh siswa jika memilih jawaban kunci benar
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={mcqPoints}
+                          onChange={(e) => setMcqPoints(e.target.value)}
+                          className="w-20 text-xs font-bold p-2 text-center rounded-lg border border-primary-300 bg-white"
+                        />
+                        <span className="text-xs font-semibold text-neutral-600">Poin</span>
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -977,13 +1003,18 @@ export default function TeacherExamsManagementPage() {
 
                         <div className="flex items-center gap-1.5">
                           {q.type === 'MCQ' && (
-                            <span className="font-bold text-success-700 bg-success-50 px-2 py-0.5 rounded border border-success-200 text-[10px]">
-                              Kunci: {q.correctOption}
-                            </span>
+                            <>
+                              <span className="font-bold text-success-700 bg-success-50 px-2 py-0.5 rounded border border-success-200 text-[10px]">
+                                Kunci: {q.correctOption}
+                              </span>
+                              <span className="font-bold text-primary-700 bg-primary-50 px-2 py-0.5 rounded border border-primary-200 text-[10px]">
+                                {q.points || 10} Poin
+                              </span>
+                            </>
                           )}
                           {q.type === 'ESSAY' && (
                             <span className="font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 text-[10px]">
-                              {q.points || 10} Poin
+                              {q.points || 10} Poin (Esai)
                             </span>
                           )}
                           <button

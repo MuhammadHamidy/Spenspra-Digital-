@@ -1159,28 +1159,44 @@ export const elearningApi = {
     const session = getLocal(sessionKey, null);
     if (!session) return;
 
-    // Hitung skor otomatis untuk PG
+    // Hitung skor otomatis untuk PG berdasarkan poin tiap butir soal
     const questions = await elearningApi.getExamQuestions(examId);
     let correctCount = 0;
     let totalMcq = 0;
+    let totalEssay = 0;
+    let totalMcqPoints = 0;
+    let earnedMcqPoints = 0;
 
     questions.forEach((q) => {
+      const qPoints = Number(q.points) > 0 ? Number(q.points) : 10;
       if (q.type === 'MCQ') {
         totalMcq += 1;
-        const answer = session.answers[q.id];
+        totalMcqPoints += qPoints;
+        const answer = session.answers?.[q.id];
         if (answer && answer.selectedOption === q.correctOption) {
           correctCount += 1;
+          earnedMcqPoints += qPoints;
         }
+      } else if (q.type === 'ESSAY') {
+        totalEssay += 1;
       }
     });
 
-    const score = totalMcq > 0 ? Math.round((correctCount / totalMcq) * 100) : 100;
+    // Jika murni soal esai (totalMcq === 0), tidak perlu skor otomatis (score: null, dinilai manual guru)
+    // Jika ada soal PG, skor dihitung dari bobot poin per butir soal
+    const score = totalMcq > 0
+      ? (totalMcqPoints > 0 ? Math.round((earnedMcqPoints / totalMcqPoints) * 100) : Math.round((correctCount / totalMcq) * 100))
+      : null;
 
     session.status = 'SUBMITTED';
     session.submittedAt = new Date().toISOString();
     session.score = score;
     session.correctCount = correctCount;
     session.totalMcq = totalMcq;
+    session.totalEssay = totalEssay;
+    session.totalMcqPoints = totalMcqPoints;
+    session.earnedMcqPoints = earnedMcqPoints;
+    session.isEssayOnly = totalMcq === 0 && totalEssay > 0;
 
     setLocal(sessionKey, session);
 
@@ -1198,7 +1214,7 @@ export const elearningApi = {
     if (effSessionId) {
       fetchJson(`/sessions/${effSessionId}/finish`, {
         method: 'POST',
-        body: JSON.stringify({ score }),
+        body: JSON.stringify({ score: score !== null ? score : 0 }),
       }).catch(() => {});
     }
 
