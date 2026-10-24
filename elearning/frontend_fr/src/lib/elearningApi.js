@@ -1,9 +1,26 @@
 import { tokenStorage } from './common/tokenStorage';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+export function getElearningApiBase() {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host.includes('spenspra.com')) return 'https://belajar.spenspra.com/api';
+    if (host.includes('spenspra.sch.id')) return 'https://belajar.spenspra.sch.id/api';
+    if (!host.includes('localhost') && host !== '127.0.0.1') {
+      return `${window.location.origin}/api`;
+    }
+    const envUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('belajar.localhost')) {
+      return envUrl;
+    }
+    return `${window.location.origin}/api`;
+  }
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+}
 
 async function fetchJson(endpoint, options = {}) {
-  const url = `${BASE_URL}${endpoint}`;
+  const baseUrl = getElearningApiBase();
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${baseUrl}${cleanEndpoint}`;
   const currentUser = tokenStorage.getUser();
   const userId = currentUser?.id || 'user-elearning-default';
   const token = tokenStorage.getToken();

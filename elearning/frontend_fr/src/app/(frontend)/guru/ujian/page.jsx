@@ -341,8 +341,14 @@ export default function TeacherExamsManagementPage() {
   const handleOpenQuestionEditor = async (exam) => {
     setActiveQuestionEditorExam(exam);
     const qs = await elearningApi.getExamQuestions(exam.id);
-    setExamQuestions(qs || []);
+    const list = qs || [];
+    setExamQuestions(list);
     resetQuestionForm();
+
+    // Otomatis sinkronisasi soal lokal ke database server jika ada
+    if (list.length > 0 && exam?.id) {
+      elearningApi.saveExamQuestions(exam.id, list).catch(() => {});
+    }
   };
 
   const handleEditQuestion = (q) => {
@@ -517,6 +523,28 @@ export default function TeacherExamsManagementPage() {
           </div>
 
           <div className="flex items-center gap-2 self-end md:self-center">
+            {examQuestions.length > 0 && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    setIsSavingQuestion(true);
+                    await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, examQuestions);
+                    setSaveSuccessMsg(`✓ Seluruh ${examQuestions.length} butir soal berhasil disimpan ke server!`);
+                    setTimeout(() => setSaveSuccessMsg(''), 4000);
+                  } catch (e) {
+                    alert('Gagal sinkronisasi: ' + e.message);
+                  } finally {
+                    setIsSavingQuestion(false);
+                  }
+                }}
+                loading={isSavingQuestion}
+                className="cursor-pointer font-bold shadow-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                ☁️ Simpan ke Server ({examQuestions.length} Soal)
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
