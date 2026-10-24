@@ -1070,24 +1070,73 @@ export const elearningApi = {
   },
 
   saveAnswer: async (sessionId, examId, studentId, questionId, selectedOption, essayAnswer = '', isDoubtful = false) => {
-    const sId = studentId || 'demo';
-    const sessionKey = `exam_session_${examId}_${sId}`;
-    const session = getLocal(sessionKey, null);
-    if (!session) return;
+    const sId = String(studentId || 'demo');
+    const effId = sessionId;
 
-    session.answers[questionId] = {
-      selectedOption,
-      essayAnswer,
-      isDoubtful,
-      updatedAt: new Date().toISOString(),
-    };
-    session.doubtfuls[questionId] = isDoubtful;
-    setLocal(sessionKey, session);
+    // Save locally under multiple possible session keys for fallback resiliency
+    const possibleKeys = [
+      `exam_session_${examId}_${sId}`,
+      effId ? `exam_session_${effId}` : null,
+    ].filter(Boolean);
 
-    // Call backend async
-    const effId = sessionId || session.sessionId;
-    if (effId) {
-      fetchJson(`/sessions/${effId}/answers`, {
+    let session = null;
+    let targetKey = possibleKeys[0];
+
+    for (const key of possibleKeys) {
+      const found = getLocal(key, null);
+      if (found) {
+        session = found;
+        targetKey = key;
+        break;
+      }
+    }
+
+    if (!session && typeof window !== 'undefined') {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith(`exam_session_${examId}_`)) {
+            const found = getLocal(k, null);
+            if (found) {
+              session = found;
+              targetKey = k;
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (session) {
+      if (!session.answers) session.answers = {};
+      session.answers[questionId] = {
+        questionId,
+        selectedOption,
+        essayAnswer,
+        isDoubtful,
+        updatedAt: new Date().toISOString(),
+      };
+      if (!session.doubtfuls) session.doubtfuls = {};
+      session.doubtfuls[questionId] = isDoubtful;
+      setLocal(targetKey, session);
+
+      // Sync to teacher live monitoring store
+      const monitorKey = `proctoring_${examId}`;
+      const liveSessions = getLocal(monitorKey, []);
+      const effSessionId = effId || session.sessionId;
+      const idx = liveSessions.findIndex((s) => s.sessionId === effSessionId || s.studentId === sId);
+      if (idx >= 0) {
+        liveSessions[idx] = { ...liveSessions[idx], ...session };
+      } else {
+        liveSessions.push(session);
+      }
+      setLocal(monitorKey, liveSessions);
+    }
+
+    // ALWAYS SEND TO BACKEND DATABASE REGARDLESS OF LOCAL STORAGE
+    const finalSessionId = effId || session?.sessionId;
+    if (finalSessionId) {
+      fetchJson(`/sessions/${finalSessionId}/answers`, {
         method: 'POST',
         body: JSON.stringify({
           questionId,
@@ -1099,10 +1148,11 @@ export const elearningApi = {
           isDoubtful,
           is_doubtful: isDoubtful,
         }),
-      }).catch(() => {});
+      }).catch((e) => {
+        console.warn('Gagal sync answer ke backend:', e);
+      });
     }
   },
-
 
   recordViolationLog: async (sessionId, examId, studentId, violation) => {
     const sId = studentId || 'demo';
@@ -1163,11 +1213,30 @@ export const elearningApi = {
     return session;
   },
 
-  finishExamSession: async (sessionId, examId, studentId) => {
-    const sId = studentId || 'demo';
-    const sessionKey = `exam_session_${examId}_${sId}`;
-    const session = getLocal(sessionKey, null);
-    if (!session) return;
+  finishExamSession: async (sessionId, examId, studentId, inMemoryAnswers = null) => {
+    const sId = String(studentId || 'demo');
+    const effSessionId = sessionId;
+
+    let session = getLocal(`exam_session_${examId}_${sId}`, null);
+    if (!session && typeof window !== 'undefined') {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith(`exam_session_${examId}_`)) {
+            const found = getLocal(k, null);
+            if (found) {
+              session = found;
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    const mergedAnswers = {
+      ...(session?.answers || {}),
+      ...(inMemoryAnswers || {}),
+    };
 
     // Hitung skor otomatis untuk PG berdasarkan poin tiap butir soal
     const questions = await elearningApi.getExamQuestions(examId);
@@ -1182,7 +1251,7 @@ export const elearningApi = {
       if (q.type === 'MCQ') {
         totalMcq += 1;
         totalMcqPoints += qPoints;
-        const answer = session.answers?.[q.id];
+        const answer = mergedAnswers[q.id];
         if (answer && answer.selectedOption === q.correctOption) {
           correctCount += 1;
           earnedMcqPoints += qPoints;
@@ -1192,47 +1261,62 @@ export const elearningApi = {
       }
     });
 
-    // Jika murni soal esai (totalMcq === 0), tidak perlu skor otomatis (score: null, dinilai manual guru)
-    // Jika ada soal PG, skor dihitung dari bobot poin per butir soal
     const score = totalMcq > 0
       ? (totalMcqPoints > 0 ? Math.round((earnedMcqPoints / totalMcqPoints) * 100) : Math.round((correctCount / totalMcq) * 100))
       : null;
 
-    session.status = 'SUBMITTED';
-    session.submittedAt = new Date().toISOString();
-    session.score = score;
-    session.correctCount = correctCount;
-    session.totalMcq = totalMcq;
-    session.totalEssay = totalEssay;
-    session.totalMcqPoints = totalMcqPoints;
-    session.earnedMcqPoints = earnedMcqPoints;
-    session.isEssayOnly = totalMcq === 0 && totalEssay > 0;
+    if (session) {
+      session.status = 'SUBMITTED';
+      session.submittedAt = new Date().toISOString();
+      session.score = score;
+      session.correctCount = correctCount;
+      session.totalMcq = totalMcq;
+      session.totalEssay = totalEssay;
+      session.totalMcqPoints = totalMcqPoints;
+      session.earnedMcqPoints = earnedMcqPoints;
+      session.isEssayOnly = totalMcq === 0 && totalEssay > 0;
+      session.answers = mergedAnswers;
+      setLocal(`exam_session_${examId}_${sId}`, session);
 
-    setLocal(sessionKey, session);
-
-    // Update teacher monitor
-    const monitorKey = `proctoring_${examId}`;
-    const liveSessions = getLocal(monitorKey, []);
-    const effSessionId = sessionId || session.sessionId;
-    const idx = liveSessions.findIndex((s) => s.sessionId === effSessionId || s.studentId === sId);
-    if (idx >= 0) {
-      liveSessions[idx] = session;
-      setLocal(monitorKey, liveSessions);
+      // Update teacher monitor
+      const monitorKey = `proctoring_${examId}`;
+      const liveSessions = getLocal(monitorKey, []);
+      const activeSessId = effSessionId || session.sessionId;
+      const idx = liveSessions.findIndex((s) => s.sessionId === activeSessId || s.studentId === sId);
+      if (idx >= 0) {
+        liveSessions[idx] = session;
+        setLocal(monitorKey, liveSessions);
+      }
     }
 
     // Call backend async
-    if (effSessionId) {
-      fetchJson(`/sessions/${effSessionId}/finish`, {
+    const finalSessId = effSessionId || session?.sessionId;
+    if (finalSessId) {
+      fetchJson(`/sessions/${finalSessId}/finish`, {
         method: 'POST',
         body: JSON.stringify({
           score: score !== null ? score : 0,
-          answers: session.answers || {},
+          answers: mergedAnswers,
         }),
-      }).catch(() => {});
+      }).catch((e) => {
+        console.warn('Gagal finish session ke backend:', e);
+      });
     }
 
-    return session;
+    return session || { status: 'SUBMITTED', score, answers: mergedAnswers };
   },
+
+  getSessionAnswers: async (sessionId) => {
+    if (!sessionId) return {};
+    try {
+      const res = await fetchJson(`/sessions/${sessionId}/answers`);
+      if (res?.success && res?.data) {
+        return res.data;
+      }
+    } catch (_) {}
+    return {};
+  },
+
 
   // =================== PROCTORING MONITOR (GURU) ===================
   getLiveProctoringData: async (examId) => {

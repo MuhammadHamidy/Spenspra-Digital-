@@ -235,10 +235,12 @@ export default function CBTExamRunnerPage({ params }) {
     };
     setAnswers(newAnswers);
 
+    const activeStudentId = session?.studentId || user?.id || user?.nisn || 'std-active';
+
     elearningApi.saveAnswer(
       session?.sessionId,
       examId,
-      user?.id,
+      activeStudentId,
       currentQ.id,
       key,
       '',
@@ -259,10 +261,12 @@ export default function CBTExamRunnerPage({ params }) {
     };
     setAnswers(newAnswers);
 
+    const activeStudentId = session?.studentId || user?.id || user?.nisn || 'std-active';
+
     elearningApi.saveAnswer(
       session?.sessionId,
       examId,
-      user?.id,
+      activeStudentId,
       currentQ.id,
       '',
       text,
@@ -278,11 +282,12 @@ export default function CBTExamRunnerPage({ params }) {
     const updated = { ...doubtfuls, [currentQ.id]: newVal };
     setDoubtfuls(updated);
 
+    const activeStudentId = session?.studentId || user?.id || user?.nisn || 'std-active';
     const ans = answers[currentQ.id];
     elearningApi.saveAnswer(
       session?.sessionId,
       examId,
-      user?.id,
+      activeStudentId,
       currentQ.id,
       ans?.selectedOption || '',
       ans?.essayAnswer || '',
@@ -299,7 +304,8 @@ export default function CBTExamRunnerPage({ params }) {
 
     setIsFinishing(true);
     try {
-      const res = await elearningApi.finishExamSession(session?.sessionId, examId, user?.id);
+      const activeStudentId = session?.studentId || user?.id || user?.nisn || 'std-active';
+      const res = await elearningApi.finishExamSession(session?.sessionId, examId, activeStudentId, answers);
       setFinishResult(res);
       setShowConfirmFinish(false);
     } catch (err) {
@@ -308,6 +314,7 @@ export default function CBTExamRunnerPage({ params }) {
       setIsFinishing(false);
     }
   };
+
 
   // Keyboard shortcut listener (A, B, C, D, E)
   useEffect(() => {

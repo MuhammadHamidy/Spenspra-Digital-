@@ -57,12 +57,9 @@ export default function StudentExamsHubPage() {
             sessionMap[ex.id] = sess;
             // Sinkronkan jawaban lokal ke backend jika ada sesi lokal yang belum tersinkron
             if (sess.sessionId && sess.answers && Object.keys(sess.answers).length > 0) {
-              fetch(`/api/elearning/sessions/${sess.sessionId}/finish`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ score: sess.score || 0, answers: sess.answers }),
-              }).catch(() => {});
+              elearningApi.finishExamSession(sess.sessionId, ex.id, uId, sess.answers).catch(() => {});
             }
+
           }
         }
         setExamSessions(sessionMap);

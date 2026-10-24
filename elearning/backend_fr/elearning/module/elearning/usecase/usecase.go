@@ -216,3 +216,16 @@ func (u *useCase) GetLiveProctoring(ctx context.Context, examID string) (map[str
 	}, nil
 }
 
+func (u *useCase) GetStudentAnswers(ctx context.Context, sessionID string) (map[string]domain.CBTStudentAnswer, error) {
+	answers, err := u.repo.GetStudentAnswers(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	res := make(map[string]domain.CBTStudentAnswer)
+	for _, a := range answers {
+		res[a.QuestionID] = a
+	}
+	return res, nil
+}
+
+

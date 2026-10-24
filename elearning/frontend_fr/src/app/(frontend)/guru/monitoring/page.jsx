@@ -133,6 +133,17 @@ export default function LiveProctoringMonitoringPage() {
       const qs = await elearningApi.getExamQuestions(selectedExamId);
       setExamQuestions(qs || []);
 
+      // Ambil lembar jawaban segar langsung dari database server PostgreSQL
+      const effSessionId = studentItem.sessionId || studentItem.id;
+      if (effSessionId && !String(effSessionId).startsWith('not-joined')) {
+        const freshAnswers = await elearningApi.getSessionAnswers(effSessionId);
+        if (freshAnswers && Object.keys(freshAnswers).length > 0) {
+          const merged = { ...(studentItem.answers || {}), ...freshAnswers };
+          studentItem.answers = merged;
+          setActiveStudentAnswers({ ...studentItem, answers: merged });
+        }
+      }
+
       const sId = studentItem.studentId || studentItem.student_id;
       let initialScores = studentItem.essayGrades || {};
       if (typeof window !== 'undefined' && selectedExamId && sId) {
@@ -221,12 +232,38 @@ export default function LiveProctoringMonitoringPage() {
     let ans = activeStudentAnswers.answers;
     if (!ans || Object.keys(ans).length === 0) {
       const sId = activeStudentAnswers.studentId || activeStudentAnswers.student_id;
-      if (typeof window !== 'undefined' && selectedExamId && sId) {
+      const sessId = activeStudentAnswers.sessionId || activeStudentAnswers.id;
+      if (typeof window !== 'undefined' && selectedExamId) {
         try {
-          const raw = localStorage.getItem(`exam_session_${selectedExamId}_${sId}`);
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            ans = parsed.answers || {};
+          const keys = [
+            `exam_session_${selectedExamId}_${sId}`,
+            `exam_session_${sessId}`,
+          ];
+          for (const k of keys) {
+            const raw = localStorage.getItem(k);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (parsed.answers && Object.keys(parsed.answers).length > 0) {
+                ans = parsed.answers;
+                break;
+              }
+            }
+          }
+          if (!ans && localStorage) {
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (k && k.startsWith(`exam_session_${selectedExamId}_`)) {
+                const parsed = JSON.parse(localStorage.getItem(k) || '{}');
+                if (parsed.answers && Object.keys(parsed.answers).length > 0) {
+                  const pName = (parsed.studentName || '').toLowerCase();
+                  const curName = (activeStudentAnswers.studentName || '').toLowerCase();
+                  if (curName && (pName.includes(curName) || curName.includes(pName))) {
+                    ans = parsed.answers;
+                    break;
+                  }
+                }
+              }
+            }
           }
         } catch (_) {}
       }
@@ -820,6 +857,7 @@ export default function LiveProctoringMonitoringPage() {
           ) : (
             <div className="space-y-4">
               {examQuestions.map((q, idx) => {
+                const ansValues = Object.values(studentAnswers || {});
                 const ans =
                   studentAnswers[q.id] ||
                   studentAnswers[String(q.id)] ||
@@ -827,9 +865,17 @@ export default function LiveProctoringMonitoringPage() {
                   studentAnswers[idx + 1] ||
                   studentAnswers[String(idx + 1)] ||
                   studentAnswers[`q-${idx + 1}`] ||
-                  studentAnswers[`q_${idx + 1}`];
+                  studentAnswers[`q_${idx + 1}`] ||
+                  ansValues.find((a) => a && (a.questionId === q.id || a.question_id === q.id)) ||
+                  ansValues[idx] ||
+                  null;
+
                 const isMcq = q.type === 'MCQ';
-                const isCorrect = isMcq && ans?.selectedOption === q.correctOption;
+                const studentOption = typeof ans === 'string' ? ans : (ans?.selectedOption || ans?.selected_option || '');
+                const isCorrect = isMcq && studentOption === q.correctOption;
+                const essayText = typeof ans === 'string'
+                  ? ans
+                  : (ans?.essayAnswer || ans?.essay_answer || ans?.text || ans?.answer || ans?.content || '');
 
                 return (
                   <div
@@ -951,8 +997,8 @@ export default function LiveProctoringMonitoringPage() {
                             <span>Lembar Jawaban Siswa:</span>
                           </label>
                           <div className="p-3.5 rounded-xl bg-purple-50/70 border border-purple-200 text-xs sm:text-sm text-neutral-900 leading-relaxed font-sans whitespace-pre-wrap min-h-20">
-                            {ans?.essayAnswer?.trim() ? (
-                              ans.essayAnswer
+                            {essayText && essayText.trim() ? (
+                              essayText.trim()
                             ) : (
                               <span className="text-neutral-400 italic">
                                 (Siswa tidak/belum menuliskan jawaban untuk butir esai ini)

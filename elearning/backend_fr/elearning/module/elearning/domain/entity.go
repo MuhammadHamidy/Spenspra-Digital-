@@ -181,6 +181,7 @@ type Repository interface {
 	SubmitExamSession(ctx context.Context, sessionID string, score float64) error
 	SaveStudentAnswer(ctx context.Context, ans *CBTStudentAnswer) error
 	BatchSaveStudentAnswers(ctx context.Context, sessionID string, answers []CBTStudentAnswer) error
+	GetStudentAnswers(ctx context.Context, sessionID string) ([]CBTStudentAnswer, error)
 	ListLiveProctoringSessions(ctx context.Context, examID string) ([]CBTStudentSession, []CBTViolationLog, []CBTStudentAnswer, error)
 }
 
@@ -216,6 +217,7 @@ type UseCase interface {
 	UnlockStudent(ctx context.Context, sessionID string) error
 	SaveStudentAnswer(ctx context.Context, ans *CBTStudentAnswer) error
 	FinishStudentExam(ctx context.Context, sessionID string, score float64, answers []CBTStudentAnswer) error
+	GetStudentAnswers(ctx context.Context, sessionID string) (map[string]CBTStudentAnswer, error)
 	GetLiveProctoring(ctx context.Context, examID string) (map[string]interface{}, error)
 }
 

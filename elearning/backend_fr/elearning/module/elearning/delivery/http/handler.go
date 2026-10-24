@@ -48,10 +48,12 @@ func (h *ELearningHandler) RegisterRoutes(app *fiber.App) {
 	// 4. CBT Student Runner & Anti-Cheat Proctoring
 	api.Post("/exams/:id/start", h.StartStudentExam)
 	api.Post("/sessions/:id/answers", h.SaveStudentAnswer)
+	api.Get("/sessions/:id/answers", h.GetStudentAnswers)
 	api.Post("/sessions/:id/violations", h.RecordViolation)
 	api.Post("/sessions/:id/unlock", h.UnlockStudent)
 	api.Post("/sessions/:id/finish", h.FinishStudentExam)
 	api.Get("/exams/:id/monitoring", h.GetLiveProctoring)
+
 
 }
 
@@ -905,6 +907,32 @@ func (h *ELearningHandler) SaveStudentAnswer(c *fiber.Ctx) error {
 	}
 	return c.Status(http.StatusOK).JSON(responses.Success(fiber.Map{"saved": true}, "Jawaban berhasil disimpan"))
 }
+
+func (h *ELearningHandler) GetStudentAnswers(c *fiber.Ctx) error {
+	sessionID := c.Params("id")
+	answers, err := h.useCase.GetStudentAnswers(c.Context(), sessionID)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
+	}
+	formatted := fiber.Map{}
+	for qID, a := range answers {
+		formatted[qID] = fiber.Map{
+			"id":              a.ID,
+			"question_id":     a.QuestionID,
+			"questionId":      a.QuestionID,
+			"selected_option": a.SelectedOption,
+			"selectedOption":  a.SelectedOption,
+			"essay_answer":    a.EssayAnswer,
+			"essayAnswer":     a.EssayAnswer,
+			"is_doubtful":     a.IsDoubtful,
+			"isDoubtful":      a.IsDoubtful,
+			"score_obtained":  a.ScoreObtained,
+			"scoreObtained":   a.ScoreObtained,
+		}
+	}
+	return c.Status(http.StatusOK).JSON(responses.Success(formatted, "Jawaban siswa berhasil dimuat"))
+}
+
 
 func (h *ELearningHandler) FinishStudentExam(c *fiber.Ctx) error {
 	id := c.Params("id")

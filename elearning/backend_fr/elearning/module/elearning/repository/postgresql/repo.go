@@ -15,6 +15,8 @@ type repository struct {
 }
 
 func NewRepository(db *gorm.DB) domain.Repository {
+	_ = db.Exec("ALTER TABLE cbt_student_answers DROP CONSTRAINT IF EXISTS cbt_student_answers_question_id_fkey").Error
+
 	_ = db.AutoMigrate(
 		&domain.LearningMaterial{},
 		&domain.LearningAssignment{},
@@ -27,6 +29,7 @@ func NewRepository(db *gorm.DB) domain.Repository {
 	)
 	return &repository{db: db}
 }
+
 
 
 // ================= MATERIALS =================
@@ -411,4 +414,15 @@ func (r *repository) ListLiveProctoringSessions(ctx context.Context, examID stri
 
 	return sessions, logs, answers, nil
 }
+
+func (r *repository) GetStudentAnswers(ctx context.Context, sessionID string) ([]domain.CBTStudentAnswer, error) {
+	var answers []domain.CBTStudentAnswer
+	err := r.db.WithContext(ctx).Table("cbt_student_answers").
+		Where("session_id = ?", sessionID).
+		Order("answered_at asc").
+		Find(&answers).Error
+	return answers, err
+}
+
+
 
