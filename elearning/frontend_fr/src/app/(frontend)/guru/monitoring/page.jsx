@@ -17,6 +17,10 @@ export default function LiveProctoringMonitoringPage() {
   const [classStudents, setClassStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeStudentAudit, setActiveStudentAudit] = useState(null);
+  const [activeStudentAnswers, setActiveStudentAnswers] = useState(null);
+  const [examQuestions, setExamQuestions] = useState([]);
+  const [essayScores, setEssayScores] = useState({});
+  const [savingGrade, setSavingGrade] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('ALL'); // ALL, VIOLATION, LOCKED, IN_PROGRESS, SUBMITTED, NOT_STARTED
   const [notice, setNotice] = useState(null);
@@ -122,6 +126,101 @@ export default function LiveProctoringMonitoringPage() {
       },
     });
   };
+
+  const handleOpenStudentAnswers = async (studentItem) => {
+    setActiveStudentAnswers(studentItem);
+    try {
+      const qs = await elearningApi.getExamQuestions(selectedExamId);
+      setExamQuestions(qs || []);
+
+      const sId = studentItem.studentId || studentItem.student_id;
+      let initialScores = studentItem.essayGrades || {};
+      if (typeof window !== 'undefined' && selectedExamId && sId) {
+        try {
+          const raw = localStorage.getItem(`essay_grades_${selectedExamId}_${sId}`);
+          if (raw) initialScores = JSON.parse(raw);
+        } catch (_) {}
+      }
+      setEssayScores(initialScores);
+    } catch (err) {
+      console.error('Gagal memuat butir soal:', err);
+    }
+  };
+
+  const handleSaveEssayScore = async () => {
+    if (!activeStudentAnswers) return;
+    setSavingGrade(true);
+    try {
+      const sId = activeStudentAnswers.studentId || activeStudentAnswers.student_id;
+      if (typeof window !== 'undefined' && selectedExamId && sId) {
+        localStorage.setItem(`essay_grades_${selectedExamId}_${sId}`, JSON.stringify(essayScores));
+      }
+
+      let totalEarned = 0;
+      let totalMaxPoints = 0;
+
+      examQuestions.forEach((q) => {
+        const qPoints = Number(q.points) > 0 ? Number(q.points) : 10;
+        totalMaxPoints += qPoints;
+
+        if (q.type === 'MCQ') {
+          const ans = studentAnswers[q.id];
+          if (ans && ans.selectedOption === q.correctOption) {
+            totalEarned += qPoints;
+          }
+        } else if (q.type === 'ESSAY') {
+          const essayScore = Number(essayScores[q.id]) || 0;
+          totalEarned += essayScore;
+        }
+      });
+
+      const finalScore = totalMaxPoints > 0 ? Math.round((totalEarned / totalMaxPoints) * 100) : 100;
+
+      const sessionKey = `exam_session_${selectedExamId}_${sId}`;
+      const existing = elearningApi.getStudentExamSession(selectedExamId, sId);
+      if (existing) {
+        existing.score = finalScore;
+        existing.essayGrades = essayScores;
+        localStorage.setItem(sessionKey, JSON.stringify(existing));
+      }
+
+      const monitorKey = `proctoring_${selectedExamId}`;
+      const liveSessions = JSON.parse(localStorage.getItem(monitorKey) || '[]');
+      const idx = liveSessions.findIndex((s) => s.studentId === sId || s.sessionId === activeStudentAnswers.sessionId);
+      if (idx >= 0) {
+        liveSessions[idx].score = finalScore;
+        liveSessions[idx].essayGrades = essayScores;
+        localStorage.setItem(monitorKey, JSON.stringify(liveSessions));
+      }
+
+      setNotice(`✓ Koreksi nilai akhir (${finalScore}) untuk ${activeStudentAnswers.studentName} berhasil disimpan!`);
+      setTimeout(() => setNotice(null), 4000);
+      loadProctoringData();
+      setActiveStudentAnswers(null);
+    } catch (err) {
+      alert('Gagal menyimpan nilai: ' + err.message);
+    } finally {
+      setSavingGrade(false);
+    }
+  };
+
+  const studentAnswers = useMemo(() => {
+    if (!activeStudentAnswers) return {};
+    let ans = activeStudentAnswers.answers;
+    if (!ans || Object.keys(ans).length === 0) {
+      const sId = activeStudentAnswers.studentId || activeStudentAnswers.student_id;
+      if (typeof window !== 'undefined' && selectedExamId && sId) {
+        try {
+          const raw = localStorage.getItem(`exam_session_${selectedExamId}_${sId}`);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            ans = parsed.answers || {};
+          }
+        } catch (_) {}
+      }
+    }
+    return ans || {};
+  }, [activeStudentAnswers, selectedExamId]);
 
   // Merge official class roster with live student sessions
   const mergedRoster = useMemo(() => {
@@ -548,6 +647,18 @@ export default function LiveProctoringMonitoringPage() {
 
                       <td className="py-3 px-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
+                          {s.status !== 'NOT_STARTED' && (
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              onClick={() => handleOpenStudentAnswers(s)}
+                              className="font-bold cursor-pointer text-primary-700 bg-primary-50/70 hover:bg-primary-100 border-primary-200"
+                              title="Periksa dan koreksi lembar jawaban siswa"
+                            >
+                              📝 Periksa Jawaban
+                            </Button>
+                          )}
+
                           {violations.length > 0 && (
                             <Button
                               variant="outline"
@@ -642,6 +753,257 @@ export default function LiveProctoringMonitoringPage() {
               className="cursor-pointer"
             >
               Tutup
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* MODAL PERIKSA & KOREKSI JAWABAN SISWA */}
+      <Modal
+        isOpen={Boolean(activeStudentAnswers)}
+        onClose={() => setActiveStudentAnswers(null)}
+        title="Lembar Jawaban & Koreksi Siswa"
+        subtitle={
+          activeStudentAnswers
+            ? `${activeStudentAnswers.studentName} • Kelas ${activeStudentAnswers.className || selectedExam?.className} • Status: ${
+                activeStudentAnswers.status === 'SUBMITTED' ? '✓ Telah Selesai' : '⚡ Sedang Mengerjakan'
+              }`
+            : ''
+        }
+        size="lg"
+      >
+        <div className="space-y-5 max-h-[75vh] overflow-y-auto pr-1">
+          {/* Info Card */}
+          <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div>
+              <p className="text-neutral-500">Mata Pelajaran:</p>
+              <p className="font-bold text-neutral-900">{selectedExam?.subject}</p>
+            </div>
+            <div>
+              <p className="text-neutral-500">Status Pengerjaan:</p>
+              <p className="font-bold text-emerald-700">
+                {activeStudentAnswers?.status === 'SUBMITTED' ? '✓ Sudah Selesai' : 'Sedang Ujian'}
+              </p>
+            </div>
+            <div>
+              <p className="text-neutral-500">Skor Sementara:</p>
+              <p className="font-bold text-primary-700 text-sm">
+                {activeStudentAnswers?.score !== null && activeStudentAnswers?.score !== undefined
+                  ? `${activeStudentAnswers.score} / 100`
+                  : 'Menunggu Koreksi Guru'}
+              </p>
+            </div>
+            <div>
+              <p className="text-neutral-500">Jumlah Soal:</p>
+              <p className="font-bold text-neutral-900">{examQuestions.length} Butir Soal</p>
+            </div>
+          </div>
+
+          {/* Daftar Butir Soal & Jawaban Siswa */}
+          {examQuestions.length === 0 ? (
+            <div className="py-8 text-center text-xs text-neutral-400">
+              Memuat lembar soal dan jawaban siswa...
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {examQuestions.map((q, idx) => {
+                const ans = studentAnswers[q.id];
+                const isMcq = q.type === 'MCQ';
+                const isCorrect = isMcq && ans?.selectedOption === q.correctOption;
+
+                return (
+                  <div
+                    key={q.id || idx}
+                    className="p-4 rounded-xl border border-neutral-200 bg-white shadow-2xs space-y-3"
+                  >
+                    {/* Header Soal */}
+                    <div className="flex items-center justify-between pb-2 border-b border-neutral-100 flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 rounded-md font-bold text-xs bg-neutral-900 text-white">
+                          Soal #{idx + 1}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          isMcq ? 'bg-primary-100 text-primary-800' : 'bg-purple-100 text-purple-800'
+                        }`}>
+                          {isMcq ? 'Pilihan Ganda' : 'Uraian / Esai'}
+                        </span>
+                        <span className="text-[11px] font-semibold text-neutral-500">
+                          (Bobot: {q.points || 10} Poin)
+                        </span>
+                      </div>
+
+                      {isMcq && (
+                        <div>
+                          {ans?.selectedOption ? (
+                            isCorrect ? (
+                              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                ✓ BENAR (+{q.points || 10} Poin)
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-danger-100 text-danger-800 border border-danger-300">
+                                ✕ SALAH (Kunci: {q.correctOption})
+                              </span>
+                            )
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-neutral-100 text-neutral-500 border border-neutral-300">
+                              Tidak Dijawab
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Stimulus Kasus (jika ada) */}
+                    {q.stimulusText && (
+                      <div className="p-3 rounded-lg bg-amber-50/70 border border-amber-200 text-amber-950 text-xs whitespace-pre-wrap leading-relaxed">
+                        <strong className="block text-amber-900 mb-1">📑 Wacana / Stimulus:</strong>
+                        {q.stimulusText}
+                      </div>
+                    )}
+
+                    {/* Gambar Soal (jika ada) */}
+                    {q.imageUrl && (
+                      <div className="p-2 rounded-lg bg-neutral-50 border border-neutral-200 flex justify-center">
+                        <img
+                          src={q.imageUrl}
+                          alt={`Gambar Soal #${idx + 1}`}
+                          className="max-h-48 w-auto rounded object-contain"
+                        />
+                      </div>
+                    )}
+
+                    {/* Teks Pertanyaan */}
+                    <div className="text-xs sm:text-sm font-semibold text-neutral-800 leading-relaxed whitespace-pre-wrap">
+                      {q.questionText}
+                    </div>
+
+                    {/* Jika Soal Pilihan Ganda: Tampilkan Opsi & Jawaban Siswa */}
+                    {isMcq && (
+                      <div className="space-y-1.5 pt-1">
+                        {q.options?.map((opt) => {
+                          const isStudentPick = ans?.selectedOption === opt.key;
+                          const isKey = q.correctOption === opt.key;
+
+                          let optClass = 'bg-neutral-50 border-neutral-200 text-neutral-700';
+                          if (isKey) {
+                            optClass = 'bg-emerald-50 border-emerald-400 text-emerald-900 font-semibold ring-1 ring-emerald-400';
+                          } else if (isStudentPick && !isKey) {
+                            optClass = 'bg-danger-50 border-danger-400 text-danger-900 font-semibold';
+                          }
+
+                          return (
+                            <div
+                              key={opt.key}
+                              className={`p-2.5 rounded-lg border text-xs flex items-center justify-between gap-2 ${optClass}`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className={`w-6 h-6 rounded flex items-center justify-center font-bold text-xs shrink-0 ${
+                                  isStudentPick ? 'bg-primary-600 text-white' : 'bg-neutral-200 text-neutral-700'
+                                }`}>
+                                  {opt.key}
+                                </span>
+                                <span>{opt.text}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {isStudentPick && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary-600 text-white">
+                                    Pilihan Siswa
+                                  </span>
+                                )}
+                                {isKey && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-700 text-white">
+                                    ✓ Kunci Benar
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Jika Soal Esai: Tampilkan Teks Jawaban Siswa & Form Koreksi Nilai Guru */}
+                    {!isMcq && (
+                      <div className="space-y-3 pt-1">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                            <span>✍️</span>
+                            <span>Lembar Jawaban Siswa:</span>
+                          </label>
+                          <div className="p-3.5 rounded-xl bg-purple-50/70 border border-purple-200 text-xs sm:text-sm text-neutral-900 leading-relaxed font-sans whitespace-pre-wrap min-h-20">
+                            {ans?.essayAnswer?.trim() ? (
+                              ans.essayAnswer
+                            ) : (
+                              <span className="text-neutral-400 italic">
+                                (Siswa tidak/belum menuliskan jawaban untuk butir esai ini)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Pedoman Acuan Penilaian Guru */}
+                        {q.essayRubric && (
+                          <div className="p-2.5 rounded-lg bg-neutral-50 border border-neutral-200 text-xs text-neutral-600 space-y-0.5">
+                            <span className="font-bold text-neutral-700">📖 Pedoman / Kunci Acuan Koreksi Guru:</span>
+                            <p className="whitespace-pre-wrap">{q.essayRubric}</p>
+                          </div>
+                        )}
+
+                        {/* Input Penilaian Guru untuk Esai Ini */}
+                        <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div>
+                            <label className="text-xs font-bold text-amber-950">
+                              Beri Skor / Nilai Esai Ini:
+                            </label>
+                            <p className="text-[11px] text-amber-800">
+                              Maksimal bobot nilai: <strong>{q.points || 10} Poin</strong>
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min="0"
+                              max={q.points || 100}
+                              value={essayScores[q.id] !== undefined ? essayScores[q.id] : ''}
+                              onChange={(e) =>
+                                setEssayScores({
+                                  ...essayScores,
+                                  [q.id]: Math.min(Number(q.points) || 100, Math.max(0, Number(e.target.value))),
+                                })
+                              }
+                              placeholder="0"
+                              className="w-20 p-2 text-center text-xs font-bold rounded-lg border border-amber-300 bg-white"
+                            />
+                            <span className="text-xs font-bold text-amber-900">/ {q.points || 10} Poin</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Action Footer Modal */}
+          <div className="flex items-center justify-between pt-3 border-t border-neutral-200 gap-2">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => setActiveStudentAnswers(null)}
+              className="cursor-pointer"
+            >
+              Tutup
+            </Button>
+
+            <Button
+              variant="primary"
+              size="md"
+              disabled={savingGrade}
+              onClick={handleSaveEssayScore}
+              className="font-bold cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {savingGrade ? 'Menyimpan Nilai...' : '💾 Simpan Koreksi & Nilai Akhir'}
             </Button>
           </div>
         </div>

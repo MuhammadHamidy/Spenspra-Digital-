@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Card from '@/components/Card';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
@@ -11,6 +12,7 @@ import { elearningApi } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
 export default function TeacherExamsManagementPage() {
+  const router = useRouter();
   const [user, setUser] = useState(null);
   const [exams, setExams] = useState([]);
   const [subjects, setSubjects] = useState([]);
@@ -1245,6 +1247,15 @@ export default function TeacherExamsManagementPage() {
                             className="cursor-pointer font-bold"
                           >
                             Kelola Soal
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => router.push('/guru/monitoring')}
+                            className="cursor-pointer font-bold text-primary-700 bg-primary-50/60 hover:bg-primary-100 border-primary-200"
+                            title="Lihat hasil pengerjaan & lembar jawaban siswa"
+                          >
+                            👁️ Hasil & Jawaban
                           </Button>
                           <Button
                             variant="outline"
