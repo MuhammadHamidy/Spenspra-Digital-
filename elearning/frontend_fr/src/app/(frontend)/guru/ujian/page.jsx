@@ -185,12 +185,21 @@ export default function TeacherExamsManagementPage() {
 
     setIsSubmitting(true);
     try {
+      const teacherName = user?.fullName || user?.full_name || user?.nama || user?.name || 'Bapak/Ibu Guru';
+      const teacherId = String(user?.id || user?.nip || user?.username || '');
+
       const payload = {
         title: title.trim(),
         subject,
+        course_name: subject,
         subjectCode,
+        course_id: subjectCode,
         className,
-        teacherName: user?.fullName || user?.full_name || 'Bapak/Ibu Guru',
+        class_code: className,
+        teacherName,
+        teacher_name: teacherName,
+        teacherId,
+        teacher_id: teacherId,
         token: token.trim().toUpperCase(),
         durationMinutes: Number(durationMinutes) || 60,
         maxViolations: Number(maxViolations) || 3,
@@ -238,7 +247,12 @@ export default function TeacherExamsManagementPage() {
 
   const handleStartExamNow = async (exam) => {
     try {
-      await elearningApi.updateExam(exam.id, { status: 'ACTIVE' });
+      await elearningApi.updateExam(exam.id, {
+        status: 'ACTIVE',
+        subject: exam.subject || exam.course_name,
+        className: exam.className || exam.class_code,
+        teacherName: exam.teacherName || exam.teacher_name,
+      });
       loadExams();
     } catch (err) {
       console.error(err);
@@ -255,7 +269,11 @@ export default function TeacherExamsManagementPage() {
       isDanger: true,
       onConfirm: async () => {
         try {
-          await elearningApi.updateExam(exam.id, { status: 'COMPLETED' });
+          await elearningApi.updateExam(exam.id, {
+            status: 'COMPLETED',
+            subject: exam.subject || exam.course_name,
+            className: exam.className || exam.class_code,
+          });
           await loadExams();
         } catch (err) {
           console.error(err);

@@ -164,7 +164,23 @@ func (r *repository) CreateExam(ctx context.Context, e *domain.CBTExam) error {
 
 func (r *repository) UpdateExam(ctx context.Context, id string, e *domain.CBTExam) error {
 	e.UpdatedAt = time.Now()
-	return r.db.WithContext(ctx).Table("cbt_exams").Where("id = ?", id).Updates(e).Error
+	updates := map[string]interface{}{
+		"title":            e.Title,
+		"class_code":       e.ClassCode,
+		"course_name":      e.CourseName,
+		"course_id":        e.CourseID,
+		"teacher_name":     e.TeacherName,
+		"teacher_id":       e.TeacherID,
+		"token":            e.Token,
+		"duration_minutes": e.DurationMinutes,
+		"max_violations":   e.MaxViolations,
+		"start_time":       e.StartTime,
+		"end_time":         e.EndTime,
+		"description":      e.Description,
+		"status":           e.Status,
+		"updated_at":       e.UpdatedAt,
+	}
+	return r.db.WithContext(ctx).Table("cbt_exams").Where("id = ?", id).Updates(updates).Error
 }
 
 func (r *repository) DeleteExam(ctx context.Context, id string) error {

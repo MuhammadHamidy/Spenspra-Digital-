@@ -471,19 +471,36 @@ export const elearningApi = {
   updateExam: async (id, payload) => {
     const enhancedPayload = {
       ...payload,
+      id,
       ...(payload.className ? { class_code: payload.className } : {}),
       ...(payload.subject ? { course_name: payload.subject } : {}),
+      ...(payload.subjectCode ? { course_id: payload.subjectCode } : {}),
       ...(payload.durationMinutes ? { duration_minutes: Number(payload.durationMinutes) } : {}),
       ...(payload.teacherName ? { teacher_name: payload.teacherName } : {}),
+      ...(payload.teacherId ? { teacher_id: payload.teacherId } : {}),
     };
-    await fetchJson(`/exams/${id}`, {
+
+    const res = await fetchJson(`/exams/${id}`, {
       method: 'PUT',
       body: JSON.stringify(enhancedPayload),
-    }).catch(() => {});
+    }).catch(() => null);
+
     const local = getLocal('exams', INITIAL_EXAMS);
-    const updated = local.map((e) => (e.id === id ? { ...e, ...enhancedPayload, className: enhancedPayload.class_code || e.className } : e));
+    const updated = local.map((e) => {
+      if (e.id === id) {
+        return {
+          ...e,
+          ...enhancedPayload,
+          className: enhancedPayload.class_code || payload.className || e.className,
+          subject: enhancedPayload.course_name || payload.subject || e.subject,
+          subjectCode: enhancedPayload.course_id || payload.subjectCode || e.subjectCode,
+          teacherName: enhancedPayload.teacher_name || payload.teacherName || e.teacherName,
+        };
+      }
+      return e;
+    });
     setLocal('exams', updated);
-    return updated.find((e) => e.id === id) || null;
+    return res?.data || updated.find((e) => e.id === id) || null;
   },
 
   deleteExam: async (id) => {
@@ -503,10 +520,26 @@ export const elearningApi = {
       const list = await accountApiAdapter.getStudents(className);
       if (Array.isArray(list) && list.length > 0) {
         if (!className) return list;
+
+        const normalize = (c) =>
+          String(c || '')
+            .toLowerCase()
+            .trim()
+            .replace(/^kelas\s*/, '')
+            .replace(/^rombel\s*/, '')
+            .replace(/[^a-z0-9]/g, '')
+            .replace(/^viii/, '8')
+            .replace(/^vii/, '7')
+            .replace(/^ix/, '9');
+
+        const targetNorm = normalize(className);
+
         return list.filter((s) => {
-          const sClass = (s.className || s.class_name || s.rombel || '').trim().toLowerCase();
-          const target = className.trim().toLowerCase();
-          return sClass === target || sClass.replace(/[^a-z0-9]/g, '') === target.replace(/[^a-z0-9]/g, '');
+          const sClassNorm = normalize(s.className || s.class_name || s.rombel || '');
+          return (
+            sClassNorm === targetNorm ||
+            (sClassNorm && targetNorm && (sClassNorm.includes(targetNorm) || targetNorm.includes(sClassNorm)))
+          );
         });
       }
       return [];

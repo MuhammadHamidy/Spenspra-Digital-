@@ -199,15 +199,12 @@ func (in *CBTExamInput) ToDomain() domain.CBTExam {
 	if cName == "" {
 		cName = strings.TrimSpace(in.Subject)
 	}
-	if cName == "" {
-		cName = "Matematika"
-	}
 
 	cID := strings.TrimSpace(in.CourseID)
 	if cID == "" {
 		cID = strings.TrimSpace(in.SubjectCode)
 	}
-	if cID == "" {
+	if cID == "" && cName != "" {
 		cID = "MAPEL"
 	}
 
@@ -215,16 +212,10 @@ func (in *CBTExamInput) ToDomain() domain.CBTExam {
 	if tName == "" {
 		tName = strings.TrimSpace(in.TeacherName)
 	}
-	if tName == "" {
-		tName = "Bapak/Ibu Guru"
-	}
 
 	tID := strings.TrimSpace(in.TeacherIDSnake)
 	if tID == "" {
 		tID = strings.TrimSpace(in.TeacherID)
-	}
-	if tID == "" {
-		tID = "guru-default"
 	}
 
 	dur := in.DurationMinutesSnake
@@ -368,6 +359,29 @@ func (h *ELearningHandler) CreateExam(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(responses.Fail("INVALID_PAYLOAD", err.Error()))
 	}
 	req := input.ToDomain()
+
+	if req.CourseName == "" {
+		req.CourseName = "Informatika"
+	}
+	if req.CourseID == "" {
+		req.CourseID = "INF"
+	}
+
+	if req.TeacherName == "" {
+		if uName := c.Get("X-User-Name"); strings.TrimSpace(uName) != "" {
+			req.TeacherName = strings.TrimSpace(uName)
+		} else {
+			req.TeacherName = "Bapak/Ibu Guru"
+		}
+	}
+	if req.TeacherID == "" {
+		if uID := c.Get("X-User-Id"); strings.TrimSpace(uID) != "" {
+			req.TeacherID = strings.TrimSpace(uID)
+		} else {
+			req.TeacherID = "guru-default"
+		}
+	}
+
 	if err := h.useCase.AddExam(c.Context(), &req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(responses.Fail("VALIDATION_ERROR", err.Error()))
 	}
@@ -376,11 +390,121 @@ func (h *ELearningHandler) CreateExam(c *fiber.Ctx) error {
 
 func (h *ELearningHandler) UpdateExam(c *fiber.Ctx) error {
 	id := c.Params("id")
+	existing, err := h.useCase.GetExamDetail(c.Context(), id)
+	if err != nil {
+		return c.Status(http.StatusNotFound).JSON(responses.Fail("NOT_FOUND", "Ujian tidak ditemukan"))
+	}
+
 	var input CBTExamInput
 	if err := c.BodyParser(&input); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(responses.Fail("INVALID_PAYLOAD", err.Error()))
 	}
-	req := input.ToDomain()
+
+	// Gunakan data yang ada di database sebagai fondasi, jangan pernah me-reset ke default
+	req := *existing
+
+	if t := strings.TrimSpace(input.Title); t != "" {
+		req.Title = t
+	}
+
+	cName := strings.TrimSpace(input.CourseName)
+	if cName == "" {
+		cName = strings.TrimSpace(input.Subject)
+	}
+	if cName != "" {
+		req.CourseName = cName
+	}
+
+	cID := strings.TrimSpace(input.CourseID)
+	if cID == "" {
+		cID = strings.TrimSpace(input.SubjectCode)
+	}
+	if cID != "" {
+		req.CourseID = cID
+	}
+
+	cls := strings.TrimSpace(input.ClassCode)
+	if cls == "" {
+		cls = strings.TrimSpace(input.ClassName)
+	}
+	if cls != "" {
+		req.ClassCode = cls
+	}
+
+	tName := strings.TrimSpace(input.TeacherNameSnake)
+	if tName == "" {
+		tName = strings.TrimSpace(input.TeacherName)
+	}
+	if tName != "" {
+		req.TeacherName = tName
+	} else if req.TeacherName == "" || req.TeacherName == "Bapak/Ibu Guru" {
+		if uName := c.Get("X-User-Name"); strings.TrimSpace(uName) != "" {
+			req.TeacherName = strings.TrimSpace(uName)
+		}
+	}
+
+	tID := strings.TrimSpace(input.TeacherIDSnake)
+	if tID == "" {
+		tID = strings.TrimSpace(input.TeacherID)
+	}
+	if tID != "" {
+		req.TeacherID = tID
+	}
+
+	if tok := strings.TrimSpace(input.Token); tok != "" {
+		req.Token = strings.ToUpper(tok)
+	}
+
+	dur := input.DurationMinutesSnake
+	if dur <= 0 {
+		dur = input.DurationMinutes
+	}
+	if dur > 0 {
+		req.DurationMinutes = dur
+	}
+
+	maxV := input.MaxViolationsSnake
+	if maxV <= 0 {
+		maxV = input.MaxViolations
+	}
+	if maxV > 0 {
+		req.MaxViolations = maxV
+	}
+
+	if stat := strings.TrimSpace(input.Status); stat != "" {
+		req.Status = strings.ToUpper(stat)
+	}
+
+	if desc := strings.TrimSpace(input.Description); desc != "" {
+		req.Description = desc
+	}
+
+	parseTime := func(dtStr, dStr, tStr string) *time.Time {
+		if dtStr != "" {
+			for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02T15:04"} {
+				if t, err := time.ParseInLocation(layout, dtStr, time.Local); err == nil {
+					return &t
+				}
+			}
+		}
+		if dStr != "" && tStr != "" {
+			combined := dStr + "T" + tStr
+			for _, layout := range []string{"2006-01-02T15:04", "2006-01-02T15:04:05"} {
+				if t, err := time.ParseInLocation(layout, combined, time.Local); err == nil {
+					return &t
+				}
+			}
+		}
+		return nil
+	}
+
+	if startT := parseTime(input.StartDateTime, input.ScheduledDate, input.StartTime); startT != nil {
+		req.StartTime = startT
+	}
+	if endT := parseTime(input.EndDateTime, input.ScheduledDate, input.EndTime); endT != nil {
+		req.EndTime = endT
+	}
+
 	if err := h.useCase.UpdateExam(c.Context(), id, &req); err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
 	}
