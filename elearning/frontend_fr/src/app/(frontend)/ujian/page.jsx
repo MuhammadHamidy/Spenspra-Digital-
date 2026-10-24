@@ -135,7 +135,7 @@ export default function StudentExamsHubPage() {
     }
 
     // Jika guru memulai secara manual (ACTIVE)
-    if (s === 'ACTIVE' && (!endDate || isNaN(endDate.getTime()) || currentTime <= endDate)) {
+    if (s === 'ACTIVE') {
       return { status: 'ACTIVE', label: 'Aktif / Tersedia', canStart: true };
     }
 

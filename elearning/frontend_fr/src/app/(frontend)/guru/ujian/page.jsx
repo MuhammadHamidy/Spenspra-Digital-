@@ -135,12 +135,16 @@ export default function TeacherExamsManagementPage() {
 
     const relevantClasses = defaultSubj.name ? getClassesForSubject(defaultSubj.name) : classes;
     const defaultClass = relevantClasses[0]?.name || classes[0]?.name || '';
-    setClassName(defaultClass);
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const startStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const endObj = new Date(now.getTime() + 90 * 60 * 1000);
+    const endStr = `${pad(endObj.getHours())}:${pad(endObj.getMinutes())}`;
 
     setToken(Math.random().toString(36).substring(2, 8).toUpperCase());
-    setExamDate(new Date().toISOString().split('T')[0]);
-    setStartTime('08:00');
-    setEndTime('09:30');
+    setExamDate(now.toISOString().split('T')[0]);
+    setStartTime(startStr);
+    setEndTime(endStr);
     setDurationMinutes(60);
     setMaxViolations(1);
     setDescription('');
@@ -248,8 +252,20 @@ export default function TeacherExamsManagementPage() {
 
   const handleStartExamNow = async (exam) => {
     try {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const startStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      const endObj = new Date(now.getTime() + (Number(exam.durationMinutes) || 90) * 60 * 1000);
+      const endStr = `${pad(endObj.getHours())}:${pad(endObj.getMinutes())}`;
+      const todayDate = now.toISOString().split('T')[0];
+
       await elearningApi.updateExam(exam.id, {
         status: 'ACTIVE',
+        scheduledDate: todayDate,
+        startTime: startStr,
+        endTime: endStr,
+        startDateTime: `${todayDate}T${startStr}:00`,
+        endDateTime: `${todayDate}T${endStr}:00`,
         subject: exam.subject || exam.course_name,
         className: exam.className || exam.class_code,
         teacherName: exam.teacherName || exam.teacher_name,
@@ -257,6 +273,7 @@ export default function TeacherExamsManagementPage() {
       loadExams();
     } catch (err) {
       console.error(err);
+      alert('Gagal mengaktifkan ujian: ' + err.message);
     }
   };
 
@@ -1199,18 +1216,18 @@ export default function TeacherExamsManagementPage() {
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                          {currentStatus === 'UPCOMING' && (
+                          {currentStatus !== 'ACTIVE' && (
                             <Button
                               variant="primary"
                               size="xs"
                               onClick={() => handleStartExamNow(ex)}
                               className="cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-                              title="Mulai sesi ujian sekarang lebih awal"
+                              title="Aktifkan & buka sesi ujian sekarang untuk siswa"
                             >
-                              ▶ Mulai
+                              ▶ Aktifkan
                             </Button>
                           )}
-                          {(currentStatus === 'ACTIVE' || currentStatus === 'UPCOMING') && (
+                          {currentStatus === 'ACTIVE' && (
                             <Button
                               variant="outline"
                               size="xs"
