@@ -128,6 +128,12 @@ type CBTViolationLog struct {
 	CreatedAt       time.Time `json:"created_at"`
 }
 
+// CBTLiveSession represents student session combined with violations for live monitoring
+type CBTLiveSession struct {
+	CBTStudentSession
+	Violations []CBTViolationLog `json:"violations"`
+}
+
 // Repository Interface
 type Repository interface {
 	// Materials

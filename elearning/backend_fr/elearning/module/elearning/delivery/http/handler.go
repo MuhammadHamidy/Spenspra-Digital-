@@ -876,13 +876,7 @@ func (h *ELearningHandler) GetLiveProctoring(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
 	}
 
-	// Normalisasi sessions untuk frontend guru monitoring
-	type sessionWithLogs struct {
-		domain.CBTStudentSession
-		Violations []domain.CBTViolationLog `json:"violations"`
-	}
-
-	rawSessions, _ := data["sessions"].([]sessionWithLogs)
+	rawSessions, _ := data["sessions"].([]domain.CBTLiveSession)
 	formattedSessions := []fiber.Map{}
 
 	for _, s := range rawSessions {

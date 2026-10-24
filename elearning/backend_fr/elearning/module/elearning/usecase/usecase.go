@@ -177,14 +177,9 @@ func (u *useCase) GetLiveProctoring(ctx context.Context, examID string) (map[str
 		logsBySession[l.SessionID] = append(logsBySession[l.SessionID], l)
 	}
 
-	type SessionWithLogs struct {
-		domain.CBTStudentSession
-		Violations []domain.CBTViolationLog `json:"violations"`
-	}
-
-	var results []SessionWithLogs
+	var results []domain.CBTLiveSession
 	for _, s := range sessions {
-		results = append(results, SessionWithLogs{
+		results = append(results, domain.CBTLiveSession{
 			CBTStudentSession: s,
 			Violations:        logsBySession[s.ID],
 		})
