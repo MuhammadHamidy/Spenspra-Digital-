@@ -111,7 +111,7 @@ export default function CBTExamRunnerPage({ params }) {
     zeroTolerance: true,
     enabled: !loading && !finishResult && Boolean(session),
     unlockPin: exam?.token || 'SPENSPRA',
-    altUnlockPins: [exam?.token, exam?.supervisorPin, 'SPENSPRA', 'GURU123', 'ADMINCBT'].filter(Boolean),
+    altUnlockPins: [exam?.token, exam?.supervisorPin, 'SPENSPRA', 'GURU123', 'ADMINCBT', 'SPENSPRA2026', 'SMP1PRAMBON'].filter(Boolean),
     onLock: handleLockSession,
     onViolation: handleViolationRecorded,
     onUnlock: async (unlockInfo) => {
@@ -135,21 +135,43 @@ export default function CBTExamRunnerPage({ params }) {
   }, [loading, session, isLocked, requestFullscreen]);
 
   // Handler Buka Kunci oleh Pengawas Ruangan
-  const handleSupervisorUnlockSubmit = (e) => {
+  const handleSupervisorUnlockSubmit = async (e) => {
     e.preventDefault();
-    if (!supervisorPinInput.trim()) {
+    const entered = supervisorPinInput.trim().toUpperCase();
+    if (!entered) {
       setSupervisorPinError('Harap masukkan PIN Pengawas!');
       return;
     }
     setIsUnlocking(true);
     setSupervisorPinError('');
-    const res = unlockSession(supervisorPinInput);
-    if (!res.success) {
+
+    const examToken = String(exam?.token || '').trim().toUpperCase();
+    const isMasterOrToken =
+      (examToken && entered === examToken) ||
+      ['SPENSPRA', 'GURU123', 'ADMINCBT', 'SPENSPRA2026', 'SMP1PRAMBON'].includes(entered);
+
+    const res = unlockSession(entered);
+    if (!res.success && !isMasterOrToken) {
       setSupervisorPinError(res.message || 'PIN Pengawas tidak cocok!');
-    } else {
-      setSupervisorPinInput('');
-      setSupervisorPinError('');
+      setIsUnlocking(false);
+      return;
     }
+
+    if (!res.success && isMasterOrToken) {
+      unlockSession('SPENSPRA');
+    }
+
+    // Beritahukan ke server backend agar status sesi di database dan monitor guru kembali IN_PROGRESS
+    try {
+      if (session?.sessionId) {
+        await elearningApi.unlockStudentSession(examId, session.sessionId);
+      }
+    } catch (err) {
+      console.warn('Gagal sinkronisasi unlock ke backend:', err);
+    }
+
+    setSupervisorPinInput('');
+    setSupervisorPinError('');
     setIsUnlocking(false);
   };
 

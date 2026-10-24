@@ -152,6 +152,7 @@ type Repository interface {
 	DeleteExam(ctx context.Context, id string) error
 	ListQuestions(ctx context.Context, examID string, includeAnswer bool) ([]CBTQuestion, error)
 	SaveQuestion(ctx context.Context, q *CBTQuestion) error
+	SaveQuestions(ctx context.Context, examID string, questions []CBTQuestion) error
 
 	// CBT Sessions & Proctoring
 	GetOrCreateSession(ctx context.Context, examID, studentID, studentName, classCode string) (*CBTStudentSession, error)
@@ -185,6 +186,7 @@ type UseCase interface {
 	DeleteExam(ctx context.Context, id string) error
 	GetExamQuestions(ctx context.Context, examID string, isTeacher bool) ([]CBTQuestion, error)
 	AddExamQuestion(ctx context.Context, q *CBTQuestion) error
+	SaveQuestions(ctx context.Context, examID string, questions []CBTQuestion) error
 
 	// CBT Proctoring & Student Runner
 	StartStudentExam(ctx context.Context, examID, token, studentID, studentName, classCode string) (*CBTStudentSession, error)

@@ -198,6 +198,39 @@ func (r *repository) SaveQuestion(ctx context.Context, q *domain.CBTQuestion) er
 	return r.db.WithContext(ctx).Table("cbt_questions").Create(q).Error
 }
 
+func (r *repository) SaveQuestions(ctx context.Context, examID string, questions []domain.CBTQuestion) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Delete previous questions of this exam
+		if err := tx.Table("cbt_questions").Where("exam_id = ?", examID).Delete(&domain.CBTQuestion{}).Error; err != nil {
+			return err
+		}
+
+		if len(questions) == 0 {
+			return nil
+		}
+
+		now := time.Now()
+		for i := range questions {
+			if questions[i].ID == "" {
+				questions[i].ID = "q-" + uuid.NewString()[:8]
+			}
+			questions[i].ExamID = examID
+			if questions[i].QuestionNumber <= 0 {
+				questions[i].QuestionNumber = i + 1
+			}
+			if questions[i].CorrectAnswer == "" {
+				questions[i].CorrectAnswer = "-"
+			}
+			if questions[i].ScoreWeight <= 0 {
+				questions[i].ScoreWeight = 1.0
+			}
+			questions[i].CreatedAt = now
+		}
+
+		return tx.Table("cbt_questions").Create(&questions).Error
+	})
+}
+
 // ================= CBT SESSIONS & PROCTORING =================
 
 func (r *repository) GetOrCreateSession(ctx context.Context, examID, studentID, studentName, classCode string) (*domain.CBTStudentSession, error) {

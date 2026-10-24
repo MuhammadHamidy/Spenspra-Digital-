@@ -43,6 +43,7 @@ func (h *ELearningHandler) RegisterRoutes(app *fiber.App) {
 	api.Delete("/exams/:id", h.DeleteExam)
 	api.Get("/exams/:id/questions", h.GetExamQuestions)
 	api.Post("/exams/:id/questions", h.AddExamQuestion)
+	api.Put("/exams/:id/questions", h.SaveExamQuestions)
 
 	// 4. CBT Student Runner & Anti-Cheat Proctoring
 	api.Post("/exams/:id/start", h.StartStudentExam)
@@ -394,6 +395,168 @@ func (h *ELearningHandler) DeleteExam(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(responses.Success(fiber.Map{"deleted": true}, "Ujian CBT berhasil dihapus"))
 }
 
+type CBTQuestionOptionInput struct {
+	Key  string `json:"key"`
+	Text string `json:"text"`
+}
+
+type CBTQuestionInput struct {
+	ID                  string                   `json:"id"`
+	QuestionNumber      int                      `json:"questionNumber"`
+	QuestionNumberSnake int                      `json:"question_number"`
+	Type                string                   `json:"type"`
+	QuestionType        string                   `json:"question_type"`
+	QuestionText        string                   `json:"questionText"`
+	QuestionTextSnake   string                   `json:"question_text"`
+	StimulusText        string                   `json:"stimulusText"`
+	ImageURL            string                   `json:"imageUrl"`
+	ImageURLSnake       string                   `json:"image_url"`
+	Options             []CBTQuestionOptionInput `json:"options"`
+	OptionA             string                   `json:"option_a"`
+	OptionB             string                   `json:"option_b"`
+	OptionC             string                   `json:"option_c"`
+	OptionD             string                   `json:"option_d"`
+	OptionE             string                   `json:"option_e"`
+	CorrectOption       string                   `json:"correctOption"`
+	CorrectAnswer       string                   `json:"correct_answer"`
+	Points              float64                  `json:"points"`
+	ScoreWeight         float64                  `json:"score_weight"`
+}
+
+func (in *CBTQuestionInput) ToDomain(examID string, index int) domain.CBTQuestion {
+	qNum := in.QuestionNumber
+	if qNum <= 0 {
+		qNum = in.QuestionNumberSnake
+	}
+	if qNum <= 0 {
+		qNum = index + 1
+	}
+
+	qType := strings.ToUpper(strings.TrimSpace(in.Type))
+	if qType == "" {
+		qType = strings.ToUpper(strings.TrimSpace(in.QuestionType))
+	}
+	if qType == "PILIHAN_GANDA" || qType == "" {
+		qType = "MCQ"
+	}
+
+	qText := strings.TrimSpace(in.QuestionText)
+	if qText == "" {
+		qText = strings.TrimSpace(in.QuestionTextSnake)
+	}
+
+	img := strings.TrimSpace(in.ImageURL)
+	if img == "" {
+		img = strings.TrimSpace(in.ImageURLSnake)
+	}
+
+	optA := in.OptionA
+	optB := in.OptionB
+	optC := in.OptionC
+	optD := in.OptionD
+	optE := in.OptionE
+
+	for _, opt := range in.Options {
+		k := strings.ToUpper(strings.TrimSpace(opt.Key))
+		switch k {
+		case "A":
+			optA = opt.Text
+		case "B":
+			optB = opt.Text
+		case "C":
+			optC = opt.Text
+		case "D":
+			optD = opt.Text
+		case "E":
+			optE = opt.Text
+		}
+	}
+
+	corr := strings.ToUpper(strings.TrimSpace(in.CorrectOption))
+	if corr == "" {
+		corr = strings.ToUpper(strings.TrimSpace(in.CorrectAnswer))
+	}
+	if corr == "" && qType != "ESSAY" {
+		corr = "A"
+	}
+	if corr == "" {
+		corr = "-"
+	}
+
+	pts := in.Points
+	if pts <= 0 {
+		pts = in.ScoreWeight
+	}
+	if pts <= 0 {
+		pts = 1.0
+	}
+
+	return domain.CBTQuestion{
+		ID:             in.ID,
+		ExamID:         examID,
+		QuestionNumber: qNum,
+		QuestionType:   qType,
+		QuestionText:   qText,
+		ImageURL:       img,
+		OptionA:        optA,
+		OptionB:        optB,
+		OptionC:        optC,
+		OptionD:        optD,
+		OptionE:        optE,
+		CorrectAnswer:  corr,
+		ScoreWeight:    pts,
+	}
+}
+
+func formatQuestionForFrontend(q domain.CBTQuestion) fiber.Map {
+	opts := []fiber.Map{}
+	if q.OptionA != "" {
+		opts = append(opts, fiber.Map{"key": "A", "text": q.OptionA})
+	}
+	if q.OptionB != "" {
+		opts = append(opts, fiber.Map{"key": "B", "text": q.OptionB})
+	}
+	if q.OptionC != "" {
+		opts = append(opts, fiber.Map{"key": "C", "text": q.OptionC})
+	}
+	if q.OptionD != "" {
+		opts = append(opts, fiber.Map{"key": "D", "text": q.OptionD})
+	}
+	if q.OptionE != "" {
+		opts = append(opts, fiber.Map{"key": "E", "text": q.OptionE})
+	}
+
+	qType := q.QuestionType
+	if qType == "PILIHAN_GANDA" {
+		qType = "MCQ"
+	}
+
+	return fiber.Map{
+		"id":              q.ID,
+		"exam_id":         q.ExamID,
+		"examId":          q.ExamID,
+		"questionNumber":  q.QuestionNumber,
+		"question_number": q.QuestionNumber,
+		"type":            qType,
+		"question_type":   q.QuestionType,
+		"questionText":    q.QuestionText,
+		"question_text":   q.QuestionText,
+		"imageUrl":        q.ImageURL,
+		"image_url":       q.ImageURL,
+		"options":         opts,
+		"option_a":        q.OptionA,
+		"option_b":        q.OptionB,
+		"option_c":        q.OptionC,
+		"option_d":        q.OptionD,
+		"option_e":        q.OptionE,
+		"correctOption":   q.CorrectAnswer,
+		"correct_answer":  q.CorrectAnswer,
+		"points":          q.ScoreWeight,
+		"score_weight":    q.ScoreWeight,
+		"created_at":       q.CreatedAt,
+	}
+}
+
 func (h *ELearningHandler) GetExamQuestions(c *fiber.Ctx) error {
 	id := c.Params("id")
 	role := c.Get("X-User-Role")
@@ -402,20 +565,60 @@ func (h *ELearningHandler) GetExamQuestions(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
 	}
-	return c.Status(http.StatusOK).JSON(responses.Success(questions, "Daftar butir soal dimuat"))
+
+	formatted := make([]fiber.Map, len(questions))
+	for i, q := range questions {
+		formatted[i] = formatQuestionForFrontend(q)
+	}
+
+	return c.Status(http.StatusOK).JSON(responses.Success(formatted, "Daftar butir soal dimuat"))
 }
 
 func (h *ELearningHandler) AddExamQuestion(c *fiber.Ctx) error {
 	id := c.Params("id")
-	var req domain.CBTQuestion
-	if err := c.BodyParser(&req); err != nil {
+	var input CBTQuestionInput
+	if err := c.BodyParser(&input); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(responses.Fail("INVALID_PAYLOAD", err.Error()))
 	}
-	req.ExamID = id
+	req := input.ToDomain(id, 0)
 	if err := h.useCase.AddExamQuestion(c.Context(), &req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(responses.Fail("VALIDATION_ERROR", err.Error()))
 	}
-	return c.Status(http.StatusCreated).JSON(responses.Success(req, "Soal berhasil ditambahkan"))
+	return c.Status(http.StatusCreated).JSON(responses.Success(formatQuestionForFrontend(req), "Soal berhasil ditambahkan"))
+}
+
+func (h *ELearningHandler) SaveExamQuestions(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	// Payload can be { questions: [...] } or direct slice [...]
+	type BulkPayload struct {
+		Questions []CBTQuestionInput `json:"questions"`
+	}
+
+	var rawBulk BulkPayload
+	var inputs []CBTQuestionInput
+
+	if err := c.BodyParser(&rawBulk); err == nil && len(rawBulk.Questions) > 0 {
+		inputs = rawBulk.Questions
+	} else {
+		_ = c.BodyParser(&inputs)
+	}
+
+	var domainQuestions []domain.CBTQuestion
+	for i, in := range inputs {
+		domainQuestions = append(domainQuestions, in.ToDomain(id, i))
+	}
+
+	if err := h.useCase.SaveQuestions(c.Context(), id, domainQuestions); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
+	}
+
+	formatted := make([]fiber.Map, len(domainQuestions))
+	for i, q := range domainQuestions {
+		formatted[i] = formatQuestionForFrontend(q)
+	}
+
+	return c.Status(http.StatusOK).JSON(responses.Success(formatted, "Semua butir soal berhasil disimpan ke server"))
 }
 
 // Student Runner & Anti-Cheat Handlers
@@ -424,27 +627,96 @@ func (h *ELearningHandler) StartStudentExam(c *fiber.Ctx) error {
 	type StartReq struct {
 		Token       string `json:"token"`
 		StudentID   string `json:"student_id"`
+		StudentIdCamel string `json:"studentId"`
 		StudentName string `json:"student_name"`
+		StudentNameCamel string `json:"studentName"`
 		ClassCode   string `json:"class_code"`
+		ClassName   string `json:"className"`
 	}
 	var req StartReq
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(responses.Fail("INVALID_PAYLOAD", err.Error()))
 	}
-	sess, err := h.useCase.StartStudentExam(c.Context(), id, req.Token, req.StudentID, req.StudentName, req.ClassCode)
+
+	sID := strings.TrimSpace(req.StudentID)
+	if sID == "" {
+		sID = strings.TrimSpace(req.StudentIdCamel)
+	}
+	sName := strings.TrimSpace(req.StudentName)
+	if sName == "" {
+		sName = strings.TrimSpace(req.StudentNameCamel)
+	}
+	cls := strings.TrimSpace(req.ClassCode)
+	if cls == "" {
+		cls = strings.TrimSpace(req.ClassName)
+	}
+
+	sess, err := h.useCase.StartStudentExam(c.Context(), id, req.Token, sID, sName, cls)
 	if err != nil {
 		return c.Status(http.StatusUnauthorized).JSON(responses.Fail("AUTH_ERROR", err.Error()))
 	}
-	return c.Status(http.StatusOK).JSON(responses.Success(sess, "Sesi ujian dimulai"))
+
+	return c.Status(http.StatusOK).JSON(responses.Success(fiber.Map{
+		"id":              sess.ID,
+		"sessionId":       sess.ID,
+		"exam_id":         sess.ExamID,
+		"examId":          sess.ExamID,
+		"student_id":      sess.StudentID,
+		"studentId":       sess.StudentID,
+		"student_name":    sess.StudentName,
+		"studentName":     sess.StudentName,
+		"class_code":      sess.ClassCode,
+		"className":       sess.ClassCode,
+		"started_at":      sess.StartedAt,
+		"status":          sess.Status,
+		"violation_count": sess.ViolationCount,
+		"violationsCount": sess.ViolationCount,
+		"score":           sess.Score,
+	}, "Sesi ujian dimulai"))
 }
 
 func (h *ELearningHandler) RecordViolation(c *fiber.Ctx) error {
 	id := c.Params("id")
-	var req domain.CBTViolationLog
-	if err := c.BodyParser(&req); err != nil {
+	type ViolationInput struct {
+		Type            string `json:"type"`
+		ViolationType   string `json:"violation_type"`
+		Description     string `json:"description"`
+		Details         string `json:"details"`
+		DurationSeconds int    `json:"duration_seconds"`
+		StudentID       string `json:"student_id"`
+		StudentIdCamel  string `json:"studentId"`
+	}
+	var input ViolationInput
+	if err := c.BodyParser(&input); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(responses.Fail("INVALID_PAYLOAD", err.Error()))
 	}
-	req.SessionID = id
+
+	vType := strings.TrimSpace(input.ViolationType)
+	if vType == "" {
+		vType = strings.TrimSpace(input.Type)
+	}
+	if vType == "" {
+		vType = "WINDOW_BLUR"
+	}
+
+	vDetails := strings.TrimSpace(input.Details)
+	if vDetails == "" {
+		vDetails = strings.TrimSpace(input.Description)
+	}
+
+	stID := strings.TrimSpace(input.StudentID)
+	if stID == "" {
+		stID = strings.TrimSpace(input.StudentIdCamel)
+	}
+
+	req := domain.CBTViolationLog{
+		SessionID:       id,
+		StudentID:       stID,
+		ViolationType:   vType,
+		Details:         vDetails,
+		DurationSeconds: input.DurationSeconds,
+	}
+
 	sess, err := h.useCase.LogViolation(c.Context(), &req)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
@@ -479,5 +751,60 @@ func (h *ELearningHandler) GetLiveProctoring(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
 	}
-	return c.Status(http.StatusOK).JSON(responses.Success(data, "Data proctoring real-time dimuat"))
+
+	// Normalisasi sessions untuk frontend guru monitoring
+	type sessionWithLogs struct {
+		domain.CBTStudentSession
+		Violations []domain.CBTViolationLog `json:"violations"`
+	}
+
+	rawSessions, _ := data["sessions"].([]sessionWithLogs)
+	formattedSessions := []fiber.Map{}
+
+	for _, s := range rawSessions {
+		var formattedLogs []fiber.Map
+		for _, l := range s.Violations {
+			formattedLogs = append(formattedLogs, fiber.Map{
+				"id":               l.ID,
+				"session_id":       l.SessionID,
+				"sessionId":        l.SessionID,
+				"student_id":       l.StudentID,
+				"studentId":        l.StudentID,
+				"type":             l.ViolationType,
+				"violation_type":   l.ViolationType,
+				"description":      l.Details,
+				"details":          l.Details,
+				"duration_seconds": l.DurationSeconds,
+				"created_at":       l.CreatedAt,
+				"timestamp":        l.CreatedAt,
+			})
+		}
+
+		formattedSessions = append(formattedSessions, fiber.Map{
+			"id":              s.ID,
+			"sessionId":       s.ID,
+			"exam_id":         s.ExamID,
+			"examId":          s.ExamID,
+			"student_id":      s.StudentID,
+			"studentId":       s.StudentID,
+			"student_name":    s.StudentName,
+			"studentName":     s.StudentName,
+			"nisn":            s.StudentNISN,
+			"student_nisn":    s.StudentNISN,
+			"class_code":      s.ClassCode,
+			"className":       s.ClassCode,
+			"started_at":      s.StartedAt,
+			"status":          s.Status,
+			"violation_count": s.ViolationCount,
+			"violationsCount": s.ViolationCount,
+			"score":           s.Score,
+			"violations":      formattedLogs,
+		})
+	}
+
+	return c.Status(http.StatusOK).JSON(responses.Success(fiber.Map{
+		"exam_id":  id,
+		"sessions": formattedSessions,
+		"total":    len(formattedSessions),
+	}, "Data proctoring real-time dimuat"))
 }

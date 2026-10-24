@@ -133,22 +133,35 @@ export default function LiveProctoringMonitoringPage() {
 
     return classStudents.map((st) => {
       const stId = String(st.id || st.nisn || '');
+      const stNisn = String(st.nisn || '');
       const stName = st.fullName || st.full_name || st.name || 'Siswa';
       const stClass = st.className || st.class_name || selectedExam?.className || '-';
 
-      // Find active live session
-      const liveSession = safeSessions.find(
-        (s) =>
-          String(s.studentId) === stId ||
-          (s.studentName && s.studentName.toLowerCase() === stName.toLowerCase())
-      );
+      // Find active live session by ID, NISN, or Name
+      const liveSession = safeSessions.find((s) => {
+        const sId = String(s.studentId || s.student_id || '');
+        const sNisn = String(s.nisn || s.student_nisn || '');
+        const sName = String(s.studentName || s.student_name || '').trim().toLowerCase();
+        const targetName = stName.trim().toLowerCase();
+
+        return (
+          (stId && sId === stId) ||
+          (stNisn && sNisn === stNisn) ||
+          (sName && targetName && sName === targetName)
+        );
+      });
 
       if (liveSession) {
         return {
           ...liveSession,
+          sessionId: liveSession.sessionId || liveSession.id,
+          studentId: stId,
           nisn: st.nisn || liveSession.nisn || '-',
           studentName: stName,
           className: stClass,
+          status: liveSession.status || 'IN_PROGRESS',
+          violationsCount: Number(liveSession.violationsCount ?? liveSession.violation_count ?? 0),
+          violations: liveSession.violations || [],
         };
       }
 

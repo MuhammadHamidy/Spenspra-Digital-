@@ -119,6 +119,13 @@ func (u *useCase) AddExamQuestion(ctx context.Context, q *domain.CBTQuestion) er
 	return u.repo.SaveQuestion(ctx, q)
 }
 
+func (u *useCase) SaveQuestions(ctx context.Context, examID string, questions []domain.CBTQuestion) error {
+	if examID == "" {
+		return errors.New("id ujian diperlukan")
+	}
+	return u.repo.SaveQuestions(ctx, examID, questions)
+}
+
 // CBT Proctoring & Student Runner
 func (u *useCase) StartStudentExam(ctx context.Context, examID, token, studentID, studentName, classCode string) (*domain.CBTStudentSession, error) {
 	exam, err := u.repo.GetExamByID(ctx, examID)
@@ -126,8 +133,18 @@ func (u *useCase) StartStudentExam(ctx context.Context, examID, token, studentID
 		return nil, errors.New("ujian tidak ditemukan")
 	}
 
-	if exam.Token != "" && strings.ToUpper(strings.TrimSpace(token)) != exam.Token {
+	if exam.Token != "" && strings.ToUpper(strings.TrimSpace(token)) != strings.ToUpper(strings.TrimSpace(exam.Token)) {
 		return nil, errors.New("token ujian tidak valid! periksa token dari pengawas")
+	}
+
+	if studentID == "" {
+		studentID = "std-demo"
+	}
+	if studentName == "" {
+		studentName = "Siswa Spenspra"
+	}
+	if classCode == "" {
+		classCode = exam.ClassCode
 	}
 
 	return u.repo.GetOrCreateSession(ctx, examID, studentID, studentName, classCode)

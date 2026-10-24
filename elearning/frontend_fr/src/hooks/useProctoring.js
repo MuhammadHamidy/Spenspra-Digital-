@@ -33,6 +33,12 @@ export function useProctoring({
   isEnabledRef.current = enabled;
   const isLockedRef = useRef(isLocked);
   isLockedRef.current = isLocked;
+  const unlockPinRef = useRef(unlockPin);
+  unlockPinRef.current = unlockPin;
+  const altUnlockPinsRef = useRef(altUnlockPins);
+  altUnlockPinsRef.current = altUnlockPins;
+  const onUnlockRef = useRef(onUnlock);
+  onUnlockRef.current = onUnlock;
 
   // 1. Request Screen Wake Lock (Mencegah Layar HP Mati / Sleep)
   const requestWakeLock = useCallback(async () => {
@@ -298,16 +304,20 @@ export function useProctoring({
       }
 
       // Validasi terhadap PIN resmi: custom unlockPin, altUnlockPins (misal token ujian), dan master PIN
-      const validPins = [
-        String(unlockPin || '').trim().toUpperCase(),
-        ...altUnlockPins.map((p) => String(p || '').trim().toUpperCase()),
+      const currentUnlockPin = String(unlockPinRef.current || '').trim().toUpperCase();
+      const currentAltPins = (altUnlockPinsRef.current || []).map((p) => String(p || '').trim().toUpperCase());
+
+      const validPins = new Set([
+        currentUnlockPin,
+        ...currentAltPins,
         'SPENSPRA',
         'GURU123',
         'ADMINCBT',
         'SPENSPRA2026',
-      ].filter(Boolean);
+        'SMP1PRAMBON',
+      ].filter(Boolean));
 
-      if (validPins.includes(cleanPin)) {
+      if (validPins.has(cleanPin)) {
         setIsLocked(false);
         isLockedRef.current = false;
         setViolationCount(0);
@@ -317,11 +327,13 @@ export function useProctoring({
         requestFullscreen();
         requestWakeLock();
 
-        onUnlock({
-          pin: cleanPin,
-          timestamp: new Date().toISOString(),
-          message: 'Ujian berhasil dibuka kembali oleh pengawas/guru.',
-        });
+        if (typeof onUnlockRef.current === 'function') {
+          onUnlockRef.current({
+            pin: cleanPin,
+            timestamp: new Date().toISOString(),
+            message: 'Ujian berhasil dibuka kembali oleh pengawas/guru.',
+          });
+        }
 
         return { success: true };
       }
@@ -331,7 +343,7 @@ export function useProctoring({
         message: 'PIN Pengawas tidak cocok! Hubungi Bapak/Ibu Pengawas di kelas.',
       };
     },
-    [unlockPin, altUnlockPins, requestFullscreen, requestWakeLock, onUnlock]
+    [requestFullscreen, requestWakeLock]
   );
 
   return {

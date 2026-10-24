@@ -517,9 +517,39 @@ export const elearningApi = {
 
   getExamQuestions: async (examId) => {
     const res = await fetchJson(`/exams/${examId}/questions`);
-    if (res.success && res.data) return res.data;
-    const allQuestions = getLocal('questions', INITIAL_QUESTIONS);
-    return allQuestions[examId] || [];
+    let rawList = [];
+    if (res.success && Array.isArray(res.data)) {
+      rawList = res.data;
+    } else {
+      const allQuestions = getLocal('questions', INITIAL_QUESTIONS);
+      rawList = allQuestions[examId] || [];
+    }
+
+    return rawList.map((q, idx) => {
+      const qType = q.type || (q.question_type === 'PILIHAN_GANDA' ? 'MCQ' : q.question_type) || 'MCQ';
+      let options = q.options;
+      if (!Array.isArray(options) || options.length === 0) {
+        options = [];
+        if (q.option_a) options.push({ key: 'A', text: q.option_a });
+        if (q.option_b) options.push({ key: 'B', text: q.option_b });
+        if (q.option_c) options.push({ key: 'C', text: q.option_c });
+        if (q.option_d) options.push({ key: 'D', text: q.option_d });
+        if (q.option_e) options.push({ key: 'E', text: q.option_e });
+      }
+
+      return {
+        id: q.id || `q-${idx + 1}`,
+        examId: q.examId || q.exam_id || examId,
+        questionNumber: q.questionNumber || q.question_number || idx + 1,
+        type: qType,
+        questionText: q.questionText || q.question_text || '',
+        stimulusText: q.stimulusText || '',
+        imageUrl: q.imageUrl || q.image_url || '',
+        options: options,
+        correctOption: q.correctOption || q.correct_answer || 'A',
+        points: Number(q.points || q.score_weight || 10),
+      };
+    });
   },
 
   saveExamQuestions: async (examId, questions) => {
@@ -534,10 +564,18 @@ export const elearningApi = {
       setLocal('exams', exams);
     }
 
-    fetchJson(`/exams/${examId}/questions`, {
-      method: 'PUT',
-      body: JSON.stringify({ questions }),
-    }).catch(() => {});
+    try {
+      const res = await fetchJson(`/exams/${examId}/questions`, {
+        method: 'PUT',
+        body: JSON.stringify({ questions }),
+      });
+      if (res?.success && Array.isArray(res?.data)) {
+        allQuestions[examId] = res.data;
+        setLocal('questions', allQuestions);
+      }
+    } catch (err) {
+      console.warn('Gagal sync butir soal ke backend:', err);
+    }
 
     return questions;
   },
@@ -912,18 +950,48 @@ export const elearningApi = {
       throw new Error('Token ujian tidak valid! Periksa token yang diberikan pengawas.');
     }
 
-    const sessionKey = `exam_session_${examId}_${student?.id || 'demo'}`;
+    const studentId = String(student?.id || student?.nisn || 'std-demo');
+    const studentName = student?.fullName || student?.full_name || student?.name || 'Siswa Spenspra';
+    const className = student?.className || student?.class_name || exam.className || '7A';
+
+    // 1. Daftarkan dan aktifkan sesi secara resmi di server PostgreSQL
+    let serverSessionId = null;
+    try {
+      const res = await fetchJson(`/exams/${examId}/start`, {
+        method: 'POST',
+        body: JSON.stringify({
+          token: token.trim().toUpperCase(),
+          student_id: studentId,
+          studentId: studentId,
+          student_name: studentName,
+          studentName: studentName,
+          class_code: className,
+          className: className,
+        }),
+      });
+      if (res?.success && res?.data) {
+        serverSessionId = res.data.id || res.data.sessionId;
+      }
+    } catch (e) {
+      console.warn('Sync sesi ujian ke backend:', e);
+    }
+
+    const sessionKey = `exam_session_${examId}_${studentId}`;
     let existing = getLocal(sessionKey, null);
     if (existing && existing.status !== 'SUBMITTED') {
+      if (serverSessionId && existing.sessionId !== serverSessionId) {
+        existing.sessionId = serverSessionId;
+        setLocal(sessionKey, existing);
+      }
       return existing;
     }
 
     const newSession = {
-      sessionId: `ses-${Date.now()}`,
+      sessionId: serverSessionId || `ses-${Date.now()}`,
       examId,
-      studentId: student?.id || 'std-demo',
-      studentName: student?.fullName || student?.full_name || 'Siswa Spenspra',
-      className: student?.className || exam.className || '7A',
+      studentId,
+      studentName,
+      className,
       startTime: new Date().toISOString(),
       durationSeconds: (exam.durationMinutes || 60) * 60,
       remainingSeconds: (exam.durationMinutes || 60) * 60,
@@ -936,11 +1004,24 @@ export const elearningApi = {
     };
 
     setLocal(sessionKey, newSession);
+
+    // Sync juga ke live monitoring store lokal agar guru langsung melihat
+    const monitorKey = `proctoring_${examId}`;
+    const liveSessions = getLocal(monitorKey, []);
+    const idx = liveSessions.findIndex((s) => s.studentId === studentId);
+    if (idx >= 0) {
+      liveSessions[idx] = newSession;
+    } else {
+      liveSessions.push(newSession);
+    }
+    setLocal(monitorKey, liveSessions);
+
     return newSession;
   },
 
   saveAnswer: async (sessionId, examId, studentId, questionId, selectedOption, essayAnswer = '', isDoubtful = false) => {
-    const sessionKey = `exam_session_${examId}_${studentId || 'demo'}`;
+    const sId = studentId || 'demo';
+    const sessionKey = `exam_session_${examId}_${sId}`;
     const session = getLocal(sessionKey, null);
     if (!session) return;
 
@@ -954,23 +1035,34 @@ export const elearningApi = {
     setLocal(sessionKey, session);
 
     // Call backend async
-    fetchJson(`/sessions/${sessionId}/answers`, {
-      method: 'POST',
-      body: JSON.stringify({ questionId, selectedOption, essayAnswer, isDoubtful }),
-    }).catch(() => {});
+    const effId = sessionId || session.sessionId;
+    if (effId) {
+      fetchJson(`/sessions/${effId}/answers`, {
+        method: 'POST',
+        body: JSON.stringify({ questionId, selectedOption, essayAnswer, isDoubtful }),
+      }).catch(() => {});
+    }
   },
 
   recordViolationLog: async (sessionId, examId, studentId, violation) => {
-    const sessionKey = `exam_session_${examId}_${studentId || 'demo'}`;
+    const sId = studentId || 'demo';
+    const sessionKey = `exam_session_${examId}_${sId}`;
     const session = getLocal(sessionKey, null);
     if (!session) return;
 
+    const vType = violation.type || violation.violation_type || 'WINDOW_BLUR';
+    const vDesc = violation.description || violation.details || 'Pelanggaran anti-cheat';
+    const timestamp = violation.timestamp || new Date().toISOString();
+
     session.violationsCount = (session.violationsCount || 0) + 1;
+    session.violations = session.violations || [];
     session.violations.push({
       id: `viol-${Date.now()}`,
-      type: violation.type,
-      description: violation.description,
-      timestamp: violation.timestamp || new Date().toISOString(),
+      type: vType,
+      violation_type: vType,
+      description: vDesc,
+      details: vDesc,
+      timestamp,
     });
 
     if (session.violationsCount >= (session.maxViolations || 3)) {
@@ -982,25 +1074,38 @@ export const elearningApi = {
     // Sync to teacher live monitoring store
     const monitorKey = `proctoring_${examId}`;
     const liveSessions = getLocal(monitorKey, []);
-    const idx = liveSessions.findIndex((s) => s.sessionId === sessionId);
+    const effSessionId = sessionId || session.sessionId;
+    const idx = liveSessions.findIndex((s) => s.sessionId === effSessionId || s.studentId === sId);
     if (idx >= 0) {
-      liveSessions[idx] = session;
+      liveSessions[idx] = { ...liveSessions[idx], ...session };
     } else {
       liveSessions.push(session);
     }
     setLocal(monitorKey, liveSessions);
 
     // Call backend async
-    fetchJson(`/sessions/${sessionId}/violations`, {
-      method: 'POST',
-      body: JSON.stringify(violation),
-    }).catch(() => {});
+    if (effSessionId) {
+      fetchJson(`/sessions/${effSessionId}/violations`, {
+        method: 'POST',
+        body: JSON.stringify({
+          type: vType,
+          violation_type: vType,
+          description: vDesc,
+          details: vDesc,
+          student_id: sId,
+          studentId: sId,
+        }),
+      }).catch((e) => {
+        console.warn('Gagal sync violation ke backend:', e);
+      });
+    }
 
     return session;
   },
 
   finishExamSession: async (sessionId, examId, studentId) => {
-    const sessionKey = `exam_session_${examId}_${studentId || 'demo'}`;
+    const sId = studentId || 'demo';
+    const sessionKey = `exam_session_${examId}_${sId}`;
     const session = getLocal(sessionKey, null);
     if (!session) return;
 
@@ -1032,10 +1137,19 @@ export const elearningApi = {
     // Update teacher monitor
     const monitorKey = `proctoring_${examId}`;
     const liveSessions = getLocal(monitorKey, []);
-    const idx = liveSessions.findIndex((s) => s.sessionId === sessionId);
+    const effSessionId = sessionId || session.sessionId;
+    const idx = liveSessions.findIndex((s) => s.sessionId === effSessionId || s.studentId === sId);
     if (idx >= 0) {
       liveSessions[idx] = session;
       setLocal(monitorKey, liveSessions);
+    }
+
+    // Call backend async
+    if (effSessionId) {
+      fetchJson(`/sessions/${effSessionId}/finish`, {
+        method: 'POST',
+        body: JSON.stringify({ score }),
+      }).catch(() => {});
     }
 
     return session;
@@ -1043,37 +1157,63 @@ export const elearningApi = {
 
   // =================== PROCTORING MONITOR (GURU) ===================
   getLiveProctoringData: async (examId) => {
+    const normalizeSession = (s) => ({
+      ...s,
+      sessionId: s.sessionId || s.id,
+      id: s.id || s.sessionId,
+      studentId: String(s.studentId || s.student_id || ''),
+      student_id: String(s.student_id || s.studentId || ''),
+      studentName: s.studentName || s.student_name || 'Siswa',
+      student_name: s.student_name || s.studentName || 'Siswa',
+      nisn: s.nisn || s.student_nisn || '-',
+      student_nisn: s.student_nisn || s.nisn || '-',
+      className: s.className || s.class_code || '-',
+      class_code: s.class_code || s.className || '-',
+      violationsCount: Number(s.violationsCount ?? s.violation_count ?? 0),
+      violation_count: Number(s.violation_count ?? s.violationsCount ?? 0),
+      status: s.status || 'IN_PROGRESS',
+      violations: Array.isArray(s.violations) ? s.violations : [],
+    });
+
     const res = await fetchJson(`/exams/${examId}/monitoring`);
-    if (res.success && res.data) {
-      if (Array.isArray(res.data)) return res.data;
-      if (Array.isArray(res.data.sessions)) return res.data.sessions;
+    let serverSessions = [];
+    if (res?.success && res?.data) {
+      if (Array.isArray(res.data)) serverSessions = res.data;
+      else if (Array.isArray(res.data.sessions)) serverSessions = res.data.sessions;
     }
+
+    if (serverSessions.length > 0) {
+      return serverSessions.map(normalizeSession);
+    }
+
     const monitorKey = `proctoring_${examId}`;
     const list = getLocal(monitorKey, []);
-    return Array.isArray(list) ? list : [];
+    return (Array.isArray(list) ? list : []).map(normalizeSession);
   },
 
   unlockStudentSession: async (examId, sessionId) => {
     const monitorKey = `proctoring_${examId}`;
     const liveSessions = getLocal(monitorKey, []);
-    const idx = liveSessions.findIndex((s) => s.sessionId === sessionId);
+    const idx = liveSessions.findIndex((s) => s.sessionId === sessionId || s.id === sessionId);
     if (idx >= 0) {
       liveSessions[idx].status = 'IN_PROGRESS';
-      liveSessions[idx].violationsCount = Math.max(0, (liveSessions[idx].violationsCount || 3) - 1); // Berikan dispensasi 1 toleransi
+      liveSessions[idx].violationsCount = Math.max(0, (liveSessions[idx].violationsCount || 3) - 1);
       setLocal(monitorKey, liveSessions);
 
-      // Also update student session key
-      const studentId = liveSessions[idx].studentId;
+      const studentId = liveSessions[idx].studentId || liveSessions[idx].student_id;
       const sessionKey = `exam_session_${examId}_${studentId}`;
       const session = getLocal(sessionKey, null);
       if (session) {
+        session.status = 'IN_PROGRESS';
         session.status = 'IN_PROGRESS';
         session.violationsCount = liveSessions[idx].violationsCount;
         setLocal(sessionKey, session);
       }
     }
 
-    await fetchJson(`/sessions/${sessionId}/unlock`, { method: 'POST' }).catch(() => {});
+    if (sessionId) {
+      await fetchJson(`/sessions/${sessionId}/unlock`, { method: 'POST' }).catch(() => {});
+    }
     return true;
   },
 };
