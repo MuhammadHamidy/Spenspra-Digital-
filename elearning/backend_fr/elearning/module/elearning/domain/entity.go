@@ -138,6 +138,8 @@ type Repository interface {
 	// Assignments
 	ListAssignments(ctx context.Context, classCode string) ([]LearningAssignment, error)
 	CreateAssignment(ctx context.Context, a *LearningAssignment) error
+	UpdateAssignment(ctx context.Context, id string, a *LearningAssignment) error
+	DeleteAssignment(ctx context.Context, id string) error
 	ListSubmissions(ctx context.Context, assignmentID string) ([]AssignmentSubmission, error)
 	SaveSubmission(ctx context.Context, s *AssignmentSubmission) error
 	GradeSubmission(ctx context.Context, submissionID string, score float64, feedback string, graderID string) error
@@ -169,6 +171,8 @@ type UseCase interface {
 	// Assignments
 	GetAssignments(ctx context.Context, classCode string) ([]LearningAssignment, error)
 	AddAssignment(ctx context.Context, a *LearningAssignment) error
+	UpdateAssignment(ctx context.Context, id string, a *LearningAssignment) error
+	RemoveAssignment(ctx context.Context, id string) error
 	GetSubmissions(ctx context.Context, assignmentID string) ([]AssignmentSubmission, error)
 	SubmitAssignment(ctx context.Context, s *AssignmentSubmission) error
 	GradeAssignmentSubmission(ctx context.Context, submissionID string, score float64, feedback string, graderID string) error

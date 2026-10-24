@@ -44,6 +44,21 @@ func (u *useCase) AddAssignment(ctx context.Context, a *domain.LearningAssignmen
 	return u.repo.CreateAssignment(ctx, a)
 }
 
+func (u *useCase) UpdateAssignment(ctx context.Context, id string, a *domain.LearningAssignment) error {
+	if id == "" {
+		return errors.New("id tugas diperlukan")
+	}
+	return u.repo.UpdateAssignment(ctx, id, a)
+}
+
+func (u *useCase) RemoveAssignment(ctx context.Context, id string) error {
+	if id == "" {
+		return errors.New("id tugas diperlukan")
+	}
+	return u.repo.DeleteAssignment(ctx, id)
+}
+
+
 func (u *useCase) GetSubmissions(ctx context.Context, assignmentID string) ([]domain.AssignmentSubmission, error) {
 	return u.repo.ListSubmissions(ctx, assignmentID)
 }

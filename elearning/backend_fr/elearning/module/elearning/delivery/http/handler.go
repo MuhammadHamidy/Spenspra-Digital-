@@ -29,6 +29,8 @@ func (h *ELearningHandler) RegisterRoutes(app *fiber.App) {
 	// 2. Assignments
 	api.Get("/assignments", h.ListAssignments)
 	api.Post("/assignments", h.CreateAssignment)
+	api.Put("/assignments/:id", h.UpdateAssignment)
+	api.Delete("/assignments/:id", h.DeleteAssignment)
 	api.Get("/assignments/:id/submissions", h.ListSubmissions)
 	api.Post("/assignments/:id/submissions", h.SubmitAssignment)
 	api.Put("/submissions/:id/grade", h.GradeSubmission)
@@ -98,6 +100,26 @@ func (h *ELearningHandler) CreateAssignment(c *fiber.Ctx) error {
 		return c.Status(http.StatusBadRequest).JSON(responses.Fail("VALIDATION_ERROR", err.Error()))
 	}
 	return c.Status(http.StatusCreated).JSON(responses.Success(req, "Tugas berhasil dibuat"))
+}
+
+func (h *ELearningHandler) UpdateAssignment(c *fiber.Ctx) error {
+	id := c.Params("id")
+	var req domain.LearningAssignment
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(responses.Fail("INVALID_PAYLOAD", err.Error()))
+	}
+	if err := h.useCase.UpdateAssignment(c.Context(), id, &req); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
+	}
+	return c.Status(http.StatusOK).JSON(responses.Success(req, "Tugas berhasil diperbarui"))
+}
+
+func (h *ELearningHandler) DeleteAssignment(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if err := h.useCase.RemoveAssignment(c.Context(), id); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
+	}
+	return c.Status(http.StatusOK).JSON(responses.Success(fiber.Map{"deleted": true}, "Tugas berhasil dihapus"))
 }
 
 func (h *ELearningHandler) ListSubmissions(c *fiber.Ctx) error {

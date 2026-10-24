@@ -308,12 +308,15 @@ export const elearningApi = {
   },
 
   deleteAssignment: async (id) => {
-    await fetchJson(`/assignments/${id}`, {
+    const res = await fetchJson(`/assignments/${id}`, {
       method: 'DELETE',
     });
     const local = getLocal('assignments', INITIAL_ASSIGNMENTS);
     const filtered = local.filter((item) => item.id !== id);
     setLocal('assignments', filtered);
+    if (!res.success && res.error && res.error.code !== 404) {
+      throw new Error(res.error.message || 'Gagal menghapus tugas di server');
+    }
     return true;
   },
 

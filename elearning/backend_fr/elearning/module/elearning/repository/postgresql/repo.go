@@ -72,6 +72,32 @@ func (r *repository) CreateAssignment(ctx context.Context, a *domain.LearningAss
 	return r.db.WithContext(ctx).Table("learning_assignments").Create(a).Error
 }
 
+func (r *repository) UpdateAssignment(ctx context.Context, id string, a *domain.LearningAssignment) error {
+	a.UpdatedAt = time.Now()
+	updates := map[string]interface{}{
+		"title":           a.Title,
+		"instructions":    a.Instructions,
+		"course_id":       a.CourseID,
+		"course_name":     a.CourseName,
+		"class_code":      a.ClassCode,
+		"attachment_url":  a.AttachmentURL,
+		"attachment_name": a.AttachmentName,
+		"max_score":       a.MaxScore,
+		"status":          a.Status,
+		"updated_at":      a.UpdatedAt,
+	}
+	if !a.DueDate.IsZero() {
+		updates["due_date"] = a.DueDate
+	}
+	return r.db.WithContext(ctx).Table("learning_assignments").Where("id = ?", id).Updates(updates).Error
+}
+
+func (r *repository) DeleteAssignment(ctx context.Context, id string) error {
+	_ = r.db.WithContext(ctx).Table("assignment_submissions").Where("assignment_id = ?", id).Delete(nil).Error
+	return r.db.WithContext(ctx).Table("learning_assignments").Where("id = ?", id).Delete(nil).Error
+}
+
+
 func (r *repository) ListSubmissions(ctx context.Context, assignmentID string) ([]domain.AssignmentSubmission, error) {
 	var list []domain.AssignmentSubmission
 	err := r.db.WithContext(ctx).Table("assignment_submissions").

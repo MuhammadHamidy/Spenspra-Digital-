@@ -223,7 +223,8 @@ export default function TeacherAssignmentsManagementPage() {
         try {
           await elearningApi.deleteAssignment(item.id);
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-          loadAssignments();
+          setAssignments((prev) => prev.filter((a) => a.id !== item.id));
+          await loadAssignments();
         } catch (e) {
           alert('Gagal menghapus tugas: ' + e.message);
         }
