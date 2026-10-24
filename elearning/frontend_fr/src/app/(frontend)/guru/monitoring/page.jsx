@@ -131,33 +131,41 @@ export default function LiveProctoringMonitoringPage() {
       return safeSessions;
     }
 
-    return classStudents.map((st) => {
+    const matchedSessionKeys = new Set();
+    const matchedStudentIds = new Set();
+
+    const roster = classStudents.map((st) => {
       const stId = String(st.id || st.nisn || '');
       const stNisn = String(st.nisn || '');
-      const stName = st.fullName || st.full_name || st.name || 'Siswa';
+      const stName = (st.fullName || st.full_name || st.name || 'Siswa').trim().toLowerCase();
       const stClass = st.className || st.class_name || selectedExam?.className || '-';
 
-      // Find active live session by ID, NISN, or Name
+      // Find active live session by ID, NISN, or Name (including partial match)
       const liveSession = safeSessions.find((s) => {
+        const sKey = String(s.sessionId || s.id || '');
+        if (matchedSessionKeys.has(sKey)) return false;
+
         const sId = String(s.studentId || s.student_id || '');
         const sNisn = String(s.nisn || s.student_nisn || '');
         const sName = String(s.studentName || s.student_name || '').trim().toLowerCase();
-        const targetName = stName.trim().toLowerCase();
 
         return (
           (stId && sId === stId) ||
           (stNisn && sNisn === stNisn) ||
-          (sName && targetName && sName === targetName)
+          (sName && stName && (sName === stName || sName.includes(stName) || stName.includes(sName)))
         );
       });
 
       if (liveSession) {
+        matchedSessionKeys.add(String(liveSession.sessionId || liveSession.id || ''));
+        matchedStudentIds.add(String(liveSession.studentId || liveSession.student_id || ''));
+
         return {
           ...liveSession,
           sessionId: liveSession.sessionId || liveSession.id,
-          studentId: stId,
+          studentId: stId || liveSession.studentId,
           nisn: st.nisn || liveSession.nisn || '-',
-          studentName: stName,
+          studentName: st.fullName || st.full_name || liveSession.studentName,
           className: stClass,
           status: liveSession.status || 'IN_PROGRESS',
           violationsCount: Number(liveSession.violationsCount ?? liveSession.violation_count ?? 0),
@@ -178,7 +186,7 @@ export default function LiveProctoringMonitoringPage() {
         return {
           sessionId: localSavedSession.id || `session-${stId}`,
           studentId: stId,
-          studentName: stName,
+          studentName: st.fullName || st.full_name || st.name,
           nisn: st.nisn || '-',
           className: stClass,
           status: localSavedSession.status || 'SUBMITTED',
@@ -192,7 +200,7 @@ export default function LiveProctoringMonitoringPage() {
       return {
         sessionId: `not-joined-${stId}`,
         studentId: stId,
-        studentName: stName,
+        studentName: st.fullName || st.full_name || st.name,
         nisn: st.nisn || '-',
         className: stClass,
         status: 'NOT_STARTED',
@@ -201,6 +209,29 @@ export default function LiveProctoringMonitoringPage() {
         violations: [],
       };
     });
+
+    // PENTING: Siswa yang aktif mengerjakan tetapi tidak tercatat di roster kelas resmi,
+    // tetap harus dimunculkan di bagian atas daftar monitor!
+    safeSessions.forEach((s) => {
+      const sKey = String(s.sessionId || s.id || '');
+      const sId = String(s.studentId || s.student_id || '');
+      if (!matchedSessionKeys.has(sKey) && (!sId || !matchedStudentIds.has(sId))) {
+        roster.unshift({
+          ...s,
+          sessionId: sKey || `ses-${Date.now()}`,
+          studentId: sId || 'std-active',
+          nisn: s.nisn || s.student_nisn || '-',
+          studentName: s.studentName || s.student_name || 'Siswa Peserta',
+          className: s.className || s.class_code || selectedExam?.className || '-',
+          status: s.status || 'IN_PROGRESS',
+          score: s.score,
+          violationsCount: Number(s.violationsCount ?? s.violation_count ?? 0),
+          violations: s.violations || [],
+        });
+      }
+    });
+
+    return roster;
   }, [classStudents, sessions, selectedExam]);
 
   // Statistics

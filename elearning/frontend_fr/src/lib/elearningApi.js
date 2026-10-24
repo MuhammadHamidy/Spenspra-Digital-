@@ -1248,13 +1248,22 @@ export const elearningApi = {
       else if (Array.isArray(res.data.sessions)) serverSessions = res.data.sessions;
     }
 
-    if (serverSessions.length > 0) {
-      return serverSessions.map(normalizeSession);
-    }
-
     const monitorKey = `proctoring_${examId}`;
-    const list = getLocal(monitorKey, []);
-    return (Array.isArray(list) ? list : []).map(normalizeSession);
+    const localList = getLocal(monitorKey, []);
+
+    // Gabungkan sesi dari server backend dan cache lokal (deduplikasi by studentId / sessionId)
+    const combinedMap = new Map();
+    (Array.isArray(localList) ? localList : []).forEach((s) => {
+      const key = String(s.sessionId || s.studentId || s.id || '');
+      if (key) combinedMap.set(key, s);
+    });
+    serverSessions.forEach((s) => {
+      const key = String(s.sessionId || s.studentId || s.id || '');
+      if (key) combinedMap.set(key, { ...(combinedMap.get(key) || {}), ...s });
+    });
+
+    const allSessions = Array.from(combinedMap.values());
+    return allSessions.map(normalizeSession);
   },
 
   unlockStudentSession: async (examId, sessionId) => {

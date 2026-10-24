@@ -256,6 +256,14 @@ func (r *repository) GetOrCreateSession(ctx context.Context, examID, studentID, 
 		First(&sess).Error
 
 	if err == nil {
+		if sess.Status != "IN_PROGRESS" && sess.Status != "LOCKED" {
+			sess.Status = "IN_PROGRESS"
+			sess.StartedAt = time.Now()
+			r.db.WithContext(ctx).Table("cbt_student_sessions").Where("id = ?", sess.ID).Updates(map[string]interface{}{
+				"status":     "IN_PROGRESS",
+				"started_at": sess.StartedAt,
+			})
+		}
 		return &sess, nil
 	}
 
