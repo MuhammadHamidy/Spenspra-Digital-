@@ -161,12 +161,22 @@ func (u *useCase) UnlockStudent(ctx context.Context, sessionID string) error {
 	return u.repo.UnlockSession(ctx, sessionID)
 }
 
-func (u *useCase) FinishStudentExam(ctx context.Context, sessionID string, score float64) error {
+func (u *useCase) SaveStudentAnswer(ctx context.Context, ans *domain.CBTStudentAnswer) error {
+	if ans.SessionID == "" || ans.QuestionID == "" {
+		return errors.New("session id dan question id diperlukan")
+	}
+	return u.repo.SaveStudentAnswer(ctx, ans)
+}
+
+func (u *useCase) FinishStudentExam(ctx context.Context, sessionID string, score float64, answers []domain.CBTStudentAnswer) error {
+	if len(answers) > 0 {
+		_ = u.repo.BatchSaveStudentAnswers(ctx, sessionID, answers)
+	}
 	return u.repo.SubmitExamSession(ctx, sessionID, score)
 }
 
 func (u *useCase) GetLiveProctoring(ctx context.Context, examID string) (map[string]interface{}, error) {
-	sessions, logs, err := u.repo.ListLiveProctoringSessions(ctx, examID)
+	sessions, logs, answers, err := u.repo.ListLiveProctoringSessions(ctx, examID)
 	if err != nil {
 		return nil, err
 	}
@@ -177,11 +187,25 @@ func (u *useCase) GetLiveProctoring(ctx context.Context, examID string) (map[str
 		logsBySession[l.SessionID] = append(logsBySession[l.SessionID], l)
 	}
 
+	// Map answers to session ID and question ID
+	answersBySession := make(map[string]map[string]domain.CBTStudentAnswer)
+	for _, a := range answers {
+		if answersBySession[a.SessionID] == nil {
+			answersBySession[a.SessionID] = make(map[string]domain.CBTStudentAnswer)
+		}
+		answersBySession[a.SessionID][a.QuestionID] = a
+	}
+
 	var results []domain.CBTLiveSession
 	for _, s := range sessions {
+		ansMap := answersBySession[s.ID]
+		if ansMap == nil {
+			ansMap = make(map[string]domain.CBTStudentAnswer)
+		}
 		results = append(results, domain.CBTLiveSession{
 			CBTStudentSession: s,
 			Violations:        logsBySession[s.ID],
+			Answers:           ansMap,
 		})
 	}
 
@@ -191,3 +215,4 @@ func (u *useCase) GetLiveProctoring(ctx context.Context, examID string) (map[str
 		"total":    len(results),
 	}, nil
 }
+

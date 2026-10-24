@@ -64,7 +64,23 @@ export default function CBTExamRunnerPage({ params }) {
           setAnswers(sess.answers || {});
           setDoubtfuls(sess.doubtfuls || {});
           setSecondsLeft(sess.remainingSeconds || (examData.durationMinutes || 60) * 60);
+
+          // Sinkronkan jawaban lokal ke backend jika ada
+          if (sess.sessionId && sess.answers && Object.keys(sess.answers).length > 0) {
+            for (const [qId, a] of Object.entries(sess.answers)) {
+              elearningApi.saveAnswer(
+                sess.sessionId,
+                examId,
+                currentUser?.id,
+                qId,
+                a.selectedOption || '',
+                a.essayAnswer || '',
+                Boolean(a.isDoubtful)
+              );
+            }
+          }
         }
+
       } catch (err) {
         console.error(err);
         alert(err.message || 'Gagal memuat sesi ujian!');

@@ -1089,10 +1089,20 @@ export const elearningApi = {
     if (effId) {
       fetchJson(`/sessions/${effId}/answers`, {
         method: 'POST',
-        body: JSON.stringify({ questionId, selectedOption, essayAnswer, isDoubtful }),
+        body: JSON.stringify({
+          questionId,
+          question_id: questionId,
+          selectedOption,
+          selected_option: selectedOption,
+          essayAnswer,
+          essay_answer: essayAnswer,
+          isDoubtful,
+          is_doubtful: isDoubtful,
+        }),
       }).catch(() => {});
     }
   },
+
 
   recordViolationLog: async (sessionId, examId, studentId, violation) => {
     const sId = studentId || 'demo';
@@ -1214,7 +1224,10 @@ export const elearningApi = {
     if (effSessionId) {
       fetchJson(`/sessions/${effSessionId}/finish`, {
         method: 'POST',
-        body: JSON.stringify({ score: score !== null ? score : 0 }),
+        body: JSON.stringify({
+          score: score !== null ? score : 0,
+          answers: session.answers || {},
+        }),
       }).catch(() => {});
     }
 
@@ -1239,6 +1252,7 @@ export const elearningApi = {
       violation_count: Number(s.violation_count ?? s.violationsCount ?? 0),
       status: s.status || 'IN_PROGRESS',
       violations: Array.isArray(s.violations) ? s.violations : [],
+      answers: s.answers || {},
     });
 
     const res = await fetchJson(`/exams/${examId}/monitoring`);
@@ -1259,12 +1273,15 @@ export const elearningApi = {
     });
     serverSessions.forEach((s) => {
       const key = String(s.sessionId || s.studentId || s.id || '');
-      if (key) combinedMap.set(key, { ...(combinedMap.get(key) || {}), ...s });
+      const existing = combinedMap.get(key) || {};
+      const mergedAnswers = { ...(existing.answers || {}), ...(s.answers || {}) };
+      if (key) combinedMap.set(key, { ...existing, ...s, answers: mergedAnswers });
     });
 
     const allSessions = Array.from(combinedMap.values());
     return allSessions.map(normalizeSession);
   },
+
 
   unlockStudentSession: async (examId, sessionId) => {
     const monitorKey = `proctoring_${examId}`;

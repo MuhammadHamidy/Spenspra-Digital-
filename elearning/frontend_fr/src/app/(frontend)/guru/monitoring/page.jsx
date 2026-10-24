@@ -193,6 +193,18 @@ export default function LiveProctoringMonitoringPage() {
         localStorage.setItem(monitorKey, JSON.stringify(liveSessions));
       }
 
+      // Sinkronkan nilai hasil koreksi ke database backend jika ada sessionId
+      const effSessionId = activeStudentAnswers.sessionId || activeStudentAnswers.id;
+      if (effSessionId) {
+        try {
+          await fetch(`/api/elearning/sessions/${effSessionId}/finish`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ score: finalScore }),
+          });
+        } catch (_) {}
+      }
+
       setNotice(`✓ Koreksi nilai akhir (${finalScore}) untuk ${activeStudentAnswers.studentName} berhasil disimpan!`);
       setTimeout(() => setNotice(null), 4000);
       loadProctoringData();
@@ -292,6 +304,7 @@ export default function LiveProctoringMonitoringPage() {
           score: localSavedSession.score,
           violationsCount: localSavedSession.violationsCount || 0,
           violations: localSavedSession.violations || [],
+          answers: localSavedSession.answers || {},
         };
       }
 
@@ -807,7 +820,14 @@ export default function LiveProctoringMonitoringPage() {
           ) : (
             <div className="space-y-4">
               {examQuestions.map((q, idx) => {
-                const ans = studentAnswers[q.id];
+                const ans =
+                  studentAnswers[q.id] ||
+                  studentAnswers[String(q.id)] ||
+                  studentAnswers[q.questionNumber] ||
+                  studentAnswers[idx + 1] ||
+                  studentAnswers[String(idx + 1)] ||
+                  studentAnswers[`q-${idx + 1}`] ||
+                  studentAnswers[`q_${idx + 1}`];
                 const isMcq = q.type === 'MCQ';
                 const isCorrect = isMcq && ans?.selectedOption === q.correctOption;
 

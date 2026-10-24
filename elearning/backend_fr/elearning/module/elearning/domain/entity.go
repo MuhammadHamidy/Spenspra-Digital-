@@ -128,10 +128,24 @@ type CBTViolationLog struct {
 	CreatedAt       time.Time `json:"created_at"`
 }
 
-// CBTLiveSession represents student session combined with violations for live monitoring
+// CBTStudentAnswer represents an answer submitted by a student for a specific question
+type CBTStudentAnswer struct {
+	ID             string    `json:"id" gorm:"primaryKey"`
+	SessionID      string    `json:"session_id" gorm:"column:session_id"`
+	QuestionID     string    `json:"question_id" gorm:"column:question_id"`
+	SelectedOption string    `json:"selected_option" gorm:"column:selected_option"`
+	EssayAnswer    string    `json:"essay_answer" gorm:"column:essay_answer"`
+	IsDoubtful     bool      `json:"is_doubtful" gorm:"column:is_doubtful"`
+	IsCorrect      bool      `json:"is_correct" gorm:"column:is_correct"`
+	ScoreObtained  float64   `json:"score_obtained" gorm:"column:score_obtained"`
+	AnsweredAt     time.Time `json:"answered_at" gorm:"column:answered_at"`
+}
+
+// CBTLiveSession represents student session combined with violations and answers for live monitoring
 type CBTLiveSession struct {
 	CBTStudentSession
-	Violations []CBTViolationLog `json:"violations"`
+	Violations []CBTViolationLog           `json:"violations"`
+	Answers    map[string]CBTStudentAnswer `json:"answers"`
 }
 
 // Repository Interface
@@ -165,7 +179,9 @@ type Repository interface {
 	RecordViolation(ctx context.Context, log *CBTViolationLog) (*CBTStudentSession, error)
 	UnlockSession(ctx context.Context, sessionID string) error
 	SubmitExamSession(ctx context.Context, sessionID string, score float64) error
-	ListLiveProctoringSessions(ctx context.Context, examID string) ([]CBTStudentSession, []CBTViolationLog, error)
+	SaveStudentAnswer(ctx context.Context, ans *CBTStudentAnswer) error
+	BatchSaveStudentAnswers(ctx context.Context, sessionID string, answers []CBTStudentAnswer) error
+	ListLiveProctoringSessions(ctx context.Context, examID string) ([]CBTStudentSession, []CBTViolationLog, []CBTStudentAnswer, error)
 }
 
 // UseCase Interface
@@ -198,6 +214,8 @@ type UseCase interface {
 	StartStudentExam(ctx context.Context, examID, token, studentID, studentName, classCode string) (*CBTStudentSession, error)
 	LogViolation(ctx context.Context, log *CBTViolationLog) (*CBTStudentSession, error)
 	UnlockStudent(ctx context.Context, sessionID string) error
-	FinishStudentExam(ctx context.Context, sessionID string, score float64) error
+	SaveStudentAnswer(ctx context.Context, ans *CBTStudentAnswer) error
+	FinishStudentExam(ctx context.Context, sessionID string, score float64, answers []CBTStudentAnswer) error
 	GetLiveProctoring(ctx context.Context, examID string) (map[string]interface{}, error)
 }
+

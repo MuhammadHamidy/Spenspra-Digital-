@@ -55,9 +55,18 @@ export default function StudentExamsHubPage() {
           const sess = await elearningApi.getStudentExamSession(ex.id, uId);
           if (sess) {
             sessionMap[ex.id] = sess;
+            // Sinkronkan jawaban lokal ke backend jika ada sesi lokal yang belum tersinkron
+            if (sess.sessionId && sess.answers && Object.keys(sess.answers).length > 0) {
+              fetch(`/api/elearning/sessions/${sess.sessionId}/finish`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ score: sess.score || 0, answers: sess.answers }),
+              }).catch(() => {});
+            }
           }
         }
         setExamSessions(sessionMap);
+
       }
     } catch (e) {
       console.error('Failed to load exams:', e);

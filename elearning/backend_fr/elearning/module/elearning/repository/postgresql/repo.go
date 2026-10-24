@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rapor/rapor-be/rapor/module/elearning/domain"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type repository struct {
@@ -22,9 +23,11 @@ func NewRepository(db *gorm.DB) domain.Repository {
 		&domain.CBTQuestion{},
 		&domain.CBTStudentSession{},
 		&domain.CBTViolationLog{},
+		&domain.CBTStudentAnswer{},
 	)
 	return &repository{db: db}
 }
+
 
 // ================= MATERIALS =================
 
@@ -344,14 +347,47 @@ func (r *repository) SubmitExamSession(ctx context.Context, sessionID string, sc
 		}).Error
 }
 
-func (r *repository) ListLiveProctoringSessions(ctx context.Context, examID string) ([]domain.CBTStudentSession, []domain.CBTViolationLog, error) {
+func (r *repository) SaveStudentAnswer(ctx context.Context, ans *domain.CBTStudentAnswer) error {
+	if ans.ID == "" {
+		ans.ID = "ans-" + uuid.NewString()[:8]
+	}
+	if ans.AnsweredAt.IsZero() {
+		ans.AnsweredAt = time.Now()
+	}
+
+	return r.db.WithContext(ctx).Table("cbt_student_answers").
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "session_id"}, {Name: "question_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"selected_option", "essay_answer", "is_doubtful", "is_correct", "score_obtained", "answered_at"}),
+		}).Create(ans).Error
+}
+
+func (r *repository) BatchSaveStudentAnswers(ctx context.Context, sessionID string, answers []domain.CBTStudentAnswer) error {
+	for i := range answers {
+		answers[i].SessionID = sessionID
+		if answers[i].ID == "" {
+			answers[i].ID = "ans-" + uuid.NewString()[:8]
+		}
+		if answers[i].AnsweredAt.IsZero() {
+			answers[i].AnsweredAt = time.Now()
+		}
+		_ = r.db.WithContext(ctx).Table("cbt_student_answers").
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "session_id"}, {Name: "question_id"}},
+				DoUpdates: clause.AssignmentColumns([]string{"selected_option", "essay_answer", "is_doubtful", "is_correct", "score_obtained", "answered_at"}),
+			}).Create(&answers[i]).Error
+	}
+	return nil
+}
+
+func (r *repository) ListLiveProctoringSessions(ctx context.Context, examID string) ([]domain.CBTStudentSession, []domain.CBTViolationLog, []domain.CBTStudentAnswer, error) {
 	var sessions []domain.CBTStudentSession
 	err := r.db.WithContext(ctx).Table("cbt_student_sessions").
 		Where("exam_id = ?", examID).
 		Order("started_at desc").
 		Find(&sessions).Error
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	var sessionIDs []string
@@ -360,12 +396,19 @@ func (r *repository) ListLiveProctoringSessions(ctx context.Context, examID stri
 	}
 
 	var logs []domain.CBTViolationLog
+	var answers []domain.CBTStudentAnswer
 	if len(sessionIDs) > 0 {
 		r.db.WithContext(ctx).Table("cbt_violation_logs").
 			Where("session_id IN ?", sessionIDs).
 			Order("created_at desc").
 			Find(&logs)
+
+		r.db.WithContext(ctx).Table("cbt_student_answers").
+			Where("session_id IN ?", sessionIDs).
+			Order("answered_at asc").
+			Find(&answers)
 	}
 
-	return sessions, logs, nil
+	return sessions, logs, answers, nil
 }
+
