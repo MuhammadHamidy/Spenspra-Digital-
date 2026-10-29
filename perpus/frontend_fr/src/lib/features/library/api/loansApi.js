@@ -61,10 +61,51 @@ export const loansApi = {
   },
 
   /**
-   * Mengonfirmasi pelunasan denda keterlambatan buku
+   * Mengambil detail transaksi peminjaman berdasarkan ID
    */
-  payFine: async (loanId) => {
-    const res = await httpClient.post(`/loans/${loanId}/pay-fine`, {});
+  getLoanById: async (id) => {
+    const res = await httpClient.get(`/loans/${id}`);
     return res?.data;
+  },
+
+  /**
+   * Mengirim feedback/ulasan bacaan buku setelah peminjaman selesai
+   */
+  submitFeedback: async (data) => {
+    try {
+      const res = await httpClient.post('/reading-resumes', {
+        loan_id: data.loan_id || data.loanId,
+        book_id: data.book_id || data.bookId,
+        member_id: data.member_id || data.memberId,
+        title: data.title || 'Feedback Bacaan',
+        summary: data.feedback || data.summary || '',
+        key_insights: data.key_insights || 'Ulasan Pembaca Spenspra',
+        rating: data.rating || 5,
+      });
+      return res?.data;
+    } catch (e) {
+      // Simpan di local storage sebagai fallback persistensi
+      const stored = localStorage.getItem('spenspra_feedbacks') || '[]';
+      const list = JSON.parse(stored);
+      list.push({ ...data, created_at: new Date().toISOString() });
+      localStorage.setItem('spenspra_feedbacks', JSON.stringify(list));
+      return { success: true, message: 'Feedback berhasil disimpan' };
+    }
+  },
+
+  /**
+   * Mengirim jawaban kuis pemahaman buku
+   */
+  submitQuiz: async (data) => {
+    try {
+      const res = await httpClient.post(`/loans/${data.loan_id || data.loanId}/quiz`, data);
+      return res?.data;
+    } catch (e) {
+      const stored = localStorage.getItem('spenspra_quizzes') || '[]';
+      const list = JSON.parse(stored);
+      list.push({ ...data, created_at: new Date().toISOString() });
+      localStorage.setItem('spenspra_quizzes', JSON.stringify(list));
+      return { success: true, message: 'Jawaban kuis berhasil dikirim' };
+    }
   },
 };

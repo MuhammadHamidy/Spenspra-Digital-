@@ -1,119 +1,172 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Navbar from '@/components/perpus/home/Navbar';
 import PerpusFooterMain from '@/components/perpus/home/PerpusFooterMain';
-import { useAuth } from '@/lib/features/auth/presentation/useAuth';
+import BookCard from '@/components/perpus/BookCard';
+import { berandaApi } from '@/lib/features/beranda/berandaApi';
+import { booksApi } from '@/lib/features/library/api/booksApi';
+import { tokenStorage } from '@/lib/common/tokenStorage';
 
 export default function BookmarkPage() {
-  const { user } = useAuth();
+  const router = useRouter();
   const [bookmarks, setBookmarks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [user, setUser] = useState(null);
 
+  // Sync user profile for Navbar
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('spenspra_lib_bookmarks');
-      if (stored) {
-        const obj = JSON.parse(stored);
-        setBookmarks(Object.values(obj));
-      }
-    } catch (e) {
-      // ignore
+    const local = tokenStorage.getUser();
+    if (local) {
+      setUser({
+        id: local.id || 'siswa-1',
+        nama: local.nama || local.fullName || local.full_name || local.username || 'Siswa Spenspra',
+        peran: local.peran || local.roleName || 'SISWA',
+        kelas_atau_jabatan: local.kelas_atau_jabatan || local.className || local.kelas || 'Peserta Didik',
+        foto: local.photoUrl || local.foto || null,
+      });
     }
   }, []);
 
-  const removeBookmark = (id) => {
+  // Muat data bookmark dan sinkronkan stok ketersediaan terkini dari backend
+  const loadBookmarks = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const stored = localStorage.getItem('spenspra_lib_bookmarks');
-      const obj = stored ? JSON.parse(stored) : {};
-      delete obj[id];
-      localStorage.setItem('spenspra_lib_bookmarks', JSON.stringify(obj));
-      setBookmarks(Object.values(obj));
-    } catch (e) {
-      // ignore
+      let items = [];
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        items = Object.values(parsed);
+      }
+
+      if (items.length > 0) {
+        // Ambil data buku terbaru dari backend untuk memastikan status "Tersedia" selalu konsisten
+        try {
+          const freshBooks = await berandaApi.getBuku('', 100, 0);
+          if (Array.isArray(freshBooks) && freshBooks.length > 0) {
+            const freshMap = new Map(freshBooks.map((b) => [String(b.id), b]));
+            items = items.map((item) => {
+              const fresh = freshMap.get(String(item.id));
+              if (fresh) {
+                return {
+                  ...item,
+                  tersedia: fresh.tersedia !== undefined ? fresh.tersedia : fresh.stok > 0,
+                  cover_url: fresh.cover_url || item.cover_url,
+                  penulis: fresh.penulis || item.penulis,
+                  judul: fresh.judul || item.judul,
+                };
+              }
+              return item;
+            });
+          }
+        } catch (syncErr) {
+          // Tetap tampilkan item tersimpan jika fetch sync gagal
+        }
+      }
+
+      setBookmarks(items);
+    } catch (err) {
+      console.warn('Gagal memuat bookmark:', err);
+      setError('Gagal membaca data bookmark tersimpan. Silakan coba lagi.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBookmarks();
+  }, [loadBookmarks]);
+
+  // Hapus bookmark langsung saat ikon diklik (Menu Bookmark.png)
+  const handleRemoveBookmark = (e, book) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    try {
+      const stored = localStorage.getItem('spenspra_lib_bookmarks');
+      const list = stored ? JSON.parse(stored) : {};
+      delete list[book.id];
+      localStorage.setItem('spenspra_lib_bookmarks', JSON.stringify(list));
+      setBookmarks(Object.values(list));
+    } catch (err) {}
+  };
+
+  const handleCardClick = (book) => {
+    if (book && book.id) {
+      router.push(`/bibliografi/${book.id}`);
     }
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col justify-between font-sans">
+    <div className="min-h-screen bg-white flex flex-col justify-between font-sans selection:bg-[#1E2538] selection:text-white">
       <div>
         <Navbar user={user} />
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+          {/* Header Bookmark */}
           <div className="mb-8">
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight font-sans">
               Bookmark
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-sm text-slate-600 mt-1.5 font-medium">
               Temukan buku favoritmu yang tersimpan disini
             </p>
           </div>
 
-          {bookmarks.length === 0 ? (
-            <div className="py-20 text-center bg-slate-50/60 rounded-3xl border border-slate-100 p-8">
-              <svg className="w-12 h-12 text-slate-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-              </svg>
-              <h3 className="text-base font-bold text-slate-700">Belum Ada Buku Tersimpan</h3>
-              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                Tandai buku bacaan yang Anda sukai di beranda dengan menekan ikon bookmark.
+          {/* 3 State Data: Error, Loading, Empty, atau Grid */}
+          {error ? (
+            <div className="p-12 text-center text-sm text-slate-600 bg-white rounded-3xl border border-red-100 shadow-xs my-8">
+              <p className="text-red-600 font-semibold mb-3">{error}</p>
+              <button
+                type="button"
+                onClick={loadBookmarks}
+                className="px-5 py-2 rounded-xl bg-[#1E2538] hover:bg-[#141B2B] text-white text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Coba Lagi
+              </button>
+            </div>
+          ) : loading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5 sm:gap-6">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="animate-pulse bg-white p-3.5 rounded-2xl border border-slate-100 shadow-xs">
+                  <div className="w-full aspect-[3/4] bg-slate-200 rounded-xl mb-3" />
+                  <div className="h-4 bg-slate-200 rounded-sm mb-2 w-3/4" />
+                  <div className="h-3 bg-slate-100 rounded-sm w-1/2" />
+                </div>
+              ))}
+            </div>
+          ) : bookmarks.length === 0 ? (
+            /* Empty State Sesuai Panduan */
+            <div className="py-20 text-center bg-slate-50/70 rounded-3xl border border-slate-200/80 p-8 my-6">
+              <div className="w-14 h-14 rounded-full bg-slate-200/80 text-slate-500 flex items-center justify-center mx-auto mb-3.5 shadow-2xs">
+                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+              </div>
+              <h3 className="text-base font-bold text-slate-800">Belum Ada Buku Tersimpan</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
+                Tandai buku yang Anda sukai di beranda atau bibliografi dengan menekan ikon bookmark untuk membacanya nanti.
               </p>
               <Link
-                href="/"
-                className="inline-block mt-6 px-5 py-2.5 bg-[#4B3B78] text-white text-xs font-semibold rounded-full shadow-xs hover:bg-[#3D2E66] transition-all"
+                href="/bibliografi"
+                className="inline-block mt-6 px-6 py-2.5 bg-[#1E2538] hover:bg-[#141B2B] text-white text-xs font-semibold rounded-full shadow-xs transition-colors cursor-pointer"
               >
-                Jelajahi Beranda
+                Jelajahi Bibliografi
               </Link>
             </div>
           ) : (
+            /* Grid 5 Kolom Sesuai Menu Bookmark.png */
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5 sm:gap-6">
               {bookmarks.map((book) => (
-                <div
+                <BookCard
                   key={book.id}
-                  className="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between"
-                >
-                  <div className="relative w-full aspect-[3/4] rounded-xl overflow-hidden bg-slate-100 mb-3 shadow-xs">
-                    {book.cover_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={book.cover_url} alt={book.judul} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-purple-50 text-[#4B3B78] text-xs font-bold p-2 text-center">
-                        {book.judul}
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <div className="flex items-start justify-between gap-1 mb-1">
-                      <h3 className="text-xs sm:text-sm font-bold text-slate-900 line-clamp-2 leading-snug font-sans">
-                        {book.judul}
-                      </h3>
-                      <button
-                        type="button"
-                        onClick={() => removeBookmark(book.id)}
-                        className="text-amber-500 hover:text-red-500 transition-colors p-0.5 cursor-pointer"
-                        title="Hapus bookmark"
-                      >
-                        <svg className="w-4 h-4 fill-amber-500 text-amber-500" viewBox="0 0 24 24">
-                          <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                        </svg>
-                      </button>
-                    </div>
-                    <p className="text-[11px] text-slate-500 truncate mb-3">{book.penulis}</p>
-
-                    <div>
-                      {book.tersedia ? (
-                        <span className="inline-block px-3 py-1 rounded-full text-[10px] font-semibold bg-[#2E7D5B] text-white">
-                          Tersedia
-                        </span>
-                      ) : (
-                        <span className="inline-block px-3 py-1 rounded-full text-[10px] font-semibold bg-[#C53030] text-white">
-                          Tidak Tersedia
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                  book={book}
+                  isBookmarked={true}
+                  onToggleBookmark={(e, b) => handleRemoveBookmark(e, b)}
+                  onClick={handleCardClick}
+                />
               ))}
             </div>
           )}

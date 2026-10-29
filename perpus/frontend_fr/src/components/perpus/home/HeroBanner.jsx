@@ -35,20 +35,20 @@ export default function HeroBanner() {
 
   return (
     <section className="relative w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
-      <div className="relative h-64 sm:h-80 md:h-96 rounded-3xl overflow-hidden shadow-md">
+      <div className="relative h-64 sm:h-80 md:h-96 rounded-2xl overflow-hidden shadow-sm">
         {/* Background Image with Dark Dim Overlay */}
         <div
-          className="absolute inset-0 bg-cover bg-center transition-all duration-700 transform scale-105"
+          className="absolute inset-0 bg-cover bg-center transition-all duration-700"
           style={{ backgroundImage: `url('${slide.bgImage}')` }}
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-transparent" />
+        <div className="absolute inset-0 bg-black/45" />
 
         {/* Slide Content */}
-        <div className="relative h-full flex flex-col justify-center px-8 sm:px-14 max-w-2xl z-10">
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#F2C94C] leading-tight tracking-tight whitespace-pre-line drop-shadow-sm font-sans">
+        <div className="relative h-full flex flex-col justify-center px-8 sm:px-16 max-w-2xl z-10">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#FACC15] leading-tight tracking-tight whitespace-pre-line drop-shadow-sm font-sans">
             {slide.title}
           </h1>
-          <p className="mt-3 text-sm sm:text-base text-slate-100 font-normal drop-shadow-xs">
+          <p className="mt-3 text-sm sm:text-base text-white font-normal drop-shadow-xs">
             {slide.subtitle}
           </p>
         </div>
@@ -57,10 +57,10 @@ export default function HeroBanner() {
         <button
           type="button"
           onClick={prevSlide}
-          className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center shadow-md backdrop-blur-xs transition-transform hover:scale-110 cursor-pointer z-20"
+          className="absolute left-4 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white text-slate-800 flex items-center justify-center shadow-md hover:bg-slate-50 transition-transform active:scale-95 cursor-pointer z-20"
           aria-label="Slide sebelumnya"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
@@ -68,28 +68,13 @@ export default function HeroBanner() {
         <button
           type="button"
           onClick={nextSlide}
-          className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center shadow-md backdrop-blur-xs transition-transform hover:scale-110 cursor-pointer z-20"
+          className="absolute right-4 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white text-slate-800 flex items-center justify-center shadow-md hover:bg-slate-50 transition-transform active:scale-95 cursor-pointer z-20"
           aria-label="Slide berikutnya"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
           </svg>
         </button>
-
-        {/* Indicator Dots */}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
-          {SLIDES.map((_, idx) => (
-            <button
-              key={idx}
-              type="button"
-              onClick={() => setCurrentSlide(idx)}
-              className={`h-2 rounded-full transition-all cursor-pointer ${
-                currentSlide === idx ? 'w-6 bg-[#F2C94C]' : 'w-2 bg-white/60 hover:bg-white'
-              }`}
-              aria-label={`Pindah ke slide ${idx + 1}`}
-            />
-          ))}
-        </div>
       </div>
     </section>
   );

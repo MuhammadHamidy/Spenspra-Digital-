@@ -1,27 +1,33 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { berandaApi } from '@/lib/features/beranda/berandaApi';
+import BookCard from '@/components/perpus/BookCard';
 
-export default function DaftarBukuGrid({ onSelectBook }) {
+export default function DaftarBukuGrid() {
+  const router = useRouter();
   const [bukuList, setBukuList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [bookmarks, setBookmarks] = useState({});
 
-  useEffect(() => {
-    let isMounted = true;
-    async function fetchBooks() {
-      try {
-        setLoading(true);
-        const list = await berandaApi.getBuku('', 10, 0);
-        if (isMounted) setBukuList(list);
-      } catch (err) {
-        console.warn('Gagal mengambil daftar buku:', err.message);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
+  const fetchBooks = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const list = await berandaApi.getBuku('', 10, 0);
+      setBukuList(Array.isArray(list) ? list : []);
+    } catch (err) {
+      console.warn('Gagal mengambil daftar buku:', err.message);
+      setError('Gagal memuat katalog buku bacaan. Silakan coba lagi.');
+    } finally {
+      setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
     fetchBooks();
 
     // Baca bookmark dari localStorage
@@ -31,24 +37,20 @@ export default function DaftarBukuGrid({ onSelectBook }) {
     } catch (e) {
       // ignore
     }
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  }, [fetchBooks]);
 
   const toggleBookmark = (e, book) => {
-    e.stopPropagation();
+    if (e && e.stopPropagation) e.stopPropagation();
     const next = { ...bookmarks };
     if (next[book.id]) {
       delete next[book.id];
     } else {
       next[book.id] = {
         id: book.id,
-        judul: book.judul,
-        penulis: book.penulis,
-        cover_url: book.cover_url,
-        tersedia: book.tersedia,
+        judul: book.judul || book.title,
+        penulis: book.penulis || book.author,
+        cover_url: book.cover_url || book.cover_image,
+        tersedia: book.tersedia !== undefined ? book.tersedia : true,
       };
     }
     setBookmarks(next);
@@ -59,18 +61,36 @@ export default function DaftarBukuGrid({ onSelectBook }) {
     }
   };
 
+  const handleCardClick = (book) => {
+    if (book && book.id) {
+      router.push(`/bibliografi/${book.id}`);
+    }
+  };
+
   return (
-    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 mb-16">
+    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 mb-16 font-sans">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight font-sans">
+        <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight font-sans">
           Daftar Buku Bacaan
         </h2>
       </div>
 
-      {loading ? (
+      {/* 3 State Wajib: Error, Loading, Empty, atau Data */}
+      {error ? (
+        <div className="p-12 text-center text-sm text-slate-600 bg-white rounded-3xl border border-red-100 shadow-xs">
+          <p className="text-red-600 font-semibold mb-3">{error}</p>
+          <button
+            type="button"
+            onClick={fetchBooks}
+            className="px-5 py-2 rounded-xl bg-[#1E2538] hover:bg-[#141B2B] text-white text-xs font-semibold transition-colors cursor-pointer"
+          >
+            Coba Lagi
+          </button>
+        </div>
+      ) : loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-6">
           {[...Array(10)].map((_, i) => (
-            <div key={i} className="animate-pulse bg-white p-3 rounded-2xl border border-slate-100 shadow-xs">
+            <div key={i} className="animate-pulse bg-white p-3.5 rounded-2xl border border-slate-100 shadow-xs">
               <div className="w-full aspect-[3/4] bg-slate-200 rounded-xl mb-3" />
               <div className="h-4 bg-slate-200 rounded-sm mb-2 w-3/4" />
               <div className="h-3 bg-slate-100 rounded-sm w-1/2" />
@@ -83,77 +103,15 @@ export default function DaftarBukuGrid({ onSelectBook }) {
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5 sm:gap-6">
-          {bukuList.map((buku) => {
-            const isBookmarked = !!bookmarks[buku.id];
-            return (
-              <div
-                key={buku.id}
-                onClick={() => onSelectBook?.(buku)}
-                className="bg-white p-3.5 rounded-2xl border border-slate-100/90 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between group cursor-pointer"
-              >
-                {/* Book Cover */}
-                <div className="relative w-full aspect-[3/4] rounded-xl overflow-hidden bg-slate-100 mb-3 shadow-xs">
-                  {buku.cover_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={buku.cover_url}
-                      alt={buku.judul}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-purple-50 text-[#4B3B78] text-xs font-semibold p-2 text-center">
-                      {buku.judul}
-                    </div>
-                  )}
-                </div>
-
-                {/* Details */}
-                <div className="flex-1 flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-start justify-between gap-1 mb-1">
-                      <h3 className="text-xs sm:text-sm font-bold text-slate-900 line-clamp-2 leading-snug group-hover:text-[#4B3B78] transition-colors font-sans">
-                        {buku.judul}
-                      </h3>
-                      <button
-                        type="button"
-                        onClick={(e) => toggleBookmark(e, buku)}
-                        className="text-slate-400 hover:text-amber-500 p-0.5 transition-colors cursor-pointer flex-shrink-0"
-                        title={isBookmarked ? 'Hapus dari bookmark' : 'Simpan bookmark'}
-                      >
-                        <svg
-                          className={`w-4 h-4 ${isBookmarked ? 'text-amber-500 fill-amber-500' : 'text-slate-400'}`}
-                          fill={isBookmarked ? 'currentColor' : 'none'}
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                    <p className="text-[11px] text-slate-500 truncate mb-2">{buku.penulis}</p>
-                  </div>
-
-                  {/* Availability Badge */}
-                  <div>
-                    {buku.tersedia ? (
-                      <span className="inline-block px-3 py-1 rounded-full text-[10px] font-semibold tracking-wide bg-[#2E7D5B] text-white">
-                        Tersedia
-                      </span>
-                    ) : (
-                      <span className="inline-block px-3 py-1 rounded-full text-[10px] font-semibold tracking-wide bg-[#C53030] text-white">
-                        Tidak Tersedia
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {bukuList.map((buku) => (
+            <BookCard
+              key={buku.id}
+              book={buku}
+              isBookmarked={Boolean(bookmarks[buku.id])}
+              onToggleBookmark={(e, b) => toggleBookmark(e, b)}
+              onClick={handleCardClick}
+            />
+          ))}
         </div>
       )}
 
@@ -161,7 +119,7 @@ export default function DaftarBukuGrid({ onSelectBook }) {
       <div className="text-center mt-10">
         <Link
           href="/bibliografi"
-          className="text-sm font-semibold text-[#4F8FBB] hover:text-[#397394] hover:underline inline-flex items-center gap-1.5 transition-colors"
+          className="text-sm font-semibold text-[#0084FF] hover:text-[#0070DE] hover:underline inline-flex items-center gap-1.5 transition-colors"
         >
           <span>Lihat Selengkapnya</span>
         </Link>

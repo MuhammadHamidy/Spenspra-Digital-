@@ -56,6 +56,16 @@ export default function ProfileMenu({ user, isOpen, onClose }) {
       </div>
 
       <div className="p-2 space-y-1">
+        <a
+          href="/akun"
+          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-800 hover:bg-slate-50 rounded-xl transition-colors font-medium text-left"
+        >
+          <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          <span>Profil / Akun Siswa</span>
+        </a>
+
         {((user.peran || user.roleName || '').toUpperCase() === 'PUSTAKAWAN' ||
           (user.peran || user.roleName || '').toUpperCase() === 'ADMIN_PERPUS' ||
           (user.peran || user.roleName || '').toUpperCase() === 'SUPER_ADMIN' ||

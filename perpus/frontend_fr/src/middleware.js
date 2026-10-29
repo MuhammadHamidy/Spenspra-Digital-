@@ -13,6 +13,10 @@ function getSsoLoginUrl(request, reason = '') {
 
   const ssoLoginUrl = process.env.NEXT_PUBLIC_SSO_LOGIN_URL || defaultSsoUrl;
   const redirectUrl = new URL(ssoLoginUrl, request.url);
+
+  // Simpan halaman tujuan agar setelah login di SSO langsung kembali ke halaman ini
+  redirectUrl.searchParams.set('redirect', request.url);
+
   if (reason) {
     redirectUrl.searchParams.set('reason', reason);
   }
@@ -38,18 +42,10 @@ export function middleware(request) {
     } catch {}
   }
 
-  // Public paths accessible without librarian login
+  // Sesuai desain.md: Hanya Beranda ('/') yang terbuka publik untuk mode tamu
   const isPublicPath =
     pathname === '/' ||
-    pathname.startsWith('/sso/callback') ||
-    pathname.startsWith('/perpus') ||
-    pathname.startsWith('/kiosk') ||
-    pathname.startsWith('/bibliografi') ||
-    pathname.startsWith('/bookmark') ||
-    pathname.startsWith('/pinjam') ||
-    pathname.startsWith('/baca') ||
-    pathname.startsWith('/riwayat-kunjungan') ||
-    pathname.startsWith('/pembelajaran');
+    pathname.startsWith('/sso/callback');
 
   // Rute /login kini dialihkan langsung ke SSO terpusat
   if (pathname === '/login') {
