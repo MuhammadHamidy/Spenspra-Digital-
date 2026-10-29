@@ -177,30 +177,40 @@ export default function AppAccessMatrixPage() {
         else if (role.includes('GURU') || role.includes('WALI_KELAS')) ssoRole = 'GURU';
         else ssoRole = role || 'GURU';
 
+        // Tentukan apakah pengguna berstatus pendidik/guru
+        const isEducator =
+          role.includes('GURU') ||
+          role.includes('WALI_KELAS') ||
+          role === 'ADMIN_PERPUS' ||
+          role === 'ADMIN_RAPOR' ||
+          role === 'ADMIN_ABSENSI' ||
+          u.category === 'GURU_TENDIK' ||
+          (u.nimNip && u.nimNip.length > 10 && !role.includes('SISWA'));
+
         // Tentukan peran Belajar (LMS & CBT)
         let elearningVal = 'NONE';
         if (role === 'SUPER_ADMIN') elearningVal = 'ADMIN';
-        else if (role.includes('GURU') || role.includes('WALI_KELAS')) elearningVal = 'GURU';
         else if (role.includes('SISWA')) elearningVal = 'SISWA';
+        else if (isEducator) elearningVal = 'GURU';
 
         // Tentukan peran e-Rapor
         let eraporVal = 'NONE';
         if (role === 'ADMIN_RAPOR' || role === 'SUPER_ADMIN') eraporVal = 'ADMIN';
         else if (role.includes('KEPALA')) eraporVal = 'KEPALA_SEKOLAH';
-        else if (role.includes('GURU') || role.includes('WALI_KELAS')) eraporVal = 'GURU';
         else if (role.includes('SISWA')) eraporVal = 'SISWA';
+        else if (isEducator) eraporVal = 'GURU';
 
         // Tentukan peran e-Perpus
         let eperpusVal = 'NONE';
         if (role === 'ADMIN_PERPUS' || role === 'SUPER_ADMIN') eperpusVal = 'ADMIN';
-        else if (role.includes('GURU') || role.includes('WALI_KELAS')) eperpusVal = 'GURU';
         else if (role.includes('SISWA')) eperpusVal = 'SISWA';
+        else if (isEducator) eperpusVal = 'GURU';
 
         // Tentukan peran Presensi
         let presensiVal = 'NONE';
         if (role === 'ADMIN_ABSENSI' || role === 'SUPER_ADMIN') presensiVal = 'ADMIN';
-        else if (role.includes('GURU') || role.includes('WALI_KELAS')) presensiVal = 'GURU';
         else if (role.includes('SISWA')) presensiVal = 'SISWA';
+        else if (isEducator) presensiVal = 'GURU';
 
         initialMap[u.id] = {
           ssoRole,
@@ -237,10 +247,19 @@ export default function AppAccessMatrixPage() {
           updated.presensi = 'ADMIN';
         } else if (newRole === 'ADMIN_RAPOR') {
           updated.erapor = 'ADMIN';
+          if (!updated.elearning || updated.elearning === 'NONE') updated.elearning = 'GURU';
+          if (!updated.eperpus || updated.eperpus === 'NONE') updated.eperpus = 'GURU';
+          if (!updated.presensi || updated.presensi === 'NONE') updated.presensi = 'GURU';
         } else if (newRole === 'ADMIN_PERPUS') {
           updated.eperpus = 'ADMIN';
+          if (!updated.elearning || updated.elearning === 'NONE') updated.elearning = 'GURU';
+          if (!updated.erapor || updated.erapor === 'NONE') updated.erapor = 'GURU';
+          if (!updated.presensi || updated.presensi === 'NONE') updated.presensi = 'GURU';
         } else if (newRole === 'ADMIN_ABSENSI') {
           updated.presensi = 'ADMIN';
+          if (!updated.elearning || updated.elearning === 'NONE') updated.elearning = 'GURU';
+          if (!updated.erapor || updated.erapor === 'NONE') updated.erapor = 'GURU';
+          if (!updated.eperpus || updated.eperpus === 'NONE') updated.eperpus = 'GURU';
         } else if (newRole === 'KEPALA_SEKOLAH') {
           updated.erapor = 'KEPALA_SEKOLAH';
         } else if (newRole === 'GURU') {
@@ -257,16 +276,25 @@ export default function AppAccessMatrixPage() {
       } else if (key === 'erapor') {
         if (newRole === 'ADMIN' && updated.ssoRole !== 'SUPER_ADMIN') {
           updated.ssoRole = 'ADMIN_RAPOR';
+          if (!updated.elearning || updated.elearning === 'NONE') updated.elearning = 'GURU';
+          if (!updated.eperpus || updated.eperpus === 'NONE') updated.eperpus = 'GURU';
+          if (!updated.presensi || updated.presensi === 'NONE') updated.presensi = 'GURU';
         } else if (newRole === 'KEPALA_SEKOLAH') {
           updated.ssoRole = 'KEPALA_SEKOLAH';
         }
       } else if (key === 'eperpus') {
         if (newRole === 'ADMIN' && updated.ssoRole !== 'SUPER_ADMIN') {
           updated.ssoRole = 'ADMIN_PERPUS';
+          if (!updated.elearning || updated.elearning === 'NONE') updated.elearning = 'GURU';
+          if (!updated.erapor || updated.erapor === 'NONE') updated.erapor = 'GURU';
+          if (!updated.presensi || updated.presensi === 'NONE') updated.presensi = 'GURU';
         }
       } else if (key === 'presensi') {
         if (newRole === 'ADMIN' && updated.ssoRole !== 'SUPER_ADMIN') {
           updated.ssoRole = 'ADMIN_ABSENSI';
+          if (!updated.elearning || updated.elearning === 'NONE') updated.elearning = 'GURU';
+          if (!updated.erapor || updated.erapor === 'NONE') updated.erapor = 'GURU';
+          if (!updated.eperpus || updated.eperpus === 'NONE') updated.eperpus = 'GURU';
         }
       }
 
