@@ -1,7 +1,13 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { playScannerBeep } from './soundUtils';
+import { playScannerBeep } from '../perpus/soundUtils';
+
+const ZXING_CDN_URLS = [
+  'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/zxing-library/0.21.3/index.min.js',
+  'https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js',
+];
 
 export function useBarcodeScanner({ onScan, isScanning = true, disabled = false }) {
   const videoRef = useRef(null);
@@ -9,10 +15,11 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
   const [stream, setStream] = useState(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [error, setError] = useState(null);
-  const [facingMode, setFacingMode] = useState('user');
+  const [facingMode, setFacingMode] = useState('environment');
   const [isSwitchingCamera, setIsSwitchingCamera] = useState(false);
   const [lastScannedCode, setLastScannedCode] = useState('');
   const [justScanned, setJustScanned] = useState(false);
+  const [zxingLoaded, setZxingLoaded] = useState(false);
 
   const lastScannedTimeRef = useRef(0);
   const zxingReaderRef = useRef(null);
@@ -28,9 +35,7 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
     if (zxingReaderRef.current) {
       try {
         zxingReaderRef.current.reset();
-      } catch {
-        // silent
-      }
+      } catch {}
     }
     setCameraActive(false);
   }, [stream]);
@@ -48,16 +53,23 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
           mediaStream = await navigator.mediaDevices.getUserMedia({
             video: {
               facingMode: { ideal: targetMode },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
+              width: { ideal: 1280, min: 640 },
+              height: { ideal: 720, min: 480 },
             },
             audio: false,
           });
         } catch {
-          mediaStream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: false,
-          });
+          try {
+            mediaStream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: targetMode },
+              audio: false,
+            });
+          } catch {
+            mediaStream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: false,
+            });
+          }
         }
 
         setStream(mediaStream);
@@ -70,7 +82,7 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
         }
       } catch (err) {
         console.warn('Barcode camera access error:', err);
-        setError('Kamera tidak dapat diakses: ' + (err.message || 'Periksa izin kamera browser.'));
+        setError('Kamera tidak dapat diakses: ' + (err.message || 'Periksa izin kamera.'));
         setCameraActive(false);
       } finally {
         setIsSwitchingCamera(false);
@@ -101,19 +113,38 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
     }
   }, [cameraActive, stream]);
 
-  // Load ZXing dynamically fallback
+  // Multi-CDN loader
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!('BarcodeDetector' in window) && !window.ZXing && !document.getElementById('zxing-script')) {
-      const script = document.createElement('script');
-      script.id = 'zxing-script';
-      script.src = 'https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js';
-      script.async = true;
-      document.head.appendChild(script);
+    if (window.ZXing) {
+      setZxingLoaded(true);
+      return;
     }
+
+    let cdnIndex = 0;
+    const loadNextCdn = () => {
+      if (cdnIndex >= ZXING_CDN_URLS.length) return;
+      const url = ZXING_CDN_URLS[cdnIndex];
+      cdnIndex++;
+
+      const existing = document.getElementById('zxing-script-kiosk');
+      if (existing) existing.remove();
+
+      const script = document.createElement('script');
+      script.id = 'zxing-script-kiosk';
+      script.src = url;
+      script.async = true;
+      script.onload = () => {
+        if (window.ZXing) setZxingLoaded(true);
+        else loadNextCdn();
+      };
+      script.onerror = () => loadNextCdn();
+      document.head.appendChild(script);
+    };
+
+    loadNextCdn();
   }, []);
 
-  // Handle successful detection
   const handleDetectedBarcode = useCallback(
     (barcodeRaw) => {
       if (!barcodeRaw) return;
@@ -121,7 +152,7 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
       if (!cleanCode) return;
 
       const now = Date.now();
-      if (cleanCode === lastScannedCode && now - lastScannedTimeRef.current < 2200) {
+      if (cleanCode === lastScannedCode && now - lastScannedTimeRef.current < 2000) {
         return;
       }
 
@@ -130,7 +161,7 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
       setJustScanned(true);
       playScannerBeep();
 
-      setTimeout(() => setJustScanned(false), 800);
+      setTimeout(() => setJustScanned(false), 900);
 
       if (onScan) {
         onScan(cleanCode);
@@ -139,7 +170,7 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
     [lastScannedCode, onScan]
   );
 
-  // Scanning interval loop
+  // Scanning loop with dual-engine
   useEffect(() => {
     if (!cameraActive || disabled || !isScanning) return;
 
@@ -147,7 +178,7 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
     if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
       try {
         detector = new window.BarcodeDetector({
-          formats: ['code_128', 'ean_13', 'ean_8', 'qr_code', 'code_39', 'upc_a', 'upc_e'],
+          formats: ['qr_code', 'code_128', 'ean_13', 'ean_8', 'code_39', 'upc_a', 'upc_e'],
         });
       } catch {
         detector = null;
@@ -160,44 +191,69 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
       const video = videoRef.current;
       if (video.readyState < 2) return;
 
+      isProcessing = true;
+      let detectedText = null;
+
+      // 1. Native BarcodeDetector
       if (detector) {
-        isProcessing = true;
         try {
           const barcodes = await detector.detect(video);
-          if (Array.isArray(barcodes) && barcodes.length > 0) {
-            handleDetectedBarcode(barcodes[0].rawValue);
+          if (Array.isArray(barcodes) && barcodes.length > 0 && barcodes[0].rawValue) {
+            detectedText = barcodes[0].rawValue;
           }
-        } catch {
-          // silent fallback
-        } finally {
-          isProcessing = false;
-        }
-      } else if (window.ZXing && canvasRef.current) {
-        isProcessing = true;
+        } catch {}
+      }
+
+      // 2. ZXing canvas fallback
+      if (!detectedText && window.ZXing && canvasRef.current) {
         try {
           const canvas = canvasRef.current;
-          canvas.width = video.videoWidth || 640;
-          canvas.height = video.videoHeight || 480;
+          const w = video.videoWidth || 640;
+          const h = video.videoHeight || 480;
+          canvas.width = w;
+          canvas.height = h;
           const ctx = canvas.getContext('2d');
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-          if (!zxingReaderRef.current) {
-            zxingReaderRef.current = new window.ZXing.BrowserMultiFormatReader();
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, w, h);
+            if (!zxingReaderRef.current) {
+              zxingReaderRef.current = new window.ZXing.BrowserMultiFormatReader();
+            }
+
+            try {
+              const result = await zxingReaderRef.current.decodeFromCanvas(canvas);
+              if (result && result.getText()) {
+                detectedText = result.getText();
+              }
+            } catch {}
+
+            if (!detectedText && facingMode === 'user') {
+              ctx.save();
+              ctx.translate(w, 0);
+              ctx.scale(-1, 1);
+              ctx.drawImage(video, 0, 0, w, h);
+              ctx.restore();
+
+              try {
+                const result = await zxingReaderRef.current.decodeFromCanvas(canvas);
+                if (result && result.getText()) {
+                  detectedText = result.getText();
+                }
+              } catch {}
+            }
           }
-          const result = await zxingReaderRef.current.decodeFromCanvas(canvas);
-          if (result && result.getText()) {
-            handleDetectedBarcode(result.getText());
-          }
-        } catch {
-          // Expected when frame has no barcode
-        } finally {
-          isProcessing = false;
-        }
+        } catch {}
       }
-    }, 220);
+
+      if (detectedText) {
+        handleDetectedBarcode(detectedText);
+      }
+
+      isProcessing = false;
+    }, 180);
 
     return () => clearInterval(interval);
-  }, [cameraActive, disabled, isScanning, handleDetectedBarcode]);
+  }, [cameraActive, disabled, isScanning, facingMode, handleDetectedBarcode, zxingLoaded]);
 
   return {
     videoRef,

@@ -22,8 +22,24 @@ export default function BerandaPage() {
   const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
-  // Ambil profil sesi pengguna dari endpoint backend /api/session atau tokenStorage lokal
+  // Ambil profil sesi pengguna dari tokenStorage lokal secara instan, lalu sinkronkan dengan backend
   const fetchSession = useCallback(async () => {
+    let resolvedUser = null;
+
+    // 1. Baca sesi lokal / cookie SSO secara instan tanpa menunggu network
+    const localUser = tokenStorage.getUser();
+    if (localUser) {
+      resolvedUser = {
+        id: localUser.id || 'siswa-1',
+        nama: localUser.nama || localUser.fullName || localUser.full_name || localUser.username || 'Siswa Spenspra',
+        peran: localUser.peran || localUser.roleName || 'SISWA',
+        kelas_atau_jabatan: localUser.kelas_atau_jabatan || localUser.className || localUser.kelas || 'Peserta Didik',
+        foto: localUser.photoUrl || localUser.foto || null,
+      };
+      setUser(resolvedUser);
+    }
+
+    // 2. Sinkronkan dengan backend /api/session jika tersedia
     try {
       const session = await berandaApi.getSession();
       if (session) {
@@ -31,30 +47,28 @@ export default function BerandaPage() {
         return session;
       }
     } catch (e) {
-      // Backend offline atau fallback sesi lokal
+      // Backend offline atau fallback sesi lokal tetap digunakan
     }
 
-    const localUser = tokenStorage.getUser();
-    if (localUser) {
-      const mapped = {
-        id: localUser.id || 'siswa-1',
-        nama: localUser.nama || localUser.fullName || localUser.full_name || localUser.username || 'Siswa Spenspra',
-        peran: localUser.peran || localUser.roleName || 'SISWA',
-        kelas_atau_jabatan: localUser.kelas_atau_jabatan || localUser.className || localUser.kelas || 'Peserta Didik',
-        foto: localUser.photoUrl || localUser.foto || null,
-      };
-      setUser(mapped);
-      return mapped;
-    }
-
-    setUser(null);
-    return null;
+    return resolvedUser;
   }, []);
 
   useEffect(() => {
     let isMounted = true;
 
     async function init() {
+      // Set user lokal seawal mungkin saat render pertama
+      const local = tokenStorage.getUser();
+      if (local && isMounted) {
+        setUser({
+          id: local.id || 'siswa-1',
+          nama: local.nama || local.fullName || local.full_name || local.username || 'Siswa Spenspra',
+          peran: local.peran || local.roleName || 'SISWA',
+          kelas_atau_jabatan: local.kelas_atau_jabatan || local.className || local.kelas || 'Peserta Didik',
+          foto: local.photoUrl || local.foto || null,
+        });
+      }
+
       const activeUser = await fetchSession();
       if (!isMounted) return;
 

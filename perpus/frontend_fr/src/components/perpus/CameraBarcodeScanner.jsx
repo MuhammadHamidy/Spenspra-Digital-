@@ -22,6 +22,7 @@ export default function CameraBarcodeScanner({
     justScanned,
     startCamera,
     switchCamera,
+    scanImageFile,
   } = useBarcodeScanner({ onScan, isScanning, disabled });
 
   return (
@@ -110,15 +111,34 @@ export default function CameraBarcodeScanner({
           <span>Scanner Kamera Aktif</span>
         </div>
 
-        <button
-          type="button"
-          onClick={switchCamera}
-          disabled={isSwitchingCamera}
-          className="px-3 py-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white text-xs font-bold backdrop-blur-md border border-white/20 shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-        >
-          <span className={isSwitchingCamera ? 'animate-spin' : ''}>🔄</span>
-          <span>{facingMode === 'environment' ? 'Kamera Belakang' : 'Kamera Depan'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* File Upload Barcode Snapshot */}
+          <label className="px-3 py-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white text-xs font-bold backdrop-blur-md border border-white/20 shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95">
+            <span>📁</span>
+            <span>Unggah Foto</span>
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file && typeof scanImageFile === 'function') {
+                  scanImageFile(file);
+                }
+              }}
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={switchCamera}
+            disabled={isSwitchingCamera}
+            className="px-3 py-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white text-xs font-bold backdrop-blur-md border border-white/20 shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+          >
+            <span className={isSwitchingCamera ? 'animate-spin' : ''}>🔄</span>
+            <span>{facingMode === 'environment' ? 'Kamera Belakang' : 'Kamera Depan'}</span>
+          </button>
+        </div>
       </div>
 
       <style jsx>{`

@@ -218,16 +218,16 @@ function SidebarContent({ mobileOpen = false, onCloseMobile = () => {} }) {
                 </p>
                 <div className="space-y-0.5">
                   <Link
-                    href="/students"
+                    href="/dashboard"
                     onClick={onCloseMobile}
                     className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all ${
-                      pathname.startsWith('/students')
+                      pathname === '/dashboard'
                         ? 'bg-[#4B3B78] font-semibold text-white shadow-xs'
                         : 'text-slate-600 hover:bg-[#FAF9FD] hover:text-[#3D2E66]'
                     }`}
                   >
-                    <span className="w-4 text-center text-sm">🪪</span>
-                    <span className="truncate">Kartu Barcode Saya</span>
+                    <span className="w-4 text-center text-sm">🏠</span>
+                    <span className="truncate">Dashboard Utama</span>
                   </Link>
                 </div>
               </div>

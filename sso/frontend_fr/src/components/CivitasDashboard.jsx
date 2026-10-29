@@ -366,12 +366,12 @@ export default function CivitasDashboard() {
             {isSiswa ? 'Pilih Layanan Siswa' : 'Layanan Aplikasi Civitas'}
           </h2>
           <span className="text-[11px] text-slate-400 font-medium">
-            4 Layanan Terintegrasi SSO
+            3 Layanan Terintegrasi SSO
           </span>
         </div>
 
         {isSiswa ? (
-          <div className="grid gap-5 grid-cols-1 sm:grid-cols-2">
+          <div className="grid gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {/* 1. Spenspra Belajar (LMS & Ujian) */}
             <div className="rounded-[12px] border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-[#2E7D5B]/50 transition-all duration-200 flex flex-col justify-between group">
               <div>
@@ -470,39 +470,9 @@ export default function CivitasDashboard() {
                 </a>
               </div>
             </div>
-
-            {/* 4. Kartu Barcode Siswa */}
-            <div className="rounded-[12px] border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-[#F2C94C]/80 transition-all duration-200 flex flex-col justify-between group">
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-[12px] bg-[#FEF9E7] text-[#9A7B00] flex items-center justify-center border border-[#F2C94C]/40 group-hover:scale-105 transition-transform">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                    </svg>
-                  </div>
-                  <span className="text-[10px] font-semibold text-[#8B6E00] bg-[#FFFBEA] border border-[#F2C94C] px-2.5 py-1 rounded-[999px]">
-                    Terintegrasi
-                  </span>
-                </div>
-                <h3 className="font-bold text-[#172033] text-lg group-hover:text-[#9A7B00] transition-colors">
-                  Presensi Barcode
-                </h3>
-                <p className="text-xs sm:text-sm text-[#667085] mt-1.5 leading-relaxed">
-                  Pencatatan presensi kehadiran siswa dan kelas berbasis kartu barcode resmi Spenspra.
-                </p>
-              </div>
-              <div className="mt-6 pt-4 border-t border-[#F2F4F7]">
-                <Link
-                  href="/students"
-                  className="w-full min-h-[42px] inline-flex items-center justify-center gap-2 rounded-[8px] border border-[#E5E7EB] bg-white hover:bg-slate-50 active:bg-slate-100 text-[#172033] px-5 py-2.5 text-sm font-semibold transition shadow-xs cursor-pointer"
-                >
-                  <span>Lihat Barcode Presensi</span>
-                </Link>
-              </div>
-            </div>
           </div>
         ) : (
-          <div className="grid gap-5 grid-cols-1 sm:grid-cols-2">
+          <div className="grid gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {/* Menu 1: Spenspra Belajar (LMS & CBT) */}
             <div className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-emerald-500/50 transition-all duration-200 flex flex-col justify-between group">
               <div>
@@ -601,36 +571,6 @@ export default function CivitasDashboard() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
                 </a>
-              </div>
-            </div>
-
-            {/* Menu 4: Presensi Barcode */}
-            <div className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-amber-300 transition-all duration-200 flex flex-col justify-between group">
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-[#FFF6D6] text-[#A97E0D] flex items-center justify-center border border-amber-200 group-hover:scale-105 transition-transform">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                    </svg>
-                  </div>
-                  <span className="text-[10px] font-semibold text-[#1C5038] bg-[#F7FCF9] border border-[#A9D8BC] px-2.5 py-1 rounded-full">
-                    Terintegrasi
-                  </span>
-                </div>
-                <h3 className="font-bold text-[#172033] text-lg group-hover:text-amber-800 transition-colors">
-                  Presensi Barcode
-                </h3>
-                <p className="text-xs sm:text-sm text-[#667085] mt-1.5 leading-relaxed">
-                  Pencatatan presensi kehadiran siswa dan kelas berbasis kartu barcode resmi sekolah SMP Negeri 1 Prambon.
-                </p>
-              </div>
-              <div className="mt-6 pt-4 border-t border-slate-100">
-                <Link
-                  href="/students"
-                  className="w-full min-h-[44px] inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-[#172033] py-2.5 px-4 text-sm font-semibold transition shadow-xs cursor-pointer"
-                >
-                  <span>Lihat Barcode Presensi</span>
-                </Link>
               </div>
             </div>
           </div>

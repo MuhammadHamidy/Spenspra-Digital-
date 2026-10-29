@@ -48,6 +48,7 @@ export function middleware(request) {
     pathname.startsWith('/bookmark') ||
     pathname.startsWith('/pinjam') ||
     pathname.startsWith('/baca') ||
+    pathname.startsWith('/riwayat-kunjungan') ||
     pathname.startsWith('/pembelajaran');
 
   // Rute /login kini dialihkan langsung ke SSO terpusat

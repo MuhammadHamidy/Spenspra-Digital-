@@ -15,7 +15,7 @@ export default function Navbar({ user }) {
     { name: 'Beranda', href: '/' },
     { name: 'Bibliografi', href: '/bibliografi' },
     { name: 'Bookmark', href: '/bookmark' },
-    { name: 'Absensi', href: '/kiosk' },
+    { name: 'Riwayat Kunjungan', href: '/riwayat-kunjungan' },
     { name: 'Peminjaman Buku', href: '/pinjam' },
   ];
 

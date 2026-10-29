@@ -180,18 +180,26 @@ export default function LibrarianDashboard() {
               Pantau aktivitas sirkulasi buku, status keterlambatan & denda siswa, serta kelola katalog perpustakaan secara real-time.
             </p>
           </div>
-          <div className="flex items-center gap-3 shrink-0 flex-wrap">
+          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
             <Link
-              href="/visitors"
-              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/30 flex items-center gap-2 transition-all cursor-pointer"
+              href="/pustakawan/absensi"
+              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/30 flex items-center gap-1.5 transition-all cursor-pointer"
             >
-              <span>👥 Tracking Pengunjung ({visitorStats.today_visitors})</span>
+              <span>📋</span>
+              <span>Absensi Pengunjung</span>
             </Link>
             <Link
-              href="/"
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/30 flex items-center gap-2 transition-all cursor-pointer"
+              href="/pustakawan/peminjaman"
+              className="px-4 py-2.5 bg-[#4B3B78] hover:bg-[#3D2E66] text-white rounded-xl text-xs font-bold shadow-md shadow-purple-900/30 flex items-center gap-1.5 transition-all cursor-pointer"
             >
-              <span>🖥️ Layanan Mandiri</span>
+              <span>📦</span>
+              <span>Peminjaman Buku</span>
+            </Link>
+            <Link
+              href="/visitors"
+              className="px-3.5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <span>👥 Tracking ({visitorStats.today_visitors})</span>
             </Link>
           </div>
         </div>

@@ -34,11 +34,21 @@ export const loansApi = {
 
   /**
    * Mencatat transaksi peminjaman buku baru
-   * Payload: { member_code, item_barcode, duration_days }
+   * Mendukung alias createLoan dan fleksibilitas format payload (member_barcode / member_code)
    */
   borrowBook: async (data) => {
-    const res = await httpClient.post('/loans/borrow', data);
+    const payload = {
+      member_barcode: data.member_barcode || data.member_code || data.memberBarcode || '',
+      book_barcode: data.book_barcode || data.item_barcode || data.barcode || data.bookBarcode || '',
+      duration_days: Number(data.duration_days || data.durationDays || 7),
+      notes: data.notes || '',
+    };
+    const res = await httpClient.post('/loans/borrow', payload);
     return res?.data;
+  },
+
+  createLoan: async (data) => {
+    return loansApi.borrowBook(data);
   },
 
   /**

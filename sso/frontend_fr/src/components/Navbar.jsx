@@ -150,17 +150,19 @@ export default function Navbar({ onToggleMobileSidebar = () => {} }) {
                 </div>
               </Link>
 
-              <Link
-                href="/students"
-                onClick={() => setIsProfileDropdownOpen(false)}
-                className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-slate-700 hover:bg-[#FAF9FD] hover:text-[#4B3B78] transition"
-              >
-                <span className="text-sm">🪪</span>
-                <div>
-                  <div className="font-semibold">Kartu Barcode Digital</div>
-                  <div className="text-[10px] text-slate-400">Prambon barcode token</div>
-                </div>
-              </Link>
+              {Boolean(user?.roleName === 'SUPER_ADMIN' || user?.roleName === 'ADMIN' || user?.roleName === 'ADMIN_PERPUS') && (
+                <Link
+                  href="/students"
+                  onClick={() => setIsProfileDropdownOpen(false)}
+                  className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-slate-700 hover:bg-[#FAF9FD] hover:text-[#4B3B78] transition"
+                >
+                  <span className="text-sm">🪪</span>
+                  <div>
+                    <div className="font-semibold">Kelola Barcode Digital</div>
+                    <div className="text-[10px] text-slate-400">Prambon barcode token</div>
+                  </div>
+                </Link>
+              )}
             </div>
 
             {/* Tombol Logout Sesi */}

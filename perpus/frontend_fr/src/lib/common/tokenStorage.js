@@ -96,17 +96,34 @@ function parseJwtUser(token) {
     const parsed = JSON.parse(jsonPayload);
     if (!parsed || (!parsed.sub && !parsed.id && !parsed.username)) return null;
 
-    const roleName = String(parsed.role_name || parsed.role || parsed.roleId || 'GURU').toUpperCase();
-    const fullName = parsed.full_name || parsed.fullName || parsed.username || '';
+    const rawRole = parsed.role_name || parsed.role || parsed.roleId || '';
+    let roleName = String(rawRole).toUpperCase();
+    if (!roleName) {
+      if ((parsed.username || '').toLowerCase().startsWith('siswa_')) {
+        roleName = 'SISWA';
+      } else {
+        roleName = 'SISWA';
+      }
+    }
+    const fullName = parsed.full_name || parsed.fullName || parsed.name || parsed.username || '';
+    const className = parsed.class_name || parsed.className || parsed.kelas || (roleName === 'SISWA' ? 'Peserta Didik' : 'Civitas Spenspra');
+    const photo = parsed.photo || parsed.photoUrl || parsed.avatar || null;
 
     return {
       id: parsed.id || parsed.sub,
       username: parsed.username || '',
       fullName: fullName,
       full_name: fullName,
+      nama: fullName,
       role: roleName,
       roleName: roleName,
       role_name: roleName,
+      peran: roleName,
+      kelas_atau_jabatan: className,
+      className: className,
+      kelas: className,
+      foto: photo,
+      photoUrl: photo,
       roleId: parsed.role_id || parsed.roleId || '',
       nimNip: parsed.nim_nip || parsed.nimNip || '',
       nim_nip: parsed.nim_nip || parsed.nimNip || '',

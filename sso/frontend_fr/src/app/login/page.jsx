@@ -64,10 +64,18 @@ function LoginForm() {
       const user = res?.user || {};
       const roleName = (user.roleName || user.role || user.role_name || '').toUpperCase();
 
-      let targetUrl = redirectTarget || searchParams.get('redirect_uri') || searchParams.get('app');
+      let targetUrl = redirectTarget || searchParams.get('redirect_uri') || searchParams.get('app') || searchParams.get('redirect');
       if (!targetUrl) {
         try {
           targetUrl = sessionStorage.getItem('sso_login_redirect_target');
+        } catch {}
+      }
+      if (!targetUrl && typeof document !== 'undefined' && document.referrer) {
+        try {
+          const refUrl = new URL(document.referrer);
+          if (refUrl.hostname.includes('perpus') || refUrl.pathname.includes('perpus')) {
+            targetUrl = document.referrer;
+          }
         } catch {}
       }
       try {

@@ -44,10 +44,17 @@ export const attendanceApi = {
   },
 
   /**
-   * Mencatat kehadiran pengunjung secara manual / tamu non-wajah
+   * Mencatat kehadiran pengunjung secara manual / scan barcode
    */
   recordManualVisit: async (data) => {
-    const res = await httpClient.post('/library-attendances/manual', data);
+    const payload = {
+      member_code: data.member_code || data.barcode_token || data.barcode || '',
+      visitor_name: data.visitor_name || data.name || data.fullName || 'Civitas Spenspra',
+      visitor_type: data.visitor_type || 'MEMBER',
+      method: data.method || 'BARCODE_SCAN',
+      purpose: data.purpose || 'MEMBACA',
+    };
+    const res = await httpClient.post('/library-attendances/manual', payload);
     return res?.data;
   },
 };
