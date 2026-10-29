@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
-import Header from '@/components/Header';
+import Header from '@/components/Navbar';
 import CameraBarcodeScanner, { playScannerBeep } from '@/components/perpus/CameraBarcodeScanner';
 import { membersApi } from '@/lib/features/library/api/membersApi';
 import { booksApi } from '@/lib/features/library/api/booksApi';
