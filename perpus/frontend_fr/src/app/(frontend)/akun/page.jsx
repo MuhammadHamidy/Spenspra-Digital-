@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import Navbar from '@/components/perpus/home/Navbar';
 import PerpusFooterMain from '@/components/perpus/home/PerpusFooterMain';
 import { tokenStorage } from '@/lib/common/tokenStorage';
@@ -9,6 +10,7 @@ import { berandaApi } from '@/lib/features/beranda/berandaApi';
 import { redirectToSsoLogout } from '@/lib/features/beranda/ssoHelper';
 
 export default function AkunSiswaPage() {
+  const router = useRouter();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -34,6 +36,17 @@ export default function AkunSiswaPage() {
       }
 
       if (currentUser) {
+        const roleUpper = (currentUser.peran || currentUser.roleName || currentUser.role || '').toUpperCase();
+        if (
+          roleUpper === 'PUSTAKAWAN' ||
+          roleUpper === 'ADMIN_PERPUS' ||
+          roleUpper === 'SUPER_ADMIN' ||
+          roleUpper === 'KEPALA_SEKOLAH'
+        ) {
+          router.replace('/pustakawan/akun');
+          return;
+        }
+
         const classCodes = currentUser.class_codes || currentUser.classCodes || [];
         const classStr =
           currentUser.kelas_atau_jabatan ||

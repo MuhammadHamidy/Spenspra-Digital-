@@ -82,8 +82,12 @@ export default function Navbar() {
         </button>
 
         {/* User Profile Avatar with Online Badge */}
-        <div className="flex items-center gap-3 pl-2 border-l border-slate-200">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#193D9B] to-[#1E4DBD] text-white flex items-center justify-center shadow-xs overflow-hidden">
+        <Link
+          href="/pustakawan/akun"
+          title="Buka Profil & Akun Pustakawan"
+          className="flex items-center gap-3 pl-2 border-l border-slate-200 hover:opacity-80 transition-opacity cursor-pointer group"
+        >
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#193D9B] to-[#1E4DBD] text-white flex items-center justify-center shadow-xs overflow-hidden group-hover:ring-2 group-hover:ring-blue-400">
             {user?.avatar || user?.photo ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={user.avatar || user.photo} alt="Profil" className="w-full h-full object-cover" />
@@ -94,14 +98,14 @@ export default function Navbar() {
             )}
           </div>
           <div className="hidden sm:block text-left">
-            <p className="text-xs font-bold text-slate-800 leading-tight">
+            <p className="text-xs font-bold text-slate-800 leading-tight group-hover:text-blue-600 transition-colors">
               {user?.fullName?.replace(/Prambon/gi, 'Prambon') || 'Pustakawan SMPN 1 Prambon'}
             </p>
             <p className="text-[11px] text-slate-400 font-medium">
               Pustakawan
             </p>
           </div>
-        </div>
+        </Link>
       </div>
     </header>
   );
