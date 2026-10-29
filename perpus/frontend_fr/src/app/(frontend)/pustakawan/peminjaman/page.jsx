@@ -2,8 +2,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import Sidebar from '@/components/Sidebar';
-import Header from '@/components/Navbar';
 import CameraBarcodeScanner, { playScannerBeep } from '@/components/perpus/CameraBarcodeScanner';
 import { membersApi } from '@/lib/features/library/api/membersApi';
 import { booksApi } from '@/lib/features/library/api/booksApi';
@@ -223,13 +221,7 @@ export default function PustakawanPeminjamanPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#F8FAFC]">
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col min-w-0">
-        <Header />
-
-        <main className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
+    <div className="space-y-6 max-w-7xl mx-auto w-full">
           {/* Breadcrumb & Title */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-5">
             <div>
@@ -663,8 +655,6 @@ export default function PustakawanPeminjamanPage() {
               )}
             </div>
           </div>
-        </main>
-      </div>
     </div>
   );
 }

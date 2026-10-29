@@ -2,8 +2,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import Sidebar from '@/components/Sidebar';
-import Header from '@/components/Navbar';
 import CameraBarcodeScanner, { playScannerBeep } from '@/components/perpus/CameraBarcodeScanner';
 import { attendanceApi } from '@/lib/features/library/api/attendanceApi';
 import { membersApi } from '@/lib/features/library/api/membersApi';
@@ -183,15 +181,7 @@ export default function PustakawanAbsensiPage() {
   }, [todayLogs, logSearch]);
 
   return (
-    <div className="flex min-h-screen bg-[#F8FAFC]">
-      {/* Sidebar Staf Pustakawan */}
-      <Sidebar />
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <Header />
-
-        <main className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
+    <div className="space-y-6 max-w-7xl mx-auto w-full">
           {/* Top Breadcrumb & Title */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-5">
             <div>
@@ -475,8 +465,6 @@ export default function PustakawanAbsensiPage() {
               )}
             </div>
           </div>
-        </main>
-      </div>
     </div>
   );
 }

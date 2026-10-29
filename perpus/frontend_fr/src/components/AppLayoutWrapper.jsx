@@ -9,11 +9,26 @@ import { tokenStorage } from '@/lib/common/tokenStorage';
 export default function AppLayoutWrapper({ children }) {
   const pathname = usePathname();
   const router = useRouter();
+
   const isLoginPage = pathname === '/login';
-  const isKioskPage = pathname === '/kiosk';
-  const isPerpusPage = pathname === '/perpus';
-  const isRootPage = pathname === '/';
-  const isPublicPage = isLoginPage || isKioskPage || isPerpusPage || isRootPage;
+
+  // Rute Portal Siswa & Publik (Desain e-Perpus Spenspra - Figma Frame.png s/d Frame-6.png)
+  // Halaman-halaman ini memiliki Navbar dan Footer tersendiri, TIDAK menggunakan Sidebar Admin
+  const isStudentPortalPage =
+    pathname === '/' ||
+    pathname.startsWith('/bibliografi') ||
+    pathname.startsWith('/bookmark') ||
+    pathname.startsWith('/peminjaman') ||
+    pathname === '/absensi' ||
+    pathname === '/akun' ||
+    pathname === '/pinjam' ||
+    pathname === '/kiosk' ||
+    pathname === '/perpus' ||
+    pathname === '/pembelajaran' ||
+    pathname.startsWith('/sso') ||
+    pathname.startsWith('/docs') ||
+    pathname === '/riwayat-kunjungan';
+
   const [isAuthChecked, setIsAuthChecked] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -21,7 +36,8 @@ export default function AppLayoutWrapper({ children }) {
     tokenStorage.syncCookies();
     const user = tokenStorage.getUser();
 
-    if (!user && !isPublicPage) {
+    // Halaman admin pustakawan memerlukan login jika diakses langsung
+    if (!user && !isStudentPortalPage && !isLoginPage) {
       setIsAuthenticated(false);
       setIsAuthChecked(true);
       router.replace('/login');
@@ -33,12 +49,12 @@ export default function AppLayoutWrapper({ children }) {
       setIsAuthenticated(Boolean(user));
       setIsAuthChecked(true);
     }
-  }, [pathname, isPublicPage, isLoginPage, router]);
+  }, [pathname, isStudentPortalPage, isLoginPage, router]);
 
-  // Loading state before initial auth check finishes
+  // Loading state saat verifikasi awal
   if (!isAuthChecked) {
     return (
-      <div className="min-h-screen bg-[#F6FAFD] text-[#0A1931] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F6FAFD] text-[#0A1931] flex items-center justify-center font-sans">
         <div className="text-center space-y-3">
           <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
           <p className="text-xs font-semibold text-slate-400">Memeriksa Akses...</p>
@@ -47,31 +63,7 @@ export default function AppLayoutWrapper({ children }) {
     );
   }
 
-  // Redirecting unauthenticated user from protected page to login
-  if (!isAuthenticated && !isPublicPage) {
-    return (
-      <div className="min-h-screen bg-[#F6FAFD] text-[#0A1931] flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-xs font-semibold text-slate-400">Mengarahkan ke Halaman Login...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Redirecting authenticated user from login page to dashboard
-  if (isAuthenticated && isLoginPage) {
-    return (
-      <div className="min-h-screen bg-[#F6FAFD] text-[#0A1931] flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-xs font-semibold text-slate-400">Mengarahkan ke Dashboard...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Standalone layout for login page (unauthenticated) - full screen for split view
+  // 1. Standalone layout untuk halaman Login
   if (isLoginPage) {
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col w-full font-sans">
@@ -80,16 +72,16 @@ export default function AppLayoutWrapper({ children }) {
     );
   }
 
-  // Standalone full-width layout for Layanan Mandiri screen (root page / or /perpus or legacy /kiosk)
-  if (isKioskPage || isPerpusPage || isRootPage) {
+  // 2. Standalone layout untuk Portal Siswa & Publik (Full Width, Desain Bersih Sesuai Figma)
+  if (isStudentPortalPage) {
     return (
-      <div className="min-h-screen bg-[#F8FAFC] text-[#0A1931] font-sans">
+      <div className="min-h-screen bg-white text-slate-800 font-sans">
         <main className="w-full">{children}</main>
       </div>
     );
   }
 
-  // Main app layout for authenticated user (Librarian / Admin) - matching LibSystem Pro screenshot
+  // 3. Layout Area Administrasi Pustakawan (dengan Sidebar & Navbar Admin)
   return (
     <div className="min-h-screen flex bg-[#F8FAFC] text-slate-800 font-sans">
       <Sidebar />
@@ -100,4 +92,3 @@ export default function AppLayoutWrapper({ children }) {
     </div>
   );
 }
-
