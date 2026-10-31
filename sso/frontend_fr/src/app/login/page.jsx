@@ -169,24 +169,8 @@ function LoginForm() {
         return;
       }
 
-      if (roleName === 'SISWA' || roleName === 'ROLE-SISWA' || roleName === 'MAHASISWA') {
-        window.location.href = '/dashboard';
-        return;
-      }
-
-      if (roleName === 'ADMIN_RAPOR' || roleName === 'ADMIN-RAPOR') {
-        const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
-        window.location.href = `${raporBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent('/admin/teachers')}`;
-        return;
-      }
-
-      if (roleName === 'ADMIN_PERPUS' || roleName === 'ADMIN-PERPUS' || roleName === 'PUSTAKAWAN') {
-        const perpusBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus');
-        window.location.href = `${perpusBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent('/pustakawan')}`;
-        return;
-      }
-
-      // Pengguna Guru, Tenaga Kependidikan, dan Kepala Sekolah diarahkan ke /dashboard
+      // Seluruh civitas akademika (Guru/Pendidik, Admin Perpustakaan, Admin e-Rapor, Tenaga Kependidikan, Kepala Sekolah, dan Siswa)
+      // diarahkan ke /dashboard SSO agar dapat memilih menu aplikasi secara bebas
       window.location.href = '/dashboard';
     } catch (err) {
       setError(err.message || 'Login gagal. Periksa kembali username/NIP dan kata sandi Anda.');

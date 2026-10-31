@@ -31,13 +31,26 @@ export default function CivitasDashboard() {
   const perpusBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus');
   const belajarBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_ELEARNING_URL, 'belajar');
 
+  const isLibrarian = role === 'ADMIN_PERPUS' || role === 'PUSTAKAWAN';
+  const isRaporAdmin = role === 'ADMIN_RAPOR';
+
   const getRaporLaunchUrl = (targetPath = '') => {
     const token = tokenStorage.getToken() || 'sso-session-token';
+    // Jika pengguna adalah Guru yang ditugaskan sebagai Admin Perpus, perannya di e-Rapor tetaplah GURU pengampu!
+    const raporRole = isKepalaSekolah
+      ? 'KEPALA_SEKOLAH'
+      : isRaporAdmin
+      ? 'ADMIN_RAPOR'
+      : isSiswa
+      ? 'SISWA'
+      : 'GURU';
+
     const userPayload = {
       id: user?.id || user?.person_id || 'user-1',
       username: user?.username || '',
       fullName: user?.fullName || user?.full_name || '',
-      roleName: isKepalaSekolah ? 'KEPALA_SEKOLAH' : (role || 'GURU'),
+      roleName: raporRole,
+      peran: raporRole,
       nimNip: user?.nimNip || user?.nip || user?.nisn || '',
       className: user?.className || user?.kelas || '',
       courseNames: user?.courseNames || user?.course_names || user?.courses || [],
@@ -55,11 +68,13 @@ export default function CivitasDashboard() {
 
   const getBelajarLaunchUrl = (targetPath = '') => {
     const token = tokenStorage.getToken() || 'sso-session-token';
+    const belajarRole = isSiswa ? 'SISWA' : 'GURU';
     const userPayload = {
       id: user?.id || user?.person_id || 'user-1',
       username: user?.username || '',
       fullName: user?.fullName || user?.full_name || '',
-      roleName: isKepalaSekolah ? 'KEPALA_SEKOLAH' : (role || 'GURU'),
+      roleName: belajarRole,
+      peran: belajarRole,
       nimNip: user?.nimNip || user?.nip || user?.nisn || '',
       className: user?.className || user?.kelas || '',
       courseNames: user?.courseNames || user?.course_names || user?.courses || [],
@@ -73,18 +88,17 @@ export default function CivitasDashboard() {
   };
 
   const getPerpusLaunchUrl = (targetPath = '') => {
-    const isPustakawan = role === 'ADMIN_PERPUS' || role === 'PUSTAKAWAN';
-    const destination = isPustakawan ? '/pustakawan' : (targetPath || '/');
+    const destination = isLibrarian ? '/pustakawan' : (targetPath || '/');
     const token = tokenStorage.getToken() || 'sso-session-token';
     const userPayload = {
       id: user?.id || user?.person_id || 'user-1',
       username: user?.username || '',
       fullName: user?.fullName || user?.full_name || '',
-      roleName: isKepalaSekolah ? 'KEPALA_SEKOLAH' : (role || (isSiswa ? 'SISWA' : 'GURU')),
+      roleName: isLibrarian ? 'ADMIN_PERPUS' : (isKepalaSekolah ? 'KEPALA_SEKOLAH' : (isSiswa ? 'SISWA' : 'GURU')),
       nimNip: user?.nimNip || user?.nip || user?.nisn || '',
       nama: user?.fullName || user?.full_name || '',
-      peran: isSiswa ? 'SISWA' : (role || 'GURU'),
-      kelas_atau_jabatan: user?.className || user?.kelas || (isSiswa ? 'Peserta Didik' : 'Pendidik'),
+      peran: isLibrarian ? 'ADMIN_PERPUS' : (isSiswa ? 'SISWA' : 'GURU'),
+      kelas_atau_jabatan: isLibrarian ? 'Pustakawan / Guru' : (user?.className || user?.kelas || (isSiswa ? 'Peserta Didik' : 'Pendidik')),
     };
     const encodedUser = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(userPayload)))) : '';
     const redirectParam = destination ? `&redirect=${encodeURIComponent(destination)}` : '';
@@ -351,8 +365,8 @@ export default function CivitasDashboard() {
               <p className="font-bold text-[#172033] text-sm leading-tight">
                 {user?.nimNip || user?.nip || user?.username || 'Akun Aktif'}
               </p>
-              <span className="inline-block mt-0.5 rounded-full bg-[#EDEAF5] px-2 py-0.5 text-[10px] font-semibold text-[#30264F] uppercase tracking-wider">
-                {role || 'GURU'}
+              <span className="inline-block mt-0.5 rounded-full bg-[#EDEAF5] px-2.5 py-0.5 text-[10px] font-bold text-[#30264F] uppercase tracking-wider">
+                {isLibrarian ? 'GURU • ADMIN PERPUSTAKAAN' : isRaporAdmin ? 'GURU • ADMIN RAPOR' : (role || 'GURU')}
               </span>
             </div>
           </div>
@@ -548,15 +562,21 @@ export default function CivitasDashboard() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                     </svg>
                   </div>
-                  <span className="text-[10px] font-semibold text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-1 rounded-full">
-                    Pustaka Digital
+                  <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full ${
+                    isLibrarian
+                      ? 'text-purple-700 bg-purple-50 border border-purple-200 font-bold'
+                      : 'text-sky-700 bg-sky-50 border border-sky-200'
+                  }`}>
+                    {isLibrarian ? 'Akses Pustakawan' : 'Pustaka Digital'}
                   </span>
                 </div>
                 <h3 className="font-bold text-[#172033] text-lg group-hover:text-[#4F8FBB] transition-colors">
                   e-Perpustakaan
                 </h3>
                 <p className="text-xs sm:text-sm text-[#667085] mt-1.5 leading-relaxed">
-                  Katalog pustaka sekolah, sirkulasi peminjaman dan pengembalian buku, serta riwayat bacaan civitas sekolah.
+                  {isLibrarian
+                    ? 'Kelola sirkulasi peminjaman, registrasi barcode buku fisik, presensi pengunjung, dan laporan perpustakaan.'
+                    : 'Katalog pustaka sekolah, sirkulasi peminjaman dan pengembalian buku, serta riwayat bacaan civitas sekolah.'}
                 </p>
               </div>
               <div className="mt-6 pt-4 border-t border-slate-100">
@@ -564,9 +584,13 @@ export default function CivitasDashboard() {
                   href={getPerpusLaunchUrl()}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full min-h-[44px] inline-flex items-center justify-center gap-2 rounded-xl bg-[#4F8FBB] hover:bg-[#397394] active:bg-[#2E607C] text-white py-2.5 px-4 text-sm font-semibold transition shadow-xs cursor-pointer"
+                  className={`w-full min-h-[44px] inline-flex items-center justify-center gap-2 rounded-xl text-white py-2.5 px-4 text-sm font-semibold transition shadow-xs cursor-pointer ${
+                    isLibrarian
+                      ? 'bg-[#4B3B78] hover:bg-[#3D2E66] active:bg-[#30264F]'
+                      : 'bg-[#4F8FBB] hover:bg-[#397394] active:bg-[#2E607C]'
+                  }`}
                 >
-                  <span>Buka Perpustakaan</span>
+                  <span>{isLibrarian ? 'Buka Meja Pustakawan' : 'Buka Perpustakaan'}</span>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>

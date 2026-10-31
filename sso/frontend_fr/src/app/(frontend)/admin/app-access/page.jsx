@@ -164,19 +164,6 @@ export default function AppAccessMatrixPage() {
       combinedUsers.forEach((u) => {
         const role = (u.role_name || '').toUpperCase();
 
-        // Tentukan peran dasar SSO secara presisi
-        let ssoRole = 'GURU';
-        if (role === 'SUPER_ADMIN' || role.includes('SUPER')) ssoRole = 'SUPER_ADMIN';
-        else if (role === 'ADMIN_RAPOR') ssoRole = 'ADMIN_RAPOR';
-        else if (role === 'ADMIN_PERPUS') ssoRole = 'ADMIN_PERPUS';
-        else if (role === 'ADMIN_ABSENSI') ssoRole = 'ADMIN_ABSENSI';
-        else if (role === 'ADMIN') ssoRole = 'ADMIN';
-        else if (role.includes('KEPALA')) ssoRole = 'KEPALA_SEKOLAH';
-        else if (role.includes('TENDIK') || role.includes('TENAGA_KEPENDIDIKAN') || role.includes('STAFF')) ssoRole = 'TENAGA_KEPENDIDIKAN';
-        else if (role.includes('SISWA')) ssoRole = 'SISWA';
-        else if (role.includes('GURU') || role.includes('WALI_KELAS')) ssoRole = 'GURU';
-        else ssoRole = role || 'GURU';
-
         // Tentukan apakah pengguna berstatus pendidik/guru
         const isEducator =
           role.includes('GURU') ||
@@ -185,7 +172,21 @@ export default function AppAccessMatrixPage() {
           role === 'ADMIN_RAPOR' ||
           role === 'ADMIN_ABSENSI' ||
           u.category === 'GURU_TENDIK' ||
-          (u.nimNip && u.nimNip.length > 10 && !role.includes('SISWA'));
+          (u.nimNip && u.nimNip.length > 5 && !role.includes('SISWA'));
+
+        // Tentukan peran dasar SSO secara presisi:
+        // Guru/Pendidik peran utamanya di sekolah adalah GURU, meskipun memegang tugas tambahan admin perpustakaan/rapor!
+        let ssoRole = 'GURU';
+        if (role === 'SUPER_ADMIN' || role.includes('SUPER')) ssoRole = 'SUPER_ADMIN';
+        else if (role.includes('KEPALA')) ssoRole = 'KEPALA_SEKOLAH';
+        else if (role.includes('SISWA')) ssoRole = 'SISWA';
+        else if (role.includes('TENDIK') || role.includes('TENAGA_KEPENDIDIKAN') || role.includes('STAFF')) ssoRole = 'TENAGA_KEPENDIDIKAN';
+        else if (isEducator) ssoRole = 'GURU';
+        else if (role === 'ADMIN_RAPOR') ssoRole = 'ADMIN_RAPOR';
+        else if (role === 'ADMIN_PERPUS') ssoRole = 'ADMIN_PERPUS';
+        else if (role === 'ADMIN_ABSENSI') ssoRole = 'ADMIN_ABSENSI';
+        else if (role === 'ADMIN') ssoRole = 'ADMIN';
+        else ssoRole = role || 'GURU';
 
         // Tentukan peran Belajar (LMS & CBT)
         let elearningVal = 'NONE';
@@ -202,7 +203,7 @@ export default function AppAccessMatrixPage() {
 
         // Tentukan peran e-Perpus
         let eperpusVal = 'NONE';
-        if (role === 'ADMIN_PERPUS' || role === 'SUPER_ADMIN') eperpusVal = 'ADMIN';
+        if (role === 'ADMIN_PERPUS' || role === 'PUSTAKAWAN' || role === 'SUPER_ADMIN') eperpusVal = 'ADMIN';
         else if (role.includes('SISWA')) eperpusVal = 'SISWA';
         else if (isEducator) eperpusVal = 'GURU';
 
@@ -274,7 +275,7 @@ export default function AppAccessMatrixPage() {
           updated.presensi = 'SISWA';
         }
       } else if (key === 'erapor') {
-        if (newRole === 'ADMIN' && updated.ssoRole !== 'SUPER_ADMIN') {
+        if (newRole === 'ADMIN' && updated.ssoRole !== 'SUPER_ADMIN' && updated.ssoRole !== 'GURU') {
           updated.ssoRole = 'ADMIN_RAPOR';
           if (!updated.elearning || updated.elearning === 'NONE') updated.elearning = 'GURU';
           if (!updated.eperpus || updated.eperpus === 'NONE') updated.eperpus = 'GURU';
@@ -283,14 +284,14 @@ export default function AppAccessMatrixPage() {
           updated.ssoRole = 'KEPALA_SEKOLAH';
         }
       } else if (key === 'eperpus') {
-        if (newRole === 'ADMIN' && updated.ssoRole !== 'SUPER_ADMIN') {
+        if (newRole === 'ADMIN' && updated.ssoRole !== 'SUPER_ADMIN' && updated.ssoRole !== 'GURU') {
           updated.ssoRole = 'ADMIN_PERPUS';
           if (!updated.elearning || updated.elearning === 'NONE') updated.elearning = 'GURU';
           if (!updated.erapor || updated.erapor === 'NONE') updated.erapor = 'GURU';
           if (!updated.presensi || updated.presensi === 'NONE') updated.presensi = 'GURU';
         }
       } else if (key === 'presensi') {
-        if (newRole === 'ADMIN' && updated.ssoRole !== 'SUPER_ADMIN') {
+        if (newRole === 'ADMIN' && updated.ssoRole !== 'SUPER_ADMIN' && updated.ssoRole !== 'GURU') {
           updated.ssoRole = 'ADMIN_ABSENSI';
           if (!updated.elearning || updated.elearning === 'NONE') updated.elearning = 'GURU';
           if (!updated.erapor || updated.erapor === 'NONE') updated.erapor = 'GURU';
@@ -315,9 +316,21 @@ export default function AppAccessMatrixPage() {
     const { ssoRole, erapor, eperpus, presensi } = userRoles;
 
     // Logika penentuan Role Akun di backend:
+    // Jika pendidik memiliki peran SSO 'GURU' dan diberi akses admin perpus,
+    // di backend disimpan role_name 'ADMIN_PERPUS' agar aplikasi satelit mengenali hak kelola pustakawan,
+    // namun di portal SSO dia tetap diakui dan tampil penuh sebagai GURU pengampu.
     let updatedRole = ssoRole || 'GURU';
     if (ssoRole === 'SUPER_ADMIN') {
       updatedRole = 'SUPER_ADMIN';
+    } else if (ssoRole === 'KEPALA_SEKOLAH') {
+      updatedRole = 'KEPALA_SEKOLAH';
+    } else if (ssoRole === 'SISWA') {
+      updatedRole = 'SISWA';
+    } else if (ssoRole === 'GURU') {
+      if (eperpus === 'ADMIN') updatedRole = 'ADMIN_PERPUS';
+      else if (erapor === 'ADMIN') updatedRole = 'ADMIN_RAPOR';
+      else if (presensi === 'ADMIN') updatedRole = 'ADMIN_ABSENSI';
+      else updatedRole = 'GURU';
     } else if (ssoRole === 'ADMIN_RAPOR') {
       updatedRole = 'ADMIN_RAPOR';
     } else if (ssoRole === 'ADMIN_PERPUS') {
@@ -326,19 +339,13 @@ export default function AppAccessMatrixPage() {
       updatedRole = 'ADMIN_ABSENSI';
     } else if (ssoRole === 'ADMIN') {
       updatedRole = 'ADMIN';
-    } else if (ssoRole === 'KEPALA_SEKOLAH') {
-      updatedRole = 'KEPALA_SEKOLAH';
     } else if (ssoRole === 'TENAGA_KEPENDIDIKAN') {
-      updatedRole = 'TENAGA_KEPENDIDIKAN';
-    } else if (ssoRole === 'SISWA') {
-      updatedRole = 'SISWA';
-    } else {
-      if (erapor === 'ADMIN') updatedRole = 'ADMIN_RAPOR';
-      else if (eperpus === 'ADMIN') updatedRole = 'ADMIN_PERPUS';
+      if (eperpus === 'ADMIN') updatedRole = 'ADMIN_PERPUS';
+      else if (erapor === 'ADMIN') updatedRole = 'ADMIN_RAPOR';
       else if (presensi === 'ADMIN') updatedRole = 'ADMIN_ABSENSI';
-      else if (erapor === 'KEPALA_SEKOLAH') updatedRole = 'KEPALA_SEKOLAH';
-      else if (eperpus === 'SISWA') updatedRole = 'SISWA';
-      else updatedRole = 'GURU';
+      else updatedRole = 'TENAGA_KEPENDIDIKAN';
+    } else {
+      updatedRole = ssoRole || 'GURU';
     }
 
     try {
