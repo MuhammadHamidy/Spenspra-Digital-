@@ -82,13 +82,18 @@ export default function AppLayoutWrapper({ children }) {
     );
   }
 
-  // 3. Layout Area Administrasi Pustakawan (dengan Sidebar & Navbar Admin)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  // 3. Layout Area Administrasi Pustakawan (dengan Sidebar & Navbar Admin - e-Rapor Style)
   return (
-    <div className="min-h-screen flex bg-[#F8FAFC] text-slate-800 font-sans">
-      <Sidebar />
+    <div className="min-h-screen flex bg-[#F8F9FC] text-slate-800 font-sans">
+      <Sidebar
+        mobileOpen={mobileSidebarOpen}
+        onCloseMobile={() => setMobileSidebarOpen(false)}
+      />
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
-        <Navbar />
-        <main className="flex-1 p-6 sm:p-8 overflow-y-auto">{children}</main>
+        <Navbar onToggleMobileSidebar={() => setMobileSidebarOpen((prev) => !prev)} />
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">{children}</main>
       </div>
     </div>
   );

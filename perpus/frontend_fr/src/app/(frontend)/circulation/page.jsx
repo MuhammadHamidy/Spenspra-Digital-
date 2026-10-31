@@ -258,36 +258,42 @@ export default function LoanReportsPage() {
                 {filteredLoans.map((item, idx) => (
                   <tr key={item.id || idx} className="hover:bg-slate-50/70 transition-colors">
                     {/* Kode Transaksi */}
-                    <td className="px-5 py-3.5 font-mono font-bold text-blue-600 whitespace-nowrap">
-                      {item.code || `TRX-20231024-00${idx + 1}`}
+                    <td className="px-5 py-3.5 font-mono font-bold text-[#4B3B78] whitespace-nowrap">
+                      {item.loan_code || item.code || item.id}
                     </td>
 
                     {/* Siswa */}
                     <td className="px-5 py-3.5 whitespace-nowrap">
-                      <div className="font-bold text-slate-900">{item.member_name}</div>
+                      <div className="font-bold text-slate-900">{item.member_name || 'Anggota'}</div>
                       <div className="text-[11px] text-slate-400 font-mono">
-                        {item.member_nisn || 'NISN-1290384'}
+                        {item.member_code || item.identity_number || item.member_nisn || '-'}
                       </div>
                     </td>
 
                     {/* Buku */}
                     <td className="px-5 py-3.5 font-bold text-slate-800 line-clamp-1 max-w-xs">
-                      {item.book_title}
+                      {item.book_title || '-'}
                     </td>
 
                     {/* Tgl Pinjam */}
                     <td className="px-5 py-3.5 text-slate-600 whitespace-nowrap font-medium">
-                      {item.borrow_date || '10/10/2023'}
+                      {item.borrow_date
+                        ? new Date(item.borrow_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+                        : '-'}
                     </td>
 
                     {/* Batas Kembali */}
                     <td className="px-5 py-3.5 text-slate-600 whitespace-nowrap font-medium">
-                      {item.due_date || '17/10/2023'}
+                      {item.due_date
+                        ? new Date(item.due_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+                        : '-'}
                     </td>
 
                     {/* Tgl Kembali */}
                     <td className="px-5 py-3.5 text-slate-600 whitespace-nowrap font-medium">
-                      {item.return_date || '-'}
+                      {item.return_date
+                        ? new Date(item.return_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+                        : '-'}
                     </td>
 
                     {/* Status Pill Badge */}
@@ -298,13 +304,12 @@ export default function LoanReportsPage() {
                           <span>Kembali</span>
                         </span>
                       ) : item.status === 'OVERDUE' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-red-50 text-red-700 border border-red-200">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
                           <span>!</span>
                           <span>Terlambat</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                          <span>⏱</span>
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#EDEAF5] text-[#4B3B78] border border-purple-200">
                           <span>Dipinjam</span>
                         </span>
                       )}

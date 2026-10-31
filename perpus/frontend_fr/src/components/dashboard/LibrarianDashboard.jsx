@@ -180,23 +180,31 @@ export default function LibrarianDashboard() {
           <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
             <Link
               href="/pustakawan/absensi"
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/30 flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-4 py-2 bg-[#4B3B78] hover:bg-[#3D2E66] text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-2 transition-all cursor-pointer"
             >
-              <span>📋</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
               <span>Absensi Pengunjung</span>
             </Link>
             <Link
               href="/pustakawan/peminjaman"
-              className="px-4 py-2.5 bg-[#4B3B78] hover:bg-[#3D2E66] text-white rounded-xl text-xs font-bold shadow-md shadow-purple-900/30 flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-800 rounded-lg text-xs font-bold shadow-xs border border-slate-200 flex items-center gap-2 transition-all cursor-pointer"
             >
-              <span>📦</span>
-              <span>Peminjaman Buku</span>
+              <svg className="w-4 h-4 text-[#4B3B78]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+              </svg>
+              <span>Meja Peminjaman</span>
             </Link>
             <Link
               href="/visitors"
-              className="px-3.5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold border border-white/20 flex items-center gap-2 transition-all cursor-pointer"
             >
-              <span>👥 Tracking ({visitorStats.today_visitors})</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              <span>Tracking ({visitorStats.today_visitors})</span>
             </Link>
           </div>
         </div>
@@ -207,22 +215,24 @@ export default function LibrarianDashboard() {
         {/* Card 1: Pengunjung Hari Ini */}
         <Link
           href="/visitors"
-          className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-md hover:border-emerald-300 transition-all group block"
+          className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-2xs hover:shadow-xs hover:border-[#4B3B78]/40 transition-all group block"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider group-hover:text-emerald-600 transition-colors">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider group-hover:text-[#4B3B78] transition-colors">
               Pengunjung Hari Ini
             </span>
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-              👥
+            <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
             </div>
           </div>
           <div className="mt-3">
-            <h3 className="text-2xl font-black text-slate-900 group-hover:text-emerald-700 transition-colors">
+            <h3 className="text-2xl font-bold text-slate-900 group-hover:text-[#4B3B78] transition-colors">
               {visitorStats.today_visitors}
             </h3>
             <p className="text-xs text-emerald-600 font-semibold mt-1 flex items-center gap-1">
-              <span>&rarr; Buka Tracking Presensi</span>
+              <span>Buka Tracking Presensi &rarr;</span>
             </p>
           </div>
         </Link>
