@@ -19,13 +19,10 @@ function LoginForm() {
   const reason = searchParams.get('reason');
   const [showPassword, setShowPassword] = useState(false);
 
-  // Ambil target redirect dari query string lalu simpan agar tidak hilang
+  // Ambil target redirect dari query string jika ada secara eksplisit
   React.useEffect(() => {
     const raw = searchParams.get('redirect_uri') || searchParams.get('app') || searchParams.get('redirect');
     if (raw) {
-      try {
-        sessionStorage.setItem('sso_login_redirect_target', raw);
-      } catch {}
       if (raw.toLowerCase() === 'erapor' || raw.toLowerCase() === 'rapor') {
         setRedirectTarget(getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor'));
       } else if (raw.toLowerCase() === 'perpus' || raw.toLowerCase() === 'perpusdig') {
@@ -33,23 +30,12 @@ function LoginForm() {
       } else {
         setRedirectTarget(raw);
       }
-      // Bersihkan query string dari address bar sehingga hanya tampil /login
-      if (typeof window !== 'undefined' && window.history?.replaceState) {
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
     } else {
+      // Jika URL bersih (/login), pastikan target redirect dibersihkan
       try {
-        const stored = sessionStorage.getItem('sso_login_redirect_target');
-        if (stored) {
-          if (stored.toLowerCase() === 'erapor' || stored.toLowerCase() === 'rapor') {
-            setRedirectTarget(getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor'));
-          } else if (stored.toLowerCase() === 'perpus' || stored.toLowerCase() === 'perpusdig') {
-            setRedirectTarget(getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus'));
-          } else {
-            setRedirectTarget(stored);
-          }
-        }
+        sessionStorage.removeItem('sso_login_redirect_target');
       } catch {}
+      setRedirectTarget('');
     }
   }, [searchParams]);
 
@@ -64,20 +50,8 @@ function LoginForm() {
       const user = res?.user || {};
       const roleName = (user.roleName || user.role || user.role_name || '').toUpperCase();
 
+      // Hanya gunakan query redirect jika hadir di URL saat ini
       let targetUrl = redirectTarget || searchParams.get('redirect_uri') || searchParams.get('app') || searchParams.get('redirect');
-      if (!targetUrl) {
-        try {
-          targetUrl = sessionStorage.getItem('sso_login_redirect_target');
-        } catch {}
-      }
-      if (!targetUrl && typeof document !== 'undefined' && document.referrer) {
-        try {
-          const refUrl = new URL(document.referrer);
-          if (refUrl.hostname.includes('perpus') || refUrl.pathname.includes('perpus')) {
-            targetUrl = document.referrer;
-          }
-        } catch {}
-      }
       try {
         sessionStorage.removeItem('sso_login_redirect_target');
       } catch {}
@@ -98,8 +72,36 @@ function LoginForm() {
       const encodedUser = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(userPayload)))) : '';
       const token = res?.token || '';
 
-      // 1. Jika ada target redirect ke PERPUSTAKAAN (misal klik Masuk SSO dari perpus):
-      // Kembalikan langsung ke halaman perpus dengan sesi aktif, jangan diarahkan ke menu dashboard SSO!
+      const isEducator = ['GURU', 'WALI_KELAS', 'PENDIDIK', 'KEPALA_SEKOLAH', 'TENDIK'].includes(roleName);
+
+      // PENTING: Untuk seluruh Guru/Pendidik:
+      // Guru HARUS SELALU masuk ke /dashboard SSO agar dapat memilih kartu aplikasi
+      // (e-Rapor Spenspra, e-Perpustakaan, Belajar Spenspra).
+      // Guru TIDAK BOLEH otomatis dilempar ke satelit layanan mandiri perpus saat login di SSO.
+      if (isEducator) {
+        // Cek jika memang ada deep redirect ke halaman spesifik e-Rapor (misal guru sedang input nilai lalu sesi expired)
+        const isDeepRapor = targetUrl && (targetUrl.includes('rapor') || targetUrl.includes('erapor')) && !targetUrl.endsWith('.spenspra.com') && !targetUrl.endsWith('.spenspra.com/') && !targetUrl.endsWith('/login');
+        if (isDeepRapor) {
+          const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
+          let destinationPath = '/';
+          try {
+            if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+              const parsed = new URL(targetUrl);
+              destinationPath = parsed.pathname + parsed.search;
+            } else if (targetUrl.startsWith('/')) {
+              destinationPath = targetUrl;
+            }
+          } catch {}
+          window.location.href = `${raporBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent(destinationPath)}`;
+          return;
+        }
+
+        // Default untuk Guru: langsung ke dashboard portal SSO
+        window.location.href = '/dashboard';
+        return;
+      }
+
+      // 1. Jika ada target redirect ke PERPUSTAKAAN (misal dari pustakawan murni):
       if (targetUrl && (targetUrl.toLowerCase().includes('perpus') || targetUrl.toLowerCase() === 'perpusdig')) {
         const perpusBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus');
         let destinationPath = '/';
