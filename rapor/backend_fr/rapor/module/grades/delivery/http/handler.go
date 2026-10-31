@@ -33,6 +33,10 @@ func (h *GradeHandler) RegisterRoutes(app *fiber.App) {
 	app.Get("/api/endorsements", h.GetEndorsements)
 	app.Post("/api/endorsements", h.SaveEndorsement)
 
+	// Rekap Kehadiran Rapor
+	app.Get("/api/grades/attendance", h.GetRaporAttendances)
+	app.Post("/api/grades/attendance", h.SaveRaporAttendances)
+
 	// Backup & Restore
 	app.Get("/api/backup", h.ExportBackup)
 	app.Post("/api/restore", h.RestoreBackup)
@@ -249,4 +253,34 @@ func (h *GradeHandler) DeleteGrades(c *fiber.Ctx) error {
 		"deleted_count": deleted,
 	}, "Data nilai berhasil dihapus"))
 }
+
+// ===== Rekap Kehadiran Rapor =====
+
+func (h *GradeHandler) GetRaporAttendances(c *fiber.Ctx) error {
+	className := c.Query("class_name")
+	academicYear := c.Query("academic_year")
+	semester := c.Query("semester")
+
+	list, err := h.useCase.GetRaporAttendances(c.Context(), className, academicYear, semester)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
+	}
+	return c.Status(http.StatusOK).JSON(responses.Success(list, "Data kehadiran rapor berhasil dimuat"))
+}
+
+func (h *GradeHandler) SaveRaporAttendances(c *fiber.Ctx) error {
+	var req domain.BulkRaporAttendanceRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(responses.Fail("INVALID_PAYLOAD", "Format data tidak valid: "+err.Error()))
+	}
+
+	if err := h.useCase.SaveRaporAttendances(c.Context(), req); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SAVE_ERROR", "Gagal menyimpan kehadiran: "+err.Error()))
+	}
+
+	return c.Status(http.StatusOK).JSON(responses.Success(fiber.Map{
+		"saved_count": len(req.Attendances),
+	}, "Data rekapitulasi kehadiran siswa berhasil disimpan"))
+}
+
 

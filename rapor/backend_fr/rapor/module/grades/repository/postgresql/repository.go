@@ -20,6 +20,7 @@ func NewRepository(db *gorm.DB) domain.Repository {
 		&domain.GradeLock{},
 		&domain.GradeChangeLog{},
 		&domain.ReportEndorsement{},
+		&domain.StudentRaporAttendance{},
 	)
 	return &repository{db: db}
 }
@@ -544,6 +545,9 @@ func (r *repository) ExportBackup(ctx context.Context) (*domain.BackupData, erro
 	var endorsements []*domain.ReportEndorsement
 	_ = db.Table("report_endorsements").Find(&endorsements).Error
 
+	var attendances []*domain.StudentRaporAttendance
+	_ = db.Table("student_rapor_attendances").Find(&attendances).Error
+
 	return &domain.BackupData{
 		Version:      "1.0",
 		ExportedAt:   time.Now(),
@@ -552,6 +556,7 @@ func (r *repository) ExportBackup(ctx context.Context) (*domain.BackupData, erro
 		Logs:         logs,
 		Deadlines:    deadlines,
 		Endorsements: endorsements,
+		Attendances:  attendances,
 	}, nil
 }
 
@@ -616,6 +621,19 @@ func (r *repository) RestoreBackup(ctx context.Context, data *domain.BackupData)
 			}
 		}
 
+		if len(data.Attendances) > 0 {
+			if err := tx.Clauses(clause.OnConflict{
+				Columns: []clause.Column{
+					{Name: "class_name"}, {Name: "academic_year"}, {Name: "semester"}, {Name: "student_id"},
+				},
+				DoUpdates: clause.AssignmentColumns([]string{
+					"nisn", "student_name", "hadir", "sakit", "izin", "alfa", "updated_at",
+				}),
+			}).Create(&data.Attendances).Error; err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 }
@@ -652,3 +670,53 @@ func (r *repository) DeleteByIDs(ctx context.Context, ids []string) error {
 	}
 	return r.db.WithContext(ctx).Table("student_grades").Where("id IN (?)", ids).Delete(nil).Error
 }
+
+// ===== Rekapitulasi Kehadiran Siswa di Rapor =====
+
+func (r *repository) GetRaporAttendances(ctx context.Context, className, academicYear, semester string) ([]*domain.StudentRaporAttendance, error) {
+	var list []*domain.StudentRaporAttendance
+	q := r.db.WithContext(ctx).Model(&domain.StudentRaporAttendance{}).Order("student_name, student_id")
+
+	if className != "" {
+		cleaned := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(className, "Kelas"), "kelas"))
+		cleaned = strings.TrimSpace(cleaned)
+		classVariants := []string{className, cleaned, "Kelas " + cleaned}
+		roman := cleaned
+		if strings.HasPrefix(roman, "7") {
+			roman = strings.Replace(roman, "7", "VII-", 1)
+		} else if strings.HasPrefix(roman, "8") {
+			roman = strings.Replace(roman, "8", "VIII-", 1)
+		} else if strings.HasPrefix(roman, "9") {
+			roman = strings.Replace(roman, "9", "IX-", 1)
+		}
+		if roman != cleaned {
+			classVariants = append(classVariants, roman, "Kelas "+roman)
+		}
+		q = q.Where("class_name IN (?)", classVariants)
+	}
+
+	if academicYear != "" {
+		q = q.Where("academic_year = ?", academicYear)
+	}
+	if semester != "" {
+		q = q.Where("UPPER(semester) = ?", strings.ToUpper(semester))
+	}
+
+	err := q.Find(&list).Error
+	return list, err
+}
+
+func (r *repository) SaveRaporAttendances(ctx context.Context, attendances []*domain.StudentRaporAttendance) error {
+	if len(attendances) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "class_name"}, {Name: "academic_year"}, {Name: "semester"}, {Name: "student_id"},
+		},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"nisn", "student_name", "hadir", "sakit", "izin", "alfa", "updated_at",
+		}),
+	}).Create(&attendances).Error
+}
+

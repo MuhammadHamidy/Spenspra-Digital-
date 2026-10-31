@@ -235,15 +235,52 @@ type ReportEndorsement struct {
 
 func (ReportEndorsement) TableName() string { return "report_endorsements" }
 
-// ===== 4. Backup & Restore Data e-Rapor =====
+// ===== 4. Rekapitulasi Kehadiran Siswa di Rapor =====
+type StudentRaporAttendance struct {
+	ID           string    `json:"id" gorm:"primaryKey;column:id;type:varchar(64)"`
+	ClassName    string    `json:"class_name" gorm:"column:class_name;type:varchar(32);index:idx_rapor_att_class"`
+	AcademicYear string    `json:"academic_year" gorm:"column:academic_year;type:varchar(16);index:idx_rapor_att_class"`
+	Semester     string    `json:"semester" gorm:"column:semester;type:varchar(16);index:idx_rapor_att_class"`
+	StudentID    string    `json:"student_id" gorm:"column:student_id;type:varchar(64);index:idx_rapor_att_student"`
+	NISN         string    `json:"nisn" gorm:"column:nisn;type:varchar(32);index:idx_rapor_att_nisn"`
+	StudentName  string    `json:"student_name" gorm:"column:student_name;type:varchar(255)"`
+	Hadir        int       `json:"hadir" gorm:"column:hadir;default:0"`
+	Sakit        int       `json:"sakit" gorm:"column:sakit;default:0"`
+	Izin         int       `json:"izin" gorm:"column:izin;default:0"`
+	Alfa         int       `json:"alfa" gorm:"column:alfa;default:0"`
+	CreatedAt    time.Time `json:"created_at" gorm:"column:created_at"`
+	UpdatedAt    time.Time `json:"updated_at" gorm:"column:updated_at"`
+}
+
+func (StudentRaporAttendance) TableName() string { return "student_rapor_attendances" }
+
+type StudentRaporAttendanceItem struct {
+	StudentID   string `json:"student_id"`
+	NISN        string `json:"nisn"`
+	StudentName string `json:"student_name"`
+	Hadir       int    `json:"hadir"`
+	Sakit       int    `json:"sakit"`
+	Izin        int    `json:"izin"`
+	Alfa        int    `json:"alfa"`
+}
+
+type BulkRaporAttendanceRequest struct {
+	ClassName    string                       `json:"class_name"`
+	AcademicYear string                       `json:"academic_year"`
+	Semester     string                       `json:"semester"`
+	Attendances  []StudentRaporAttendanceItem `json:"attendances"`
+}
+
+// ===== 5. Backup & Restore Data e-Rapor =====
 type BackupData struct {
-	Version      string               `json:"version"`
-	ExportedAt   time.Time            `json:"exported_at"`
-	Grades       []*StudentGrade      `json:"grades"`
-	Locks        []*GradeLock         `json:"locks"`
-	Logs         []*GradeChangeLog    `json:"logs"`
-	Deadlines    []*GradeDeadline     `json:"deadlines"`
-	Endorsements []*ReportEndorsement `json:"endorsements"`
+	Version      string                    `json:"version"`
+	ExportedAt   time.Time                 `json:"exported_at"`
+	Grades       []*StudentGrade           `json:"grades"`
+	Locks        []*GradeLock              `json:"locks"`
+	Logs         []*GradeChangeLog         `json:"logs"`
+	Deadlines    []*GradeDeadline          `json:"deadlines"`
+	Endorsements []*ReportEndorsement      `json:"endorsements"`
+	Attendances  []*StudentRaporAttendance `json:"attendances,omitempty"`
 }
 
 type Repository interface {
@@ -263,6 +300,10 @@ type Repository interface {
 	// Pengesahan Rapor
 	GetEndorsements(ctx context.Context, academicYear, semester string) ([]*ReportEndorsement, error)
 	SaveEndorsement(ctx context.Context, endorsement *ReportEndorsement) error
+
+	// Rekap Kehadiran Rapor
+	GetRaporAttendances(ctx context.Context, className, academicYear, semester string) ([]*StudentRaporAttendance, error)
+	SaveRaporAttendances(ctx context.Context, attendances []*StudentRaporAttendance) error
 
 	// Backup & Restore
 	ExportBackup(ctx context.Context) (*BackupData, error)
@@ -290,6 +331,10 @@ type UseCase interface {
 	GetEndorsements(ctx context.Context, academicYear, semester string) ([]*ReportEndorsement, error)
 	SaveEndorsement(ctx context.Context, endorsement *ReportEndorsement) error
 
+	// Rekap Kehadiran Rapor
+	GetRaporAttendances(ctx context.Context, className, academicYear, semester string) ([]*StudentRaporAttendance, error)
+	SaveRaporAttendances(ctx context.Context, req BulkRaporAttendanceRequest) error
+
 	// Backup & Restore
 	ExportBackup(ctx context.Context) (*BackupData, error)
 	RestoreBackup(ctx context.Context, data *BackupData) error
@@ -297,4 +342,5 @@ type UseCase interface {
 	// Hapus / Reset Nilai
 	DeleteGrades(ctx context.Context, f GradeFilter, all bool) (int64, error)
 }
+
 

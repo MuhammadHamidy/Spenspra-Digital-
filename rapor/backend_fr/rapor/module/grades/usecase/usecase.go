@@ -342,3 +342,65 @@ func (u *useCase) DeleteGrades(ctx context.Context, f domain.GradeFilter, all bo
 	return u.repo.DeleteGrades(ctx, f, all)
 }
 
+// ===== Rekapitulasi Kehadiran Siswa di Rapor =====
+
+func (u *useCase) GetRaporAttendances(ctx context.Context, className, academicYear, semester string) ([]*domain.StudentRaporAttendance, error) {
+	return u.repo.GetRaporAttendances(ctx, className, academicYear, semester)
+}
+
+func (u *useCase) SaveRaporAttendances(ctx context.Context, req domain.BulkRaporAttendanceRequest) error {
+	if req.ClassName == "" {
+		return errors.New("class_name wajib diisi")
+	}
+	if req.AcademicYear == "" {
+		req.AcademicYear = "2025/2026"
+	}
+	if req.Semester == "" {
+		req.Semester = "GENAP"
+	}
+	req.Semester = strings.ToUpper(req.Semester)
+
+	now := time.Now()
+	cleanClass := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(req.ClassName, "Kelas"), "kelas"))
+	if cleanClass == "" {
+		cleanClass = req.ClassName
+	}
+
+	var list []*domain.StudentRaporAttendance
+	for _, item := range req.Attendances {
+		sid := strings.TrimSpace(item.StudentID)
+		if sid == "" {
+			sid = strings.TrimSpace(item.NISN)
+		}
+		if sid == "" {
+			continue
+		}
+
+		uniqueID := fmt.Sprintf("att_%s_%s_%s_%s",
+			cleanClass,
+			strings.ReplaceAll(req.AcademicYear, "/", "_"),
+			req.Semester,
+			sid,
+		)
+
+		list = append(list, &domain.StudentRaporAttendance{
+			ID:           uniqueID,
+			ClassName:    cleanClass,
+			AcademicYear: req.AcademicYear,
+			Semester:     req.Semester,
+			StudentID:    sid,
+			NISN:         item.NISN,
+			StudentName:  item.StudentName,
+			Hadir:        item.Hadir,
+			Sakit:        item.Sakit,
+			Izin:         item.Izin,
+			Alfa:         item.Alfa,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		})
+	}
+
+	return u.repo.SaveRaporAttendances(ctx, list)
+}
+
+

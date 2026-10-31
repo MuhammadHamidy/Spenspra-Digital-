@@ -103,6 +103,24 @@ export const gradeApi = {
     });
   },
 
+  // Rekap Kehadiran Rapor
+  getRaporAttendances: async (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.className) query.set('class_name', params.className);
+    if (params.academicYear) query.set('academic_year', params.academicYear);
+    if (params.semester) query.set('semester', params.semester);
+    const qs = query.toString();
+    return fetchJson(`/grades/attendance${qs ? `?${qs}` : ''}`);
+  },
+
+  saveRaporAttendances: async (payload) => {
+    return fetchJson('/grades/attendance', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+
   // Backup & Restore
   exportBackup: async () => {
     return fetchJson('/backup');

@@ -81,6 +81,13 @@ func (m *mockRepository) DeleteGrades(ctx context.Context, f domain.GradeFilter,
 func (m *mockRepository) DeleteByIDs(ctx context.Context, ids []string) error {
 	return nil
 }
+func (m *mockRepository) GetRaporAttendances(ctx context.Context, className, academicYear, semester string) ([]*domain.StudentRaporAttendance, error) {
+	return nil, nil
+}
+func (m *mockRepository) SaveRaporAttendances(ctx context.Context, attendances []*domain.StudentRaporAttendance) error {
+	return nil
+}
+
 
 func TestPredicateCalculation(t *testing.T) {
 	assert.Equal(t, "A", usecase.Predicate(95.0))

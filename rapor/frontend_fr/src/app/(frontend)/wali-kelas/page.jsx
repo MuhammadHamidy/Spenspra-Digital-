@@ -64,6 +64,7 @@ export default function WaliKelasRaporPage() {
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [tempAttendance, setTempAttendance] = useState({});
   const [attendanceSaveNotice, setAttendanceSaveNotice] = useState(false);
+  const [isSavingAttendance, setIsSavingAttendance] = useState(false);
   const [allTeachers, setAllTeachers] = useState([]);
 
   useEffect(() => {
@@ -303,7 +304,9 @@ export default function WaliKelasRaporPage() {
       const avgScore = scoreValues.length > 0 ? Number((totalScore / scoreValues.length).toFixed(1)) : 0;
       const isComplete = SUBJECT_COLUMNS.every((col) => student.scores[col.code] !== undefined);
       const isPassed = avgScore >= schoolKkm;
-      const att = attendanceMap[student.id] || { hadir: 58, sakit: 0, izin: 0, alfa: 0 };
+      const att = attendanceMap[student.id] ||
+                  (student.nisn && student.nisn !== '-' && attendanceMap[student.nisn]) ||
+                  { hadir: 58, sakit: 0, izin: 0, alfa: 0 };
 
       return {
         ...student,
@@ -411,44 +414,139 @@ export default function WaliKelasRaporPage() {
     });
   };
 
-  const attendanceStorageKey = `spenspra_attendance_${selectedClass}_${academicYear.replace('/', '_')}_${semester}`;
+  const fetchAttendance = useCallback(async (className, year, sem) => {
+    if (!className) return;
+    const cleanClass = className.replace(/^Kelas\s*/i, '').trim();
+    const currentYear = year || academicYear;
+    const currentSem = sem || semester;
+    const storageKey = `spenspra_attendance_${cleanClass}_${currentYear.replace('/', '_')}_${currentSem}`;
 
-  useEffect(() => {
-    if (!selectedClass) return;
+    let localData = {};
     try {
-      const stored = localStorage.getItem(`spenspra_attendance_${selectedClass}_${academicYear.replace('/', '_')}_${semester}`);
+      const stored = localStorage.getItem(storageKey);
       if (stored) {
-        setAttendanceMap(JSON.parse(stored));
+        localData = JSON.parse(stored) || {};
+      } else {
+        // Smart Recovery: cari apakah ada draf kehadiran kelas ini di key sebelumnya (misal beda tahun/semester)
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (k.startsWith(`spenspra_attendance_${cleanClass}`) || k.startsWith(`spenspra_attendance_Kelas ${cleanClass}`))) {
+            const candidate = JSON.parse(localStorage.getItem(k));
+            if (candidate && typeof candidate === 'object' && Object.keys(candidate).length > 0) {
+              localData = candidate;
+              break;
+            }
+          }
+        }
       }
     } catch (e) {}
-  }, [selectedClass, academicYear, semester]);
+
+    try {
+      const res = await gradeApi.getRaporAttendances({
+        className: cleanClass,
+        academicYear: currentYear,
+        semester: currentSem.toUpperCase(),
+      });
+      if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
+        const serverMap = {};
+        res.data.forEach((item) => {
+          const entry = {
+            hadir: Number(item.hadir) || 0,
+            sakit: Number(item.sakit) || 0,
+            izin: Number(item.izin) || 0,
+            alfa: Number(item.alfa) || 0,
+          };
+          if (item.student_id) serverMap[item.student_id] = entry;
+          if (item.nisn && item.nisn !== '-') serverMap[item.nisn] = entry;
+        });
+        const merged = { ...localData, ...serverMap };
+        setAttendanceMap(merged);
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(merged));
+        } catch (e) {}
+        return;
+      }
+    } catch (err) {
+      console.warn('Gagal memuat rekap kehadiran dari server:', err);
+    }
+
+    if (Object.keys(localData).length > 0) {
+      setAttendanceMap(localData);
+    } else {
+      setAttendanceMap({});
+    }
+  }, [academicYear, semester]);
+
+  useEffect(() => {
+    fetchAttendance(selectedClass, academicYear, semester);
+  }, [selectedClass, academicYear, semester, fetchAttendance]);
 
   const handleOpenAttendanceModal = () => {
     const initialMap = {};
     studentsSummary.forEach((s) => {
+      const att = attendanceMap[s.id] ||
+                  (s.nisn && s.nisn !== '-' && attendanceMap[s.nisn]) ||
+                  s.attendance ||
+                  { hadir: 58, sakit: 0, izin: 0, alfa: 0 };
       initialMap[s.id] = {
-        hadir: s.attendance?.hadir ?? 58,
-        sakit: s.attendance?.sakit ?? 0,
-        izin: s.attendance?.izin ?? 0,
-        alfa: s.attendance?.alfa ?? 0,
+        hadir: att?.hadir ?? 58,
+        sakit: att?.sakit ?? 0,
+        izin: att?.izin ?? 0,
+        alfa: att?.alfa ?? 0,
       };
     });
     setTempAttendance(initialMap);
     setIsAttendanceModalOpen(true);
   };
 
-  const handleSaveAttendance = () => {
+  const handleSaveAttendance = async () => {
+    if (!selectedClass) return;
+    const cleanClass = selectedClass.replace(/^Kelas\s*/i, '').trim();
     const updated = {
       ...attendanceMap,
       ...tempAttendance,
     };
     setAttendanceMap(updated);
+
+    const storageKey = `spenspra_attendance_${cleanClass}_${academicYear.replace('/', '_')}_${semester}`;
     try {
-      localStorage.setItem(attendanceStorageKey, JSON.stringify(updated));
+      localStorage.setItem(storageKey, JSON.stringify(updated));
     } catch (e) {}
-    setIsAttendanceModalOpen(false);
-    setAttendanceSaveNotice(true);
-    setTimeout(() => setAttendanceSaveNotice(false), 4000);
+
+    setIsSavingAttendance(true);
+    try {
+      const payload = {
+        class_name: cleanClass,
+        academic_year: academicYear,
+        semester: semester.toUpperCase(),
+        attendances: studentsSummary.map((s) => {
+          const item = tempAttendance[s.id] || updated[s.id] || (s.nisn && s.nisn !== '-' && updated[s.nisn]) || s.attendance || { hadir: 58, sakit: 0, izin: 0, alfa: 0 };
+          return {
+            student_id: s.id,
+            nisn: s.nisn && s.nisn !== '-' ? s.nisn : '',
+            student_name: s.name,
+            hadir: Number(item.hadir) || 0,
+            sakit: Number(item.sakit) || 0,
+            izin: Number(item.izin) || 0,
+            alfa: Number(item.alfa) || 0,
+          };
+        }),
+      };
+
+      const res = await gradeApi.saveRaporAttendances(payload);
+      if (res?.success) {
+        setAttendanceSaveNotice('Data kehadiran siswa berhasil disimpan permanen ke server database!');
+      } else {
+        setAttendanceSaveNotice('Data kehadiran tersimpan di cache lokal browser.');
+      }
+    } catch (err) {
+      console.warn('Gagal menyimpan kehadiran ke server:', err);
+      setAttendanceSaveNotice('Data kehadiran tersimpan di cache lokal browser (server offline).');
+    } finally {
+      setIsSavingAttendance(false);
+      setIsAttendanceModalOpen(false);
+      setTimeout(() => setAttendanceSaveNotice(false), 5000);
+    }
   };
 
   const updateTempAttendanceItem = (studentId, field, value) => {
@@ -566,7 +664,7 @@ export default function WaliKelasRaporPage() {
             <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
             </svg>
-            <span>Data kehadiran siswa berhasil disimpan dan otomatis masuk ke lembar Rapor Sisipan!</span>
+            <span>{typeof attendanceSaveNotice === 'string' ? attendanceSaveNotice : 'Data kehadiran siswa berhasil disimpan dan otomatis masuk ke lembar Rapor Sisipan!'}</span>
           </div>
           <button type="button" onClick={() => setAttendanceSaveNotice(false)} className="text-emerald-600 hover:text-emerald-800 font-bold cursor-pointer">✕</button>
         </div>
@@ -620,6 +718,7 @@ export default function WaliKelasRaporPage() {
         tempAttendance={tempAttendance}
         updateTempAttendanceItem={updateTempAttendanceItem}
         onSaveAttendance={handleSaveAttendance}
+        isSaving={isSavingAttendance}
       />
 
       {/* 6. Modal Pratinjau & Cetak Rapor Siswa (Lazy Loaded) */}
