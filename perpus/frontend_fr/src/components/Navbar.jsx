@@ -23,14 +23,14 @@ export default function Navbar({ onToggleMobileSidebar = () => {} }) {
 
   const getBreadcrumb = () => {
     if (pathname === '/pustakawan') return { section: 'Perpustakaan', sub: 'Dashboard Utama' };
-    if (pathname.startsWith('/pustakawan/absensi')) return { section: 'Sirkulasi', sub: 'Presensi Pengunjung' };
-    if (pathname.startsWith('/pustakawan/peminjaman')) return { section: 'Sirkulasi', sub: 'Meja Peminjaman Buku' };
+    if (pathname.startsWith('/pustakawan/absensi')) return { section: 'Sirkulasi', sub: 'Riwayat Pengunjung' };
+    if (pathname.startsWith('/pustakawan/peminjaman')) return { section: 'Sirkulasi', sub: 'Riwayat Peminjaman' };
     if (pathname.startsWith('/books/import')) return { section: 'Katalog Buku', sub: 'Import Data Massal' };
     if (pathname.startsWith('/books')) return { section: 'Katalog Buku', sub: 'Daftar & Barcode Eksemplar' };
     if (pathname.startsWith('/members')) return { section: 'Data Master', sub: 'Siswa & Guru Perpustakaan' };
-    if (pathname.startsWith('/visitors')) return { section: 'Laporan', sub: 'Tracking Pengunjung' };
+    if (pathname.startsWith('/visitors')) return { section: 'Sirkulasi', sub: 'Riwayat Pengunjung' };
     if (pathname.startsWith('/loans/tracking')) return { section: 'Sirkulasi', sub: 'Tanggungan & Denda' };
-    if (pathname.startsWith('/circulation')) return { section: 'Laporan', sub: 'Riwayat Peminjaman' };
+    if (pathname.startsWith('/circulation')) return { section: 'Sirkulasi', sub: 'Riwayat Peminjaman' };
     if (pathname.startsWith('/pustakawan/akun') || pathname.startsWith('/profile')) return { section: 'Pengaturan', sub: 'Akun Pustakawan' };
     return { section: 'Perpustakaan', sub: 'SMPN 1 Prambon' };
   };

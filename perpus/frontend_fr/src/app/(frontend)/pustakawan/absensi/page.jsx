@@ -1,473 +1,475 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import CameraBarcodeScanner, { playScannerBeep } from '@/components/perpus/CameraBarcodeScanner';
 import { attendanceApi } from '@/lib/features/library/api/attendanceApi';
-import { membersApi } from '@/lib/features/library/api/membersApi';
 import CircularProgress from '@mui/material/CircularProgress';
 
 export default function PustakawanAbsensiPage() {
-  const [activeTab, setActiveTab] = useState('SCAN'); // 'SCAN' | 'MANUAL'
-  const [selectedPurpose, setSelectedPurpose] = useState('MEMBACA');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [manualInput, setManualInput] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [selectedPurpose, setSelectedPurpose] = useState('ALL');
+  const [selectedDate, setSelectedDate] = useState(() => {
+    // Default hari ini format YYYY-MM-DD
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
 
-  // Anggota terdaftar & riwayat hari ini
-  const [members, setMembers] = useState([]);
-  const [todayLogs, setTodayLogs] = useState([]);
-  const [loadingLogs, setLoadingLogs] = useState(false);
-  const [lastDetectedPerson, setLastDetectedPerson] = useState(null);
+  const [stats, setStats] = useState({
+    today_visitors: 0,
+    member_visitors: 0,
+    guest_visitors: 0,
+    total_visits: 0,
+  });
 
-  // Filter & Search log
-  const [logSearch, setLogSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 15;
 
-  // Format tanggal hari ini
-  const todayDateStr = useMemo(() => {
-    return new Date().toLocaleDateString('id-ID', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-  }, []);
-
-  // Muat data anggota dan log presensi hari ini langsung dari backend
+  // Muat data riwayat kunjungan dan statistik
   const loadData = useCallback(async () => {
-    setLoadingLogs(true);
+    setLoading(true);
     try {
-      const todayISO = new Date().toISOString().split('T')[0];
-      const [membersRes, attRes] = await Promise.allSettled([
-        membersApi.getMembers(),
-        attendanceApi.getAttendances('', todayISO),
+      const [attRes, statsRes] = await Promise.allSettled([
+        attendanceApi.getAttendances(search, selectedDate),
+        attendanceApi.getAttendanceStats(),
       ]);
 
-      if (membersRes.status === 'fulfilled' && Array.isArray(membersRes.value)) {
-        setMembers(membersRes.value);
+      let logList = attRes.status === 'fulfilled' && Array.isArray(attRes.value) ? attRes.value : [];
+
+      // Sort log dari yang paling baru
+      logList.sort((a, b) => {
+        const timeA = new Date(a.visited_at || a.created_at || a.timestamp || 0).getTime();
+        const timeB = new Date(b.visited_at || b.created_at || b.timestamp || 0).getTime();
+        return timeB - timeA;
+      });
+
+      setLogs(logList);
+
+      if (statsRes.status === 'fulfilled' && statsRes.value) {
+        setStats(statsRes.value);
       }
-
-      let logs = attRes.status === 'fulfilled' && Array.isArray(attRes.value) ? attRes.value : [];
-
-      // Sort logs dari yang paling baru
-      logs.sort((a, b) => new Date(b.created_at || b.timestamp || 0) - new Date(a.created_at || a.timestamp || 0));
-      setTodayLogs(logs);
     } catch (err) {
-      console.warn('Gagal memuat log presensi:', err);
+      console.warn('Gagal memuat log pengunjung:', err);
     } finally {
-      setLoadingLogs(false);
+      setLoading(false);
     }
-  }, []);
+  }, [search, selectedDate]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  // Eksekusi presensi siswa/pengunjung
-  const handleProcessAttendance = async (barcodeOrId) => {
-    const clean = String(barcodeOrId).trim();
-    if (!clean) return;
+  // Filter logs berdasarkan keperluan
+  const filteredLogs = useMemo(() => {
+    let result = logs;
 
-    setIsProcessing(true);
-    setErrorMsg('');
-    setSuccessMsg('');
+    if (selectedPurpose !== 'ALL') {
+      result = result.filter((l) => {
+        const p = (l.purpose || '').toUpperCase();
+        if (selectedPurpose === 'MEMBACA') return p === 'MEMBACA' || p.includes('BACA');
+        if (selectedPurpose === 'PINJAM') return p === 'PINJAM' || p === 'PEMINJAMAN' || p.includes('PINJAM') || p.includes('KEMBALI');
+        if (selectedPurpose === 'BELAJAR') return p === 'BELAJAR' || p === 'BELAJAR_BERSAMA' || p.includes('BELAJAR') || p.includes('PEMBELAJARAN');
+        if (selectedPurpose === 'TAMU') return p === 'TAMU' || p.includes('TAMU') || p.includes('UMUM');
+        return true;
+      });
+    }
 
-    try {
-      // 1. Cari data anggota terdaftar
-      let matchedMember = members.find(
-        (m) =>
-          (m.barcode_token && m.barcode_token.toLowerCase() === clean.toLowerCase()) ||
-          (m.identity_number && m.identity_number.toLowerCase() === clean.toLowerCase()) ||
-          (m.member_code && m.member_code.toLowerCase() === clean.toLowerCase())
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((l) => {
+        const name = (l.visitor_name || l.name || l.full_name || '').toLowerCase();
+        const idNum = (l.identity_number || l.studentId || l.nisn || l.nip || '').toLowerCase();
+        const cls = (l.class_name || l.className || '').toLowerCase();
+        return name.includes(q) || idNum.includes(q) || cls.includes(q);
+      });
+    }
+
+    return result;
+  }, [logs, selectedPurpose, search]);
+
+  // Pagination calculation
+  const totalItems = filteredLogs.length;
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
+  const paginatedLogs = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredLogs.slice(start, start + pageSize);
+  }, [filteredLogs, currentPage, pageSize]);
+
+  // Helper badge keperluan
+  const renderPurposeBadge = (purpose) => {
+    const p = (purpose || 'MEMBACA').toUpperCase();
+    if (p.includes('PINJAM') || p.includes('KEMBALI')) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/80">
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+          </svg>
+          Meminjam / Kembali
+        </span>
       );
+    }
+    if (p.includes('BELAJAR') || p.includes('PEMBELAJARAN')) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200/80">
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          </svg>
+          Belajar Bersama
+        </span>
+      );
+    }
+    if (p.includes('TAMU') || p.includes('UMUM')) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/80">
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          Tamu / Umum
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+        </svg>
+        Membaca Buku
+      </span>
+    );
+  };
 
-      // 2. Kirim pencatatan presensi langsung ke backend API
-      const payload = {
-        barcode_token: clean,
-        visitor_name: matchedMember ? (matchedMember.full_name || matchedMember.name) : clean,
-        visitor_type: matchedMember ? (matchedMember.member_type || 'MEMBER') : 'MEMBER',
-        purpose: selectedPurpose,
-        method: 'BARCODE_SCAN',
-        notes: `Presensi Petugas Perpustakaan - ${selectedPurpose}`,
-      };
-
-      const recordResult = await attendanceApi.recordManualVisit(payload);
-
-      const visitorName = recordResult?.visitor_name || (matchedMember ? (matchedMember.full_name || matchedMember.name) : clean);
-      const newLogItem = {
-        id: recordResult?.id || `att-${Date.now()}`,
-        name: visitorName,
-        visitor_name: visitorName,
-        studentId: matchedMember?.id || clean,
-        identityNumber: matchedMember?.identity_number || clean,
-        className: matchedMember?.class_name || 'Civitas Spenspra',
-        purpose: selectedPurpose,
-        method: 'BARCODE_SCAN',
-        timestamp: recordResult?.created_at || new Date().toISOString(),
-        created_at: recordResult?.created_at || new Date().toISOString(),
-        notes: `Presensi Petugas Perpustakaan`,
-      };
-
-      setTodayLogs((prev) => [newLogItem, ...prev]);
-      setLastDetectedPerson(newLogItem);
-
-      playScannerBeep();
-      setSuccessMsg(`Presensi berhasil: ${visitorName} (${selectedPurpose})`);
-      setManualInput('');
-
-      setTimeout(() => {
-        setSuccessMsg('');
-      }, 4000);
-    } catch (err) {
-      console.error('Error saat mencatat presensi:', err);
-      setErrorMsg(err.message || 'Gagal memproses presensi. Pastikan kode barcode terdaftar.');
-    } finally {
-      setIsProcessing(false);
+  // Helper format tanggal dan jam WIB
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return '-';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return String(dateStr);
+      const datePart = d.toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+      const timePart = d.toLocaleTimeString('id-ID', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      return `${datePart} • ${timePart} WIB`;
+    } catch {
+      return String(dateStr);
     }
   };
 
-  const filteredTodayLogs = useMemo(() => {
-    if (!logSearch.trim()) return todayLogs;
-    const q = logSearch.toLowerCase();
-    return todayLogs.filter(
-      (l) =>
-        (l.visitor_name && l.visitor_name.toLowerCase().includes(q)) ||
-        (l.name && l.name.toLowerCase().includes(q)) ||
-        (l.purpose && l.purpose.toLowerCase().includes(q)) ||
-        (l.className && l.className.toLowerCase().includes(q))
-    );
-  }, [todayLogs, logSearch]);
-
-  const purposeOptions = [
-    {
-      id: 'MEMBACA',
-      label: 'Membaca',
-      desc: 'Membaca buku di ruang baca',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-        </svg>
-      ),
-    },
-    {
-      id: 'PEMINJAMAN',
-      label: 'Meminjam / Kembali',
-      desc: 'Sirkulasi buku koleksi',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-        </svg>
-      ),
-    },
-    {
-      id: 'PEMBELAJARAN',
-      label: 'Belajar Bersama',
-      desc: 'Tugas & aktivitas kelas',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-        </svg>
-      ),
-    },
-    {
-      id: 'TAMU',
-      label: 'Tamu / Umum',
-      desc: 'Kunjungan pihak luar',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-        </svg>
-      ),
-    },
-  ];
-
   return (
-    <div className="space-y-6 max-w-7xl mx-auto w-full">
-      {/* Header Halaman (Bersih, tanpa duplikasi breadcrumb) */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-xl border border-slate-200/80 shadow-2xs">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12 font-sans">
+      {/* Header Halaman */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-[#EDEAF5] text-[#4B3B78]">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-              </svg>
-            </span>
-            <span>Absensi Pengunjung Perpustakaan</span>
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#EDEAF5] text-[#4B3B78] uppercase tracking-wider mb-2">
+            Sirkulasi Kunjungan
+          </div>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            Riwayat Pengunjung Perpustakaan
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            {todayDateStr} • Catat kehadiran siswa, guru, atau tamu perpustakaan secara digital via scanner maupun input langsung.
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Data kehadiran dan aktivitas kunjungan civitas SMP Negeri 1 Prambon di perpustakaan.
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={loadData}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-xs transition cursor-pointer"
+          >
+            <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>Segarkan Data</span>
+          </button>
         </div>
       </div>
 
-      {/* Toast Notifikasi Sukses / Error */}
-      {successMsg && (
-        <div className="p-3.5 rounded-xl bg-emerald-600 text-white text-xs sm:text-sm font-semibold shadow-xs flex items-center gap-3">
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
-          </svg>
-          <span className="flex-1">{successMsg}</span>
-          <button type="button" onClick={() => setSuccessMsg('')} className="hover:opacity-75 cursor-pointer">
-            ✕
-          </button>
-        </div>
-      )}
-
-      {errorMsg && (
-        <div className="p-3.5 rounded-xl bg-rose-600 text-white text-xs sm:text-sm font-semibold shadow-xs flex items-center gap-3">
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <span className="flex-1">{errorMsg}</span>
-          <button type="button" onClick={() => setErrorMsg('')} className="hover:opacity-75 cursor-pointer">
-            ✕
-          </button>
-        </div>
-      )}
-
-      {/* Grid Utama: Kiri Scanner & Form, Kanan Log Pengunjung */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Kolom Kiri: Form & Scanner (7 Kolom) */}
-        <div className="lg:col-span-7 bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5 sm:p-6 space-y-6">
-          {/* 1. Keperluan Kunjungan (e-Rapor Style Pills) */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2.5">
-              1. Pilih Keperluan Kunjungan
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              {purposeOptions.map((p) => {
-                const isSelected = selectedPurpose === p.id;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setSelectedPurpose(p.id)}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                      isSelected
-                        ? 'bg-[#EDEAF5] border-[#4B3B78] text-[#3D2E66] font-bold shadow-2xs'
-                        : 'bg-slate-50/70 border-slate-200 text-slate-600 hover:bg-[#FAF9FD] hover:border-slate-300'
-                    }`}
-                  >
-                    <div className={`p-1.5 rounded-lg w-fit mb-2 ${isSelected ? 'bg-[#4B3B78] text-white' : 'bg-white text-slate-500 border border-slate-200/80'}`}>
-                      {p.icon}
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold">{p.label}</div>
-                      <div className="text-[10px] text-slate-400 font-normal mt-0.5">{p.desc}</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 2. Pindai Barcode / Input Manual */}
-          <div>
-            <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                2. Pindai Kartu Siswa / Barcode
-              </label>
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg text-xs font-semibold">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('SCAN')}
-                  className={`px-3 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
-                    activeTab === 'SCAN'
-                      ? 'bg-white text-[#4B3B78] font-bold shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  <span>Kamera Scanner</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('MANUAL')}
-                  className={`px-3 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
-                    activeTab === 'MANUAL'
-                      ? 'bg-white text-[#4B3B78] font-bold shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  <span>Input Manual / Barcode Gun</span>
-                </button>
-              </div>
-            </div>
-
-            {activeTab === 'SCAN' ? (
-              <div className="space-y-3">
-                <div className="relative w-full h-80 rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner">
-                  <CameraBarcodeScanner
-                    isScanning={!isProcessing}
-                    onScan={(barcode) => handleProcessAttendance(barcode)}
-                  />
-                </div>
-                <p className="text-[11px] text-slate-500 text-center">
-                  Arahkan QR code kartu pelajar siswa atau barcode fisik tepat di depan kamera scanner.
-                </p>
-              </div>
-            ) : (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleProcessAttendance(manualInput);
-                }}
-                className="space-y-4"
-              >
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                    Masukkan NISN / Kode Anggota / Barcode:
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Contoh: MBR-2026-0001 atau NISN 0081234567..."
-                      value={manualInput}
-                      onChange={(e) => setManualInput(e.target.value)}
-                      className="flex-1 px-3.5 py-2 rounded-lg border border-slate-300 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#4B3B78] focus:border-transparent transition-all"
-                      autoFocus
-                    />
-                    <button
-                      type="submit"
-                      disabled={!manualInput.trim() || isProcessing}
-                      className="px-4 py-2 rounded-lg bg-[#4B3B78] hover:bg-[#3D2E66] disabled:bg-slate-300 text-white text-xs font-bold transition shadow-2xs cursor-pointer flex items-center gap-1.5"
-                    >
-                      {isProcessing ? <CircularProgress size={16} sx={{ color: 'white' }} /> : 'Catat Presensi'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Pilih Cepat dari Siswa Terdaftar */}
-                {members.length > 0 && (
-                  <div className="pt-2 border-t border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                      Pilih Cepat Siswa / Guru:
-                    </span>
-                    <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
-                      {members.slice(0, 8).map((m) => (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => handleProcessAttendance(m.barcode_token || m.identity_number || m.member_code || m.id)}
-                          className="px-2.5 py-1 rounded-md bg-slate-50 hover:bg-[#EDEAF5] border border-slate-200 hover:border-[#4B3B78] text-slate-700 hover:text-[#3D2E66] text-[11px] font-medium transition cursor-pointer"
-                        >
-                          {m.full_name || m.name} ({m.class_name || 'Civitas'})
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </form>
-            )}
-          </div>
-
-          {/* Banner Siswa Terakhir Yang Tercatat */}
-          {lastDetectedPerson && (
-            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
-                ✓
-              </div>
-              <div className="flex-1 min-w-0">
-                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">
-                  Presensi Terakhir Berhasil
-                </span>
-                <h4 className="text-xs font-bold text-slate-900 truncate">
-                  {lastDetectedPerson.visitor_name}
-                </h4>
-                <p className="text-[11px] text-slate-500">
-                  Kelas: {lastDetectedPerson.className || '-'} • Keperluan: {lastDetectedPerson.purpose}
-                </p>
-              </div>
-              <span className="text-[11px] font-mono text-emerald-800 bg-white px-2 py-1 rounded-md border border-emerald-200 shrink-0">
-                {new Date(lastDetectedPerson.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Kolom Kanan: Log Kehadiran Hari Ini (5 Kolom) */}
-        <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">Pengunjung Hari Ini</h3>
-              <p className="text-[11px] text-slate-400">Total {todayLogs.length} kunjungan tercatat</p>
-            </div>
-            <button
-              type="button"
-              onClick={loadData}
-              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 text-xs font-medium transition cursor-pointer flex items-center gap-1"
-              title="Segarkan data log pengunjung"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      {/* 4 Kartu Ringkasan Kunjungan */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              Total Pengunjung
+            </span>
+            <div className="w-10 h-10 rounded-xl bg-purple-50 text-[#4B3B78] flex items-center justify-center font-bold">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-              <span>Refresh</span>
-            </button>
+            </div>
           </div>
+          <div className="mt-3">
+            <h3 className="text-2xl font-bold text-slate-900">{filteredLogs.length}</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Sesuai filter tanggal & pencarian</p>
+          </div>
+        </div>
 
-          {/* Search Log Pengunjung */}
-          <div className="relative">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              Siswa & Anggota
+            </span>
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+          </div>
+          <div className="mt-3">
+            <h3 className="text-2xl font-bold text-slate-900">
+              {filteredLogs.filter((l) => (l.visitor_type || '').toUpperCase() !== 'GUEST').length}
+            </h3>
+            <p className="text-xs text-emerald-600 font-semibold mt-0.5">Civitas Terdaftar</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              Keperluan Membaca
+            </span>
+            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+            </div>
+          </div>
+          <div className="mt-3">
+            <h3 className="text-2xl font-bold text-slate-900">
+              {filteredLogs.filter((l) => (l.purpose || '').toUpperCase().includes('BACA') || (l.purpose || '').toUpperCase() === 'MEMBACA').length}
+            </h3>
+            <p className="text-xs text-blue-600 font-semibold mt-0.5">Ruang Baca & Literasi</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              Tamu & Umum
+            </span>
+            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+              </svg>
+            </div>
+          </div>
+          <div className="mt-3">
+            <h3 className="text-2xl font-bold text-slate-900">
+              {filteredLogs.filter((l) => (l.visitor_type || '').toUpperCase() === 'GUEST' || (l.purpose || '').toUpperCase().includes('TAMU')).length}
+            </h3>
+            <p className="text-xs text-amber-600 font-semibold mt-0.5">Kunjungan Eksternal</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Kontrol Pencarian & Filter */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+          {/* Input Pencarian */}
+          <div className="sm:col-span-5 relative">
             <input
               type="text"
-              placeholder="Cari nama pengunjung..."
-              value={logSearch}
-              onChange={(e) => setLogSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B3B78] focus:border-transparent"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Cari nama pengunjung, NISN, NIP, atau kelas..."
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#4B3B78]/20 focus:border-[#4B3B78] transition"
             />
-            <svg className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
 
-          {/* List Log Pengunjung Real-time */}
-          {loadingLogs ? (
-            <div className="py-12 flex flex-col items-center justify-center gap-2">
-              <CircularProgress size={22} sx={{ color: '#4B3B78' }} />
-              <span className="text-xs text-slate-400">Memuat data log hari ini...</span>
-            </div>
-          ) : filteredTodayLogs.length === 0 ? (
-            <div className="py-12 text-center text-slate-400 text-xs">
-              Belum ada pengunjung yang tercatat hari ini.
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1 divide-y divide-slate-100">
-              {filteredTodayLogs.map((log, index) => {
-                const timeStr = log.timestamp || log.created_at;
-                const dateObj = timeStr ? new Date(timeStr) : null;
-                const formattedTime = dateObj && !isNaN(dateObj.getTime())
-                  ? `${dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB`
-                  : null;
+          {/* Filter Keperluan */}
+          <div className="sm:col-span-4">
+            <select
+              value={selectedPurpose}
+              onChange={(e) => {
+                setSelectedPurpose(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#4B3B78]/20 focus:border-[#4B3B78] transition"
+            >
+              <option value="ALL">Semua Keperluan Kunjungan</option>
+              <option value="MEMBACA">Membaca Buku di Perpustakaan</option>
+              <option value="PINJAM">Meminjam / Mengembalikan Buku</option>
+              <option value="BELAJAR">Belajar Bersama / Kelas</option>
+              <option value="TAMU">Tamu / Kunjungan Umum</option>
+            </select>
+          </div>
 
-                return (
-                  <div key={log.id || index} className="pt-2.5 first:pt-0 flex items-center justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <h4 className="text-xs font-bold text-slate-800 truncate" title={log.visitor_name || log.name}>
-                        {log.visitor_name || log.name || 'Pengunjung Perpustakaan'}
-                      </h4>
-                      <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
-                        <span className="font-semibold text-[#4B3B78]">{log.purpose || 'MEMBACA'}</span>
-                        <span>•</span>
-                        <span>{log.className || log.notes || 'Siswa'}</span>
-                      </div>
-                    </div>
-
-                    {formattedTime && (
-                      <span className="text-[10px] font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md shrink-0">
-                        {formattedTime}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {/* Filter Tanggal */}
+          <div className="sm:col-span-3 flex items-center gap-2">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => {
+                setSelectedDate(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#4B3B78]/20 focus:border-[#4B3B78] transition"
+            />
+            {selectedDate && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedDate('');
+                  setCurrentPage(1);
+                }}
+                className="px-2.5 py-2 text-xs font-semibold text-slate-500 hover:text-red-600 hover:bg-slate-100 rounded-lg transition"
+                title="Tampilkan Semua Tanggal"
+              >
+                Reset
+              </button>
+            )}
+          </div>
         </div>
+      </div>
+
+      {/* Tabel Data Pengunjung */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <th className="py-3.5 px-4 w-12 text-center">No</th>
+                <th className="py-3.5 px-4">Nama Pengunjung</th>
+                <th className="py-3.5 px-4">Identitas & Kelas</th>
+                <th className="py-3.5 px-4">Keperluan Kunjungan</th>
+                <th className="py-3.5 px-4">Metode Presensi</th>
+                <th className="py-3.5 px-4">Waktu Berkunjung</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs">
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center">
+                    <div className="flex flex-col items-center justify-center gap-2.5">
+                      <CircularProgress size={28} sx={{ color: '#4B3B78' }} />
+                      <p className="text-xs text-slate-400 font-semibold">Memuat riwayat pengunjung perpustakaan...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginatedLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center">
+                    <div className="max-w-sm mx-auto space-y-2">
+                      <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                        </svg>
+                      </div>
+                      <p className="text-sm font-bold text-slate-700">Tidak Ada Kunjungan Tercatat</p>
+                      <p className="text-xs text-slate-400">
+                        {selectedDate
+                          ? `Belum ada pengunjung yang terdata pada tanggal ${selectedDate}.`
+                          : 'Belum ada data kunjungan yang sesuai dengan kata kunci pencarian.'}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                paginatedLogs.map((log, index) => {
+                  const visitorName = log.visitor_name || log.name || log.full_name || 'Pengunjung Perpustakaan';
+                  const idNum = log.identity_number || log.studentId || log.nisn || log.nip || '-';
+                  const className = log.class_name || log.className || (log.visitor_type === 'GUEST' ? 'Tamu Luar' : 'Siswa');
+                  const method = (log.method || 'SCAN').toUpperCase();
+                  const rowNumber = (currentPage - 1) * pageSize + index + 1;
+
+                  return (
+                    <tr key={log.id || index} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="py-3.5 px-4 text-center font-medium text-slate-400">
+                        {rowNumber}
+                      </td>
+                      <td className="py-3.5 px-4 font-semibold text-slate-900">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-[#EDEAF5] text-[#4B3B78] flex items-center justify-center font-bold text-xs shrink-0">
+                            {visitorName.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-slate-900 leading-tight">{visitorName}</p>
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              ID: {idNum}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700">
+                          {className}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {renderPurposeBadge(log.purpose)}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                          {method.includes('FACE') ? (
+                            <>
+                              <svg className="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              Face Scan
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                              </svg>
+                              Barcode Card
+                            </>
+                          )}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-600 font-medium">
+                        {formatDateTime(log.visited_at || log.created_at || log.timestamp)}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer Pagination */}
+        {!loading && filteredLogs.length > pageSize && (
+          <div className="px-5 py-4 bg-slate-50/80 border-t border-slate-200 flex items-center justify-between">
+            <span className="text-xs text-slate-500">
+              Menampilkan {paginatedLogs.length} dari {totalItems} kunjungan
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                Sebelumnya
+              </button>
+              <span className="px-3 py-1 text-xs font-bold text-slate-700">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                Selanjutnya
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
