@@ -15,7 +15,8 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
   const [stream, setStream] = useState(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [error, setError] = useState(null);
-  const [facingMode, setFacingMode] = useState('environment'); // Default to rear camera on mobile for autofocus
+  const [facingMode, setFacingMode] = useState('user'); // Default to front/user camera for laptop webcams
+  const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
   const [isSwitchingCamera, setIsSwitchingCamera] = useState(false);
   const [lastScannedCode, setLastScannedCode] = useState('');
   const [justScanned, setJustScanned] = useState(false);
@@ -43,28 +44,46 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
   }, [stream]);
 
   const startCamera = useCallback(
-    async (targetMode = facingMode) => {
+    async (targetMode) => {
       setError(null);
       try {
         if (stream) {
           stream.getTracks().forEach((t) => t.stop());
         }
 
-        let mediaStream;
+        // Deteksi apakah user menggunakan perangkat mobile (HP/Tablet) vs PC/Laptop
+        const isMobile = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        // 1. Deteksi apakah perangkat memiliki beberapa kamera
+        let videoDevices = [];
+        try {
+          if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            videoDevices = devices.filter((d) => d.kind === 'videoinput');
+          }
+        } catch {}
+
+        const multi = videoDevices.length > 1;
+        setHasMultipleCameras(multi);
+
+        // Pada Laptop/PC: Selalu utamakan 'user' (webcam). Pada HP: utamakan 'environment' (kamera belakang)
+        const chosenFacing = targetMode || (isMobile && multi ? 'environment' : 'user');
+
+        let mediaStream = null;
         try {
           mediaStream = await navigator.mediaDevices.getUserMedia({
             video: {
-              facingMode: { ideal: targetMode },
+              facingMode: { ideal: chosenFacing },
               width: { ideal: 1280, min: 640 },
               height: { ideal: 720, min: 480 },
             },
             audio: false,
           });
         } catch {
-          // Fallback tanpa constraint width/height
+          // Fallback tanpa constraint resolusi
           try {
             mediaStream = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: targetMode },
+              video: { facingMode: chosenFacing },
               audio: false,
             });
           } catch {
@@ -77,11 +96,15 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
 
         setStream(mediaStream);
         setCameraActive(true);
-        setFacingMode(targetMode);
+        setFacingMode(chosenFacing);
 
         if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-          videoRef.current.play().catch(() => {});
+          const video = videoRef.current;
+          video.srcObject = mediaStream;
+          video.setAttribute('playsinline', 'true');
+          video.setAttribute('autoplay', 'true');
+          video.muted = true;
+          video.play().catch(() => {});
         }
       } catch (err) {
         console.warn('Barcode camera access error:', err);
@@ -91,7 +114,7 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
         setIsSwitchingCamera(false);
       }
     },
-    [facingMode, stream]
+    [stream]
   );
 
   const switchCamera = useCallback(async () => {
@@ -345,6 +368,7 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
     cameraActive,
     error,
     facingMode,
+    hasMultipleCameras,
     isSwitchingCamera,
     lastScannedCode,
     justScanned,

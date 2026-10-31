@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import CameraBarcodeScanner from './CameraBarcodeScanner';
 import VisitorProfileCard from './VisitorProfileCard';
 import AttendanceStepsGuide from './AttendanceStepsGuide';
+import AppIcon from '@/components/AppIcon';
 
 export default function PerpusAttendanceScreen({
   selectedPurpose,
@@ -91,12 +92,16 @@ export default function PerpusAttendanceScreen({
         </button>
 
         <div className={`px-3 py-2 rounded-xl text-xs font-bold border flex items-center gap-1.5 ${purposeColor}`}>
-          <span>
-            {selectedPurpose === 'PEMBELAJARAN' ? '🎓'
-              : selectedPurpose === 'TAMU' ? '🤝'
-              : activeBarcodeMode === 'KEMBALI' ? '🔄'
-              : '📚'}
-          </span>
+          <AppIcon
+            name={
+              selectedPurpose === 'PEMBELAJARAN' ? 'graduation'
+              : selectedPurpose === 'TAMU' ? 'human'
+              : activeBarcodeMode === 'KEMBALI' ? 'sync'
+              : 'course'
+            }
+            color="blue"
+            size={16}
+          />
           <span>{purposeName}</span>
         </div>
 
@@ -175,8 +180,8 @@ export default function PerpusAttendanceScreen({
               </div>
             ) : (
               <div className="w-full aspect-[4/3] rounded-2xl bg-slate-50 border border-slate-200 flex flex-col items-center justify-center p-6 text-center space-y-4">
-                <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#0084FF] flex items-center justify-center text-2xl shadow-xs">
-                  ⌨️
+                <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#0084FF] flex items-center justify-center shadow-xs">
+                  <AppIcon name="computer" color="blue" size={28} />
                 </div>
                 <div className="space-y-1 max-w-sm">
                   <h4 className="text-base font-black text-slate-800">Input Kode QR / NISN / NIP</h4>

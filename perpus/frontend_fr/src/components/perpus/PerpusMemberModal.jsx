@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import AppIcon from '@/components/AppIcon';
 
 export default function PerpusMemberModal({
   showMemberModal,
@@ -30,7 +31,7 @@ export default function PerpusMemberModal({
             onClick={() => setShowMemberModal(false)}
             className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
           >
-            ✕
+            <AppIcon name="close-cancel" color="grey" size={14} />
           </button>
         </div>
 

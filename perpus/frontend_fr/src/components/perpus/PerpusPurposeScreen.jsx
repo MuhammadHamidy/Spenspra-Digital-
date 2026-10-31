@@ -1,14 +1,15 @@
 'use client';
 
 import React from 'react';
+import AppIcon from '@/components/AppIcon';
 
 export default function PerpusPurposeScreen({ handleSelectPurpose }) {
   return (
     <div className="w-full max-w-6xl flex flex-col items-center py-6 sm:py-12 space-y-8 animate-in fade-in zoom-in-95 duration-200 mx-auto px-4">
       {/* Header Hero */}
       <div className="text-center space-y-2.5 max-w-2xl">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-[#0066CC] text-xs font-bold mb-1">
-          <span>🏛️</span>
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-[#0066CC] text-xs font-bold mb-1">
+          <AppIcon name="building" color="blue" size={16} />
           <span>Layanan Mandiri Perpustakaan SMPN 1 Prambon</span>
         </div>
         <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-[#0A1931] tracking-tight leading-tight">
@@ -27,8 +28,8 @@ export default function PerpusPurposeScreen({ handleSelectPurpose }) {
           className="group relative bg-white rounded-3xl p-6 sm:p-7 border-2 border-slate-200/90 hover:border-blue-500 shadow-sm hover:shadow-xl transition-all duration-200 cursor-pointer flex flex-col justify-between"
         >
           <div>
-            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-2xl mb-5 group-hover:scale-105 transition-transform shadow-xs">
-              📚
+            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-5 group-hover:scale-105 transition-transform shadow-xs">
+              <AppIcon name="course" color="blue" size={28} />
             </div>
             <h3 className="text-lg sm:text-xl font-black text-[#0A1931] group-hover:text-blue-600 transition-colors">
               Peminjaman Buku
@@ -54,8 +55,8 @@ export default function PerpusPurposeScreen({ handleSelectPurpose }) {
           className="group relative bg-white rounded-3xl p-6 sm:p-7 border-2 border-slate-200/90 hover:border-amber-500 shadow-sm hover:shadow-xl transition-all duration-200 cursor-pointer flex flex-col justify-between"
         >
           <div>
-            <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center text-2xl mb-5 group-hover:scale-105 transition-transform shadow-xs">
-              🔄
+            <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mb-5 group-hover:scale-105 transition-transform shadow-xs">
+              <AppIcon name="sync" color="blue" size={28} />
             </div>
             <h3 className="text-lg sm:text-xl font-black text-[#0A1931] group-hover:text-amber-600 transition-colors">
               Pengembalian Buku
@@ -81,8 +82,8 @@ export default function PerpusPurposeScreen({ handleSelectPurpose }) {
           className="group relative bg-white rounded-3xl p-6 sm:p-7 border-2 border-slate-200/90 hover:border-indigo-500 shadow-sm hover:shadow-xl transition-all duration-200 cursor-pointer flex flex-col justify-between"
         >
           <div>
-            <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-2xl mb-5 group-hover:scale-105 transition-transform shadow-xs">
-              📖
+            <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-5 group-hover:scale-105 transition-transform shadow-xs">
+              <AppIcon name="document-book" color="blue" size={28} />
             </div>
             <h3 className="text-lg sm:text-xl font-black text-[#0A1931] group-hover:text-indigo-600 transition-colors">
               Membaca di Tempat
@@ -108,8 +109,8 @@ export default function PerpusPurposeScreen({ handleSelectPurpose }) {
           className="group relative bg-white rounded-3xl p-6 sm:p-7 border-2 border-slate-200/90 hover:border-emerald-500 shadow-sm hover:shadow-xl transition-all duration-200 cursor-pointer flex flex-col justify-between"
         >
           <div>
-            <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-2xl mb-5 group-hover:scale-105 transition-transform shadow-xs">
-              🎓
+            <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-5 group-hover:scale-105 transition-transform shadow-xs">
+              <AppIcon name="graduation" color="green" size={28} />
             </div>
             <h3 className="text-lg sm:text-xl font-black text-[#0A1931] group-hover:text-emerald-600 transition-colors">
               Belajar di Kelas / Literasi
@@ -137,10 +138,11 @@ export default function PerpusPurposeScreen({ handleSelectPurpose }) {
           onClick={() => handleSelectPurpose('TAMU')}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-600 hover:text-slate-900 text-xs font-semibold transition-all shadow-2xs cursor-pointer"
         >
-          <span>🤝</span>
+          <AppIcon name="human" color="blue" size={16} />
           <span>Kunjungan Tamu Dinas / Wali Murid / Alumni Umum &rarr;</span>
         </button>
       </div>
+    </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import CameraBarcodeScanner from '@/components/perpus/CameraBarcodeScanner';
+import AppIcon from '@/components/AppIcon';
 
 export default function PerpusBookScanScreen({
   currentScreen,
@@ -185,8 +186,8 @@ export default function PerpusBookScanScreen({
               <div className="my-4 space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
                 {(detectedStudent?.activeLoans || []).length === 0 ? (
                   <div className="py-10 text-center text-slate-400 space-y-2">
-                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto text-xl font-bold">
-                      ✅
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-xs">
+                      <AppIcon name="tick" color="green" size={24} />
                     </div>
                     <p className="text-xs font-bold text-slate-700">Tidak Ada Tanggungan Buku</p>
                     <p className="text-[11px] text-slate-400 max-w-[220px] mx-auto leading-relaxed">
@@ -252,8 +253,8 @@ export default function PerpusBookScanScreen({
               <div className="my-4 space-y-3 max-h-[380px] overflow-y-auto pr-1">
                 {scannedBooks.length === 0 ? (
                   <div className="py-12 text-center text-slate-400 space-y-2">
-                    <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-300 flex items-center justify-center mx-auto text-2xl">
-                      📚
+                    <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto shadow-xs">
+                      <AppIcon name="course" color="blue" size={28} />
                     </div>
                     <p className="text-xs font-bold text-slate-500">Belum Ada Buku Dipindai</p>
                     <p className="text-[11px] text-slate-400 max-w-[220px] mx-auto leading-relaxed">
@@ -284,7 +285,7 @@ export default function PerpusBookScanScreen({
                         className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                         title="Hapus buku ini"
                       >
-                        ✕
+                        <AppIcon name="close-cancel" color="grey" size={14} />
                       </button>
                     </div>
                   ))

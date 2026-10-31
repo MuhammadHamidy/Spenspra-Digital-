@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import AppIcon from '@/components/AppIcon';
 import { playScannerBeep } from './soundUtils';
 import { useBarcodeScanner } from './useBarcodeScanner';
 
@@ -17,6 +18,7 @@ export default function CameraBarcodeScanner({
     cameraActive,
     error,
     facingMode,
+    hasMultipleCameras,
     isSwitchingCamera,
     lastScannedCode,
     justScanned,
@@ -27,22 +29,27 @@ export default function CameraBarcodeScanner({
 
   return (
     <div className="relative w-full h-full bg-slate-950 overflow-hidden flex items-center justify-center">
-      {cameraActive ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className={`w-full h-full object-cover transition-transform duration-300 ${
-            facingMode === 'user' ? 'transform -scale-x-100' : ''
-          }`}
-        />
-      ) : (
+      {/* Video element selalu di-render agar videoRef.current siap menerima mediaStream */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        onLoadedMetadata={(e) => {
+          e.currentTarget.play().catch(() => {});
+        }}
+        className={`w-full h-full object-cover transition-opacity duration-300 ${
+          cameraActive ? 'opacity-100' : 'opacity-0 absolute pointer-events-none'
+        } ${facingMode === 'user' ? 'transform -scale-x-100' : ''}`}
+      />
+
+      {/* Fallback & Error State */}
+      {!cameraActive && (
         <div className="flex flex-col items-center justify-center p-6 text-center text-slate-400">
           {error ? (
             <div className="space-y-3 max-w-sm">
-              <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto text-xl font-bold">
-                ⚠️
+              <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto">
+                <AppIcon name="caution" color="red" size={24} />
               </div>
               <p className="text-xs text-rose-300 font-semibold leading-relaxed">{error}</p>
               <button
@@ -92,13 +99,20 @@ export default function CameraBarcodeScanner({
 
           <div className="absolute bottom-3 inset-x-2 flex flex-col items-center text-center">
             <span
-              className={`px-3 py-1 rounded-full text-[10px] font-bold backdrop-blur-md transition-all ${
+              className={`px-3 py-1 rounded-full text-[10px] font-bold backdrop-blur-md transition-all inline-flex items-center gap-1.5 ${
                 justScanned
                   ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/50'
                   : 'bg-black/75 text-slate-200 border border-white/10'
               }`}
             >
-              {justScanned ? `✅ Terdeteksi: ${lastScannedCode}` : 'Arahkan QR Code Kartu / Barcode Buku ke Sini'}
+              {justScanned ? (
+                <>
+                  <AppIcon name="tick" color="green" size={12} />
+                  <span>Terdeteksi: {lastScannedCode}</span>
+                </>
+              ) : (
+                'Arahkan QR Code Kartu / Barcode Buku ke Sini'
+              )}
             </span>
           </div>
         </div>
@@ -114,7 +128,7 @@ export default function CameraBarcodeScanner({
         <div className="flex items-center gap-2">
           {/* File Upload Barcode Snapshot */}
           <label className="px-3 py-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white text-xs font-bold backdrop-blur-md border border-white/20 shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95">
-            <span>📁</span>
+            <AppIcon name="upload" color="white" size={14} />
             <span>Unggah Foto</span>
             <input
               type="file"
@@ -129,15 +143,18 @@ export default function CameraBarcodeScanner({
             />
           </label>
 
-          <button
-            type="button"
-            onClick={switchCamera}
-            disabled={isSwitchingCamera}
-            className="px-3 py-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white text-xs font-bold backdrop-blur-md border border-white/20 shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-          >
-            <span className={isSwitchingCamera ? 'animate-spin' : ''}>🔄</span>
-            <span>{facingMode === 'environment' ? 'Kamera Belakang' : 'Kamera Depan'}</span>
-          </button>
+          {/* Hanya tampilkan tombol ganti kamera jika perangkat memiliki lebih dari 1 kamera */}
+          {hasMultipleCameras && (
+            <button
+              type="button"
+              onClick={switchCamera}
+              disabled={isSwitchingCamera}
+              className="px-3 py-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white text-xs font-bold backdrop-blur-md border border-white/20 shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+            >
+              <AppIcon name="sync" color="white" size={14} className={isSwitchingCamera ? 'animate-spin' : ''} />
+              <span>{facingMode === 'environment' ? 'Kamera Belakang' : 'Kamera Depan'}</span>
+            </button>
+          )}
         </div>
       </div>
 

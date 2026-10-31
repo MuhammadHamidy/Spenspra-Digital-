@@ -8,6 +8,7 @@ import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApi
 import { useAuth } from '@/lib/features/auth/presentation/useAuth';
 import { getRole } from '@/lib/access/portalAccess';
 import Pagination from '@/components/Pagination';
+import AppIcon from '@/components/AppIcon';
 
 const TYPE_CONFIG = {
   SISWA: {
@@ -212,7 +213,7 @@ export default function BarcodeMultifungsiPage() {
               }}
               className="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
             >
-              <span>🔍</span>
+              <AppIcon name="search" color="blue" size={14} />
               <span>Uji / Validasi Token Barcode</span>
             </button>
           )}
@@ -625,15 +626,17 @@ export default function BarcodeMultifungsiPage() {
               </div>
 
               {scanError && (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-                  ❌ {scanError}
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 flex items-center gap-2">
+                  <AppIcon name="caution" color="red" size={16} />
+                  <span>{scanError}</span>
                 </div>
               )}
 
               {scanResult && (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 space-y-2 text-xs">
                   <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
-                    <span>✅ Barcode Valid & Terverifikasi</span>
+                    <AppIcon name="tick" color="green" size={16} />
+                    <span>Barcode Valid & Terverifikasi</span>
                   </div>
                   <div className="space-y-1.5 pt-2 border-t border-emerald-200 text-slate-800">
                     <p><strong>Nama:</strong> {scanResult.full_name}</p>

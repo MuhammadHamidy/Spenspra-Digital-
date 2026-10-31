@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
+import AppIcon from '@/components/AppIcon';
 
-export default function KioskBookModal({
+export default function PerpusBookModal({
   pendingBookModal,
   setPendingBookModal,
   detectedStudent,
@@ -33,11 +34,11 @@ export default function KioskBookModal({
             disabled={isSubmittingAction}
             className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
           >
-            ✕
+            <AppIcon name="close-cancel" color="grey" size={14} />
           </button>
         </div>
 
-        {/* Borrower Profile Pill (Matches detected face) */}
+        {/* Borrower Profile Pill (Matches verified student card) */}
         {detectedStudent && (
           <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">
@@ -45,7 +46,7 @@ export default function KioskBookModal({
                 {detectedStudent.name?.slice(0, 2).toUpperCase() || 'S'}
               </div>
               <div className="min-w-0">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Identitas Peminjam</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Identitas Peminjam (Barcode Terverifikasi)</p>
                 <p className="text-xs font-black text-[#0A1931] truncate">{detectedStudent.name}</p>
                 <p className="text-[10px] text-slate-500 font-mono mt-0.5">
                   NISN: {detectedStudent.identityNumber || detectedStudent.id} • Kelas: {detectedStudent.className || 'Siswa'}
@@ -98,78 +99,62 @@ export default function KioskBookModal({
               </p>
             )}
 
-            <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed pt-1 border-t border-slate-200/60">
-              {pendingBookModal.description}
-            </p>
-          </div>
-        </div>
-
-        {/* Loan Timing Schedule Boxes */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-blue-50/80 border border-blue-200/80 rounded-2xl p-3.5 flex items-start gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#0084FF] text-white flex items-center justify-center flex-shrink-0 shadow-xs">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-[#0066CC] uppercase tracking-wider">Tanggal Pinjam</p>
-              <p className="text-xs sm:text-sm font-black text-[#0A1931] mt-0.5">{pendingBookModal.borrowDate}</p>
-              <p className="text-[10px] text-slate-500">Hari ini</p>
-            </div>
-          </div>
-
-          <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-3.5 flex items-start gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#D97706] text-white flex items-center justify-center flex-shrink-0 shadow-xs">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-[#B45309] uppercase tracking-wider">Tenggat Kembali</p>
-              <p className="text-xs sm:text-sm font-black text-[#0A1931] mt-0.5">{pendingBookModal.dueDate}</p>
-              <p className="text-[10px] text-slate-500">Masa pinjam 7 hari</p>
+            <div className="pt-1.5 border-t border-slate-200/80 grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 block uppercase">Tanggal Transaksi</span>
+                <span className="font-bold text-slate-700">{pendingBookModal.borrowDate}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 block uppercase">Tenggat Pengembalian</span>
+                <span className="font-bold text-[#0084FF]">{pendingBookModal.dueDate}</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Action Buttons: Pinjam vs Kembali */}
-        <div className="pt-2 space-y-2.5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button
-              type="button"
-              disabled={isSubmittingAction}
-              onClick={() => handleExecuteSingleAction(pendingBookModal, 'PINJAM')}
-              className="w-full py-3.5 px-4 rounded-2xl bg-[#0084FF] hover:bg-[#0070DE] text-white font-extrabold text-sm shadow-md shadow-blue-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] disabled:opacity-50"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-              <span>{isSubmittingAction ? 'Memproses...' : 'Pinjam Buku Ini'}</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={isSubmittingAction}
-              onClick={() => handleExecuteSingleAction(pendingBookModal, 'KEMBALI')}
-              className="w-full py-3.5 px-4 rounded-2xl bg-[#D97706] hover:bg-[#B45309] text-white font-extrabold text-sm shadow-md shadow-amber-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] disabled:opacity-50"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-              </svg>
-              <span>{isSubmittingAction ? 'Memproses...' : 'Kembalikan Buku Ini'}</span>
-            </button>
-          </div>
+        {/* Action Choice Buttons: PINJAM atau KEMBALI */}
+        <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button
+            type="button"
+            disabled={isSubmittingAction}
+            onClick={() => handleExecuteSingleAction(pendingBookModal, 'PINJAM')}
+            className="py-3 px-4 rounded-2xl bg-[#0084FF] hover:bg-[#0070DE] text-white font-black text-sm shadow-md shadow-blue-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50"
+          >
+            {isSubmittingAction ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <>
+                <AppIcon name="download" color="white" size={16} />
+                <span>PINJAM BUKU INI</span>
+              </>
+            )}
+          </button>
 
           <button
             type="button"
             disabled={isSubmittingAction}
-            onClick={() => setPendingBookModal(null)}
-            className="w-full py-2.5 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs transition-all cursor-pointer"
+            onClick={() => handleExecuteSingleAction(pendingBookModal, 'KEMBALI')}
+            className="py-3 px-4 rounded-2xl bg-[#D97706] hover:bg-[#B45309] text-white font-black text-sm shadow-md shadow-amber-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50"
           >
-            Batal / Pindai Ulang
+            {isSubmittingAction ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <>
+                <AppIcon name="upload" color="white" size={16} />
+                <span>KEMBALIKAN BUKU</span>
+              </>
+            )}
           </button>
         </div>
+
+        <button
+          type="button"
+          disabled={isSubmittingAction}
+          onClick={() => setPendingBookModal(null)}
+          className="w-full py-2.5 text-xs font-bold text-slate-500 hover:text-slate-700 transition-colors cursor-pointer text-center"
+        >
+          Batalkan &amp; Scan Barcode Lain
+        </button>
       </div>
     </div>
   );

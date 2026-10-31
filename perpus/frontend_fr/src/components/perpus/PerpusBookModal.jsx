@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import AppIcon from '@/components/AppIcon';
 
 export default function PerpusBookModal({
   pendingBookModal,
@@ -33,7 +34,7 @@ export default function PerpusBookModal({
             disabled={isSubmittingAction}
             className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
           >
-            ✕
+            <AppIcon name="close-cancel" color="grey" size={14} />
           </button>
         </div>
 
@@ -123,7 +124,8 @@ export default function PerpusBookModal({
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : (
               <>
-                <span>📥 PINJAM BUKU INI</span>
+                <AppIcon name="download" color="white" size={16} />
+                <span>PINJAM BUKU INI</span>
               </>
             )}
           </button>
@@ -138,7 +140,8 @@ export default function PerpusBookModal({
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : (
               <>
-                <span>📤 KEMBALIKAN BUKU</span>
+                <AppIcon name="upload" color="white" size={16} />
+                <span>KEMBALIKAN BUKU</span>
               </>
             )}
           </button>

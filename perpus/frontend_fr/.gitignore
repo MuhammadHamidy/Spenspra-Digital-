@@ -42,3 +42,4 @@ next-env.d.ts
 
 /src/generated
 /db/password.txt
+/public/icon

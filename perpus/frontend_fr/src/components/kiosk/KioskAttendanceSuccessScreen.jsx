@@ -1,8 +1,10 @@
 'use client';
 
 import React from 'react';
+import { Barcode } from '@/lib/common/barcodeGenerator';
+import AppIcon from '@/components/AppIcon';
 
-export default function KioskAttendanceSuccessScreen({
+export default function PerpusAttendanceSuccessScreen({
   attendanceRecord,
   attendanceCountdown,
   handleFullResetToHome,
@@ -14,8 +16,8 @@ export default function KioskAttendanceSuccessScreen({
       <div className="w-full bg-white rounded-3xl p-7 sm:p-9 border border-slate-200/90 shadow-xl space-y-6 text-center">
         {/* Success Badge & Icon */}
         <div className="flex flex-col items-center space-y-3">
-          <div className="w-20 h-20 rounded-full bg-emerald-50 text-emerald-600 border-4 border-emerald-100 flex items-center justify-center text-4xl shadow-inner animate-bounce">
-            ✓
+          <div className="w-20 h-20 rounded-full bg-emerald-50 text-emerald-600 border-4 border-emerald-100 flex items-center justify-center shadow-inner animate-bounce">
+            <AppIcon name="tick" color="green" size={36} />
           </div>
           <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-black tracking-wider uppercase">
             KEHADIRAN BERHASIL DICATAT
@@ -40,8 +42,8 @@ export default function KioskAttendanceSuccessScreen({
                 <span>{(attendanceRecord.name || 'P')[0]}</span>
               )}
             </div>
-            <div>
-              <h4 className="text-base font-black text-slate-900 leading-tight">
+            <div className="flex-1 min-w-0">
+              <h4 className="text-base font-black text-slate-900 leading-tight truncate">
                 {attendanceRecord.name}
               </h4>
               <p className="text-xs text-slate-500 font-mono mt-0.5">
@@ -65,6 +67,18 @@ export default function KioskAttendanceSuccessScreen({
             </div>
           </div>
 
+          {/* Barcode of student */}
+          {attendanceRecord.studentId && (
+            <div className="bg-white p-2.5 rounded-xl border border-slate-200/70 flex flex-col items-center justify-center">
+              <Barcode
+                value={attendanceRecord.studentId}
+                width={180}
+                height={45}
+                showText={true}
+              />
+            </div>
+          )}
+
           <div className="bg-white p-2.5 rounded-xl border border-slate-200/70 text-center">
             <span className="text-[11px] font-mono text-slate-500">
               KODE PRESENSI: <strong>{attendanceRecord.id}</strong> • {attendanceRecord.date}
@@ -74,7 +88,7 @@ export default function KioskAttendanceSuccessScreen({
 
         {/* Status Sesi Harian: Batas 1 Hari, Restart Saat Berganti Hari */}
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold flex items-center justify-center gap-2">
-          <span>📅</span>
+          <AppIcon name="schedule" color="green" size={16} />
           <span>
             {attendanceRecord.isReusedDailySession
               ? 'Sesi Hari Ini Masih Aktif • Anda sudah tercatat hadir. Sesi berlaku 1 hari dan otomatis me-restart pada pergantian hari.'
@@ -84,7 +98,7 @@ export default function KioskAttendanceSuccessScreen({
 
         {/* Status Note: No book scan required */}
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-[#0066CC] font-semibold flex items-center justify-center gap-2">
-          <span>✨</span>
+          <AppIcon name="star" color="blue" size={16} />
           <span>Anda tidak perlu memindai buku. Silakan langsung menikmati fasilitas perpustakaan.</span>
         </div>
 
@@ -100,8 +114,8 @@ export default function KioskAttendanceSuccessScreen({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
             </svg>
           </button>
-          <p className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            SISTEM AKAN KEMBALI KE BERANDA OTOMATIS DALAM {attendanceCountdown} DETIK.
+          <p className="text-center text-[11px] font-semibold text-slate-400">
+            Tekan tombol di atas untuk kembali ke menu awal
           </p>
         </div>
       </div>

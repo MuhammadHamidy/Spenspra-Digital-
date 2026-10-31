@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Barcode } from '@/lib/common/barcodeGenerator';
+import AppIcon from '@/components/AppIcon';
 
 export default function PerpusAttendanceSuccessScreen({
   attendanceRecord,
@@ -15,8 +16,8 @@ export default function PerpusAttendanceSuccessScreen({
       <div className="w-full bg-white rounded-3xl p-7 sm:p-9 border border-slate-200/90 shadow-xl space-y-6 text-center">
         {/* Success Badge & Icon */}
         <div className="flex flex-col items-center space-y-3">
-          <div className="w-20 h-20 rounded-full bg-emerald-50 text-emerald-600 border-4 border-emerald-100 flex items-center justify-center text-4xl shadow-inner animate-bounce">
-            ✓
+          <div className="w-20 h-20 rounded-full bg-emerald-50 text-emerald-600 border-4 border-emerald-100 flex items-center justify-center shadow-inner animate-bounce">
+            <AppIcon name="tick" color="green" size={36} />
           </div>
           <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-black tracking-wider uppercase">
             KEHADIRAN BERHASIL DICATAT
@@ -87,7 +88,7 @@ export default function PerpusAttendanceSuccessScreen({
 
         {/* Status Sesi Harian: Batas 1 Hari, Restart Saat Berganti Hari */}
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold flex items-center justify-center gap-2">
-          <span>📅</span>
+          <AppIcon name="schedule" color="green" size={16} />
           <span>
             {attendanceRecord.isReusedDailySession
               ? 'Sesi Hari Ini Masih Aktif • Anda sudah tercatat hadir. Sesi berlaku 1 hari dan otomatis me-restart pada pergantian hari.'
@@ -97,7 +98,7 @@ export default function PerpusAttendanceSuccessScreen({
 
         {/* Status Note: No book scan required */}
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-[#0066CC] font-semibold flex items-center justify-center gap-2">
-          <span>✨</span>
+          <AppIcon name="star" color="blue" size={16} />
           <span>Anda tidak perlu memindai buku. Silakan langsung menikmati fasilitas perpustakaan.</span>
         </div>
 

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Barcode } from '@/lib/common/barcodeGenerator';
+import AppIcon from '@/components/AppIcon';
 
 export default function VisitorProfileCard({
   selectedPurpose,
@@ -70,7 +71,7 @@ export default function VisitorProfileCard({
               <div className="w-full bg-slate-50 p-3 rounded-2xl border border-slate-200/90 text-left shadow-2xs">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
-                    <span>📚</span>
+                    <AppIcon name="course" color="blue" size={14} />
                     <span>Buku yang Sedang Dipinjam ({activeLoans.length})</span>
                   </span>
                   <span className="text-[10px] font-bold text-slate-500">
@@ -205,9 +206,8 @@ export default function VisitorProfileCard({
               if (setBarcodeScanError) setBarcodeScanError(null);
             }}
             className="w-full py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-1"
-            title="Presensi sebagai Tamu Umum tanpa kartu barcode"
-          >
-            <span>🤝 Masuk Sebagai Tamu Umum (Tanpa Kartu)</span>
+            <AppIcon name="human" color="blue" size={14} />
+            <span>Masuk Sebagai Tamu Umum (Tanpa Kartu)</span>
           </button>
         )}
       </div>
