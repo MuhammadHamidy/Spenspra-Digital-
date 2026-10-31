@@ -5,6 +5,12 @@ function getSsoLoginUrl(request, reason = '') {
   const isSpenspraCom = host.includes('spenspra.com');
   const isSpenspraSch = host.includes('spenspra.sch.id');
 
+  const defaultSsoUrl = isSpenspraCom
+    ? 'https://sso.spenspra.com/login'
+    : isSpenspraSch
+    ? 'https://sso.spenspra.sch.id/login'
+    : 'http://sso.localhost/login';
+
   const defaultPerpusUrl = isSpenspraCom
     ? 'https://perpus.spenspra.com'
     : isSpenspraSch
