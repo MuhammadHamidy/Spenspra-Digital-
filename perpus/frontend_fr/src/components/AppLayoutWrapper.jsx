@@ -32,6 +32,7 @@ export default function AppLayoutWrapper({ children }) {
 
   const [isAuthChecked, setIsAuthChecked] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     tokenStorage.syncCookies();
@@ -81,8 +82,6 @@ export default function AppLayoutWrapper({ children }) {
       </div>
     );
   }
-
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // 3. Layout Area Administrasi Pustakawan (dengan Sidebar & Navbar Admin - e-Rapor Style)
   return (

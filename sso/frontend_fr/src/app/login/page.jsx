@@ -74,12 +74,23 @@ function LoginForm() {
 
       const isEducator = ['GURU', 'WALI_KELAS', 'PENDIDIK', 'KEPALA_SEKOLAH', 'TENDIK'].includes(roleName);
 
-      // PENTING: Untuk seluruh Guru/Pendidik:
-      // Guru HARUS SELALU masuk ke /dashboard SSO agar dapat memilih kartu aplikasi
-      // (e-Rapor Spenspra, e-Perpustakaan, Belajar Spenspra).
-      // Guru TIDAK BOLEH otomatis dilempar ke satelit layanan mandiri perpus saat login di SSO.
+      // 1. SUPER_ADMIN: Selalu wajib masuk ke Dashboard Super Admin Pusat
+      if (roleName === 'SUPER_ADMIN' || roleName === 'SUPER-ADMIN') {
+        window.location.href = '/superadmin';
+        return;
+      }
+
+      // 2. ADMIN RAPOR: Selalu wajib masuk ke halaman Administrasi e-Rapor
+      if (roleName === 'ADMIN_RAPOR' || roleName === 'ADMIN-RAPOR') {
+        const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
+        window.location.href = `${raporBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent('/admin/teachers')}`;
+        return;
+      }
+
+      // 3. GURU / PENDIDIK / WALI KELAS / KEPALA SEKOLAH:
+      // Harus SELALU masuk ke /dashboard SSO agar dapat memilih kartu aplikasi (e-Rapor, e-Perpus, Belajar Spenspra).
       if (isEducator) {
-        // Cek jika memang ada deep redirect ke halaman spesifik e-Rapor (misal guru sedang input nilai lalu sesi expired)
+        // Cek jika memang ada deep redirect ke halaman spesifik e-Rapor
         const isDeepRapor = targetUrl && (targetUrl.includes('rapor') || targetUrl.includes('erapor')) && !targetUrl.endsWith('.spenspra.com') && !targetUrl.endsWith('.spenspra.com/') && !targetUrl.endsWith('/login');
         if (isDeepRapor) {
           const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
@@ -101,79 +112,16 @@ function LoginForm() {
         return;
       }
 
-      // 1. Jika ada target redirect ke PERPUSTAKAAN (misal dari pustakawan murni):
-      if (targetUrl && (targetUrl.toLowerCase().includes('perpus') || targetUrl.toLowerCase() === 'perpusdig')) {
+      // 4. ADMIN PERPUS / PUSTAKAWAN MURNI:
+      if (roleName === 'ADMIN_PERPUS' || roleName === 'PUSTAKAWAN') {
         const perpusBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus');
-        let destinationPath = '/';
-        try {
-          if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
-            const parsed = new URL(targetUrl);
-            destinationPath = parsed.pathname + parsed.search;
-          } else if (targetUrl.startsWith('/')) {
-            destinationPath = targetUrl;
-          }
-        } catch {}
-
-        if ((roleName === 'ADMIN_PERPUS' || roleName === 'PUSTAKAWAN') && (destinationPath === '/' || destinationPath === '')) {
-          destinationPath = '/pustakawan';
-        }
-
-        window.location.href = `${perpusBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent(destinationPath)}`;
+        window.location.href = `${perpusBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent('/pustakawan')}`;
         return;
       }
 
-      // 2. Jika ada target redirect ke E-RAPOR:
-      if (targetUrl && (targetUrl.toLowerCase().includes('rapor') || targetUrl.toLowerCase() === 'erapor')) {
-        const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
-        let destinationPath = '/';
-        try {
-          if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
-            const parsed = new URL(targetUrl);
-            destinationPath = parsed.pathname + parsed.search;
-          } else if (targetUrl.startsWith('/')) {
-            destinationPath = targetUrl;
-          }
-        } catch {}
-
-        if ((roleName === 'ADMIN_RAPOR' || roleName === 'ADMIN-RAPOR') && (destinationPath === '/' || destinationPath === '')) {
-          destinationPath = '/admin/teachers';
-        }
-
-        window.location.href = `${raporBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent(destinationPath)}`;
-        return;
-      }
-
-      // 3. Jika ada target redirect lainnya yang valid:
-      if (targetUrl) {
-        try {
-          const parsed = new URL(targetUrl, window.location.origin);
-          const isAllowedHost =
-            parsed.hostname === 'localhost' ||
-            parsed.hostname.endsWith('.localhost') ||
-            parsed.hostname === '127.0.0.1' ||
-            parsed.hostname === 'spenspra.com' ||
-            parsed.hostname.endsWith('.spenspra.com') ||
-            parsed.hostname === 'spenspra.sch.id' ||
-            parsed.hostname.endsWith('.spenspra.sch.id');
-
-          if (isAllowedHost && (parsed.protocol === 'http:' || parsed.protocol === 'https:')) {
-            window.location.href = parsed.toString();
-            return;
-          }
-        } catch (e) {
-          console.warn('Format redirect URL tidak valid:', e);
-        }
-      }
-
-      // 4. Default: Jika login langsung di SSO tanpa redirect_uri dari aplikasi satelit
-      if (roleName === 'SUPER_ADMIN' || roleName === 'SUPER-ADMIN') {
-        window.location.href = '/superadmin';
-        return;
-      }
-
-      // Seluruh civitas akademika (Guru/Pendidik, Admin Perpustakaan, Admin e-Rapor, Tenaga Kependidikan, Kepala Sekolah, dan Siswa)
-      // diarahkan ke /dashboard SSO agar dapat memilih menu aplikasi secara bebas
+      // 5. Default Civitas (Siswa, dsb): Arahkan ke /dashboard SSO
       window.location.href = '/dashboard';
+      return;
     } catch (err) {
       setError(err.message || 'Login gagal. Periksa kembali username/NIP dan kata sandi Anda.');
     } finally {
