@@ -41,19 +41,24 @@ export default function PerpusNavbar({
           </div>
         </div>
 
-        {/* Right Section: Pustakawan Admin Login */}
+        {/* Right Section: User Profile & Actions */}
         <div className="flex items-center gap-2 sm:gap-3">
           {currentUser ? (
-            <div className="flex items-center gap-2">
-              <Link
-                href="/pustakawan"
-                className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold transition-all shadow-xs"
-              >
-                <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                </svg>
-                <span className="hidden sm:inline">Dashboard Pustakawan</span>
-              </Link>
+            <div className="flex items-center gap-2.5">
+              {(currentUser.roleName === 'PUSTAKAWAN' || currentUser.role === 'PUSTAKAWAN' || currentUser.roleName === 'SUPER_ADMIN') && (
+                <Link
+                  href="/pustakawan"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-xs font-semibold transition-all shadow-xs"
+                >
+                  <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                  </svg>
+                  <span className="hidden sm:inline">Dashboard Pustakawan</span>
+                </Link>
+              )}
+              <span className="text-xs font-semibold text-slate-700 hidden sm:inline px-2">
+                {currentUser.fullName || currentUser.nama || 'Pengguna'}
+              </span>
               <button
                 type="button"
                 onClick={() => {
@@ -61,7 +66,7 @@ export default function PerpusNavbar({
                   setCurrentUser(null);
                   router.refresh();
                 }}
-                className="p-2 rounded-full border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-red-600 text-xs font-bold transition-all cursor-pointer"
+                className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-red-600 text-xs font-semibold transition-all cursor-pointer"
                 title="Keluar"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -69,18 +74,7 @@ export default function PerpusNavbar({
                 </svg>
               </button>
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => redirectToSsoLogin()}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-semibold transition-all shadow-xs cursor-pointer"
-            >
-              <svg className="w-3.5 h-3.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-              </svg>
-              <span>Pustakawan (SSO)</span>
-            </button>
-          )}
+          ) : null}
         </div>
       </div>
     </header>
