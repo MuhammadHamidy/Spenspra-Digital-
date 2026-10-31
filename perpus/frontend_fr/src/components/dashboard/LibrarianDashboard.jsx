@@ -167,10 +167,7 @@ export default function LibrarianDashboard() {
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
       {/* 1. Hero Welcome Banner */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white p-6 sm:p-8 shadow-md border border-slate-800">
-        <div
-          className="absolute inset-0 bg-cover bg-center opacity-15 mix-blend-overlay"
-          style={{ backgroundImage: "url('/images/library_hall.jpg')" }}
-        />
+        <div className="absolute inset-0 bg-[radial-gradient(#3b82f6_1px,transparent_1px)] [background-size:20px_20px] opacity-20 pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div className="space-y-2 max-w-2xl">
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">

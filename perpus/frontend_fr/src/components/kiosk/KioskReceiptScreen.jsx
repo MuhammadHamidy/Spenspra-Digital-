@@ -1,9 +1,9 @@
 'use client';
 
 import React from 'react';
-import Image from 'next/image';
+import AppIcon from '@/components/AppIcon';
 
-export default function KioskReceiptScreen({
+export default function PerpusReceiptScreen({
   lastTransaction,
   countdown,
   handleFullResetToAttendance,
@@ -12,15 +12,14 @@ export default function KioskReceiptScreen({
     <div className="w-full max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 items-center py-4">
       {/* Left Column: 3D Book Checkmark Illustration & Gratitude */}
       <div className="lg:col-span-6 flex flex-col items-center text-center space-y-4">
-        {/* 3D Book Illustration with Floating Blue Checkmark */}
-        <div className="relative w-64 h-64 sm:w-72 sm:h-72">
-          <Image
-            src="/image/book_success.jpg"
-            alt="Transaksi Berhasil"
-            fill
-            className="object-contain drop-shadow-xl"
-            priority
-          />
+        {/* Book Illustration with Floating Checkmark */}
+        <div className="relative w-44 h-44 sm:w-52 sm:h-52 rounded-3xl bg-gradient-to-br from-blue-50 to-indigo-50/70 border border-blue-100 flex items-center justify-center shadow-lg my-2">
+          <div className="w-24 h-24 rounded-2xl bg-white shadow-md border border-slate-100 flex items-center justify-center">
+            <AppIcon name="course" color="blue" size={44} />
+          </div>
+          <div className="absolute -bottom-2 -right-2 w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-lg border-2 border-white animate-bounce">
+            <AppIcon name="tick" color="white" size={22} />
+          </div>
         </div>
 
         {/* Green Pill Badge */}
@@ -134,9 +133,9 @@ export default function KioskReceiptScreen({
             </svg>
           </button>
 
-          {/* 15s Auto-Redirect Note */}
-          <p className="text-center text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-            SISTEM AKAN KEMBALI KE LAYAR UTAMA SECARA OTOMATIS DALAM {countdown} DETIK.
+          {/* Guidance Note */}
+          <p className="text-center text-[11px] font-semibold text-slate-400">
+            Tekan tombol di atas jika sudah selesai
           </p>
         </div>
       </div>

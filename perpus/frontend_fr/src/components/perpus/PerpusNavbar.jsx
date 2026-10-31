@@ -13,11 +13,6 @@ export default function PerpusNavbar({
 }) {
   return (
     <header className="relative w-full border-b border-slate-200/80 bg-white/95 backdrop-blur-md shadow-xs z-30">
-      <div
-        className="absolute inset-0 opacity-[0.03] pointer-events-none bg-cover bg-center"
-        style={{ backgroundImage: "url('/image/library_hall.jpg')" }}
-      />
-
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4 relative z-10">
         {/* Brand Logo & Title */}
         <div className="flex items-center gap-3">
