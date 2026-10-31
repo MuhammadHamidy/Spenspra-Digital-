@@ -47,12 +47,15 @@ INSERT INTO accounts (
     'ADMIN-RAPOR-001',
     ''
 ),
+-- Akun khusus Admin Perpustakaan
+-- Username: admin.perpus
+-- Password awal: PerpusPrambon2026!
 (
     'user-admin-perpus-1',
-    'admin.perpus.prambon',
-    '$2b$12$b7M6TM8JKthdO8bFRgt0p.s2feGtjTZSBB72RnFmX1nvvrfRvdEFG',
+    'admin.perpus',
+    '$2a$10$XB75tIY.ap0J9QAYYUlZLOW.CeLvuBjGw06fK.KoelH/ItI63.Xua',
     'admin.perpus@smpn1prambon.sch.id',
-    'Administrator Perpustakaan SMP Negeri 1 Prambon',
+    'Petugas Perpustakaan SMP Negeri 1 Prambon',
     'role-admin-perpus',
     'ADMIN-PERPUS-001',
     ''

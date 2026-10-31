@@ -87,9 +87,17 @@ function LoginForm() {
         return;
       }
 
-      // 3. GURU / PENDIDIK / ADMIN PERPUS / CIVITAS:
+      // 3. ADMIN PERPUS (Akun Khusus Meja Kerja Perpustakaan):
+      // Langsung diarahkan ke Meja Administrasi Pustakawan
+      if (roleName === 'ADMIN_PERPUS' || roleName === 'PUSTAKAWAN') {
+        const perpusBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus');
+        window.location.href = `${perpusBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent('/pustakawan')}`;
+        return;
+      }
+
+      // 4. GURU / PENDIDIK / CIVITAS (Termasuk Bu Conie & guru lainnya):
       // Harus SELALU masuk ke /dashboard SSO agar dapat memilih kartu aplikasi
-      // (Spenspra Belajar, e-Rapor Guru Pengampu, dan e-Perpustakaan).
+      // (Spenspra Belajar, e-Rapor Guru Pengampu, dan Perpustakaan untuk membaca/meminjam buku).
       window.location.href = '/dashboard';
       return;
     } catch (err) {
