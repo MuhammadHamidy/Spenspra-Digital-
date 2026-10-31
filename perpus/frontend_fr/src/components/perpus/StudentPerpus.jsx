@@ -153,10 +153,29 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
 
   // Select purpose before barcode scanning
   const handleSelectPurpose = (purpose) => {
-    setSelectedPurpose(purpose);
     setDetectedStudent(null);
     setBarcodeScanError(null);
-    setCurrentScreen('attendance');
+    if (purpose === 'KEMBALI') {
+      setSelectedPurpose('PEMINJAM');
+      setActiveBarcodeMode('KEMBALI');
+      setCurrentScreen('attendance');
+    } else if (purpose === 'PINJAM') {
+      setSelectedPurpose('PEMINJAM');
+      setActiveBarcodeMode('PINJAM');
+      setCurrentScreen('attendance');
+    } else if (purpose === 'MEMBACA') {
+      setSelectedPurpose('MEMBACA');
+      setActiveBarcodeMode('PINJAM');
+      setCurrentScreen('attendance');
+    } else if (purpose === 'PEMBELAJARAN') {
+      setSelectedPurpose('PEMBELAJARAN');
+      setActiveBarcodeMode('PINJAM');
+      setCurrentScreen('attendance');
+    } else {
+      setSelectedPurpose('TAMU');
+      setActiveBarcodeMode('PINJAM');
+      setCurrentScreen('attendance');
+    }
   };
 
   // Complete attendance without book scan (for Pembelajaran or Tamu)
@@ -181,10 +200,14 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
 
     const purposeLabel =
       selectedPurpose === 'PEMBELAJARAN'
-        ? 'Belajar di Kelas'
+        ? 'Belajar di Kelas / Literasi'
+        : selectedPurpose === 'MEMBACA'
+        ? 'Membaca di Tempat'
         : selectedPurpose === 'TAMU'
         ? 'Tamu / Pengunjung'
-        : 'Membaca / Meminjam';
+        : activeBarcodeMode === 'KEMBALI'
+        ? 'Pengembalian Buku'
+        : 'Peminjaman Buku';
 
     const wasAlreadyAttended = Boolean(detectedStudent?.hasActiveSessionToday);
 
@@ -285,46 +308,20 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
     return () => clearInterval(clockTimer);
   }, []);
 
-  // 2. Auto Countdown on Success Screens
+  // 2. Countdown dinonaktifkan (Tidak ada timeout otomatis pada halaman, selesai secara mandiri)
   useEffect(() => {
-    let timer = null;
-    if (currentScreen === 'success') {
-      setCountdown(15);
-      timer = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            handleFullResetToHome();
-            return 15;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else if (currentScreen === 'attendance_success') {
-      setAttendanceCountdown(10);
-      timer = setInterval(() => {
-        setAttendanceCountdown((prev) => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            handleFullResetToHome();
-            return 10;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (timer) clearInterval(timer);
-    };
+    setCountdown(null);
+    setAttendanceCountdown(null);
   }, [currentScreen]);
 
-  // Support for Physical USB Barcode / QR Handheld & Kiosk Scanners (HID Keyboard Emulation)
+  // CATATAN: Opsi scanner handheld fisik USB/Bluetooth sementara dinonaktifkan sesuai kebutuhan.
+  // Kode di bawah ini siap diaktifkan kembali jika scanner tembak/handheld fisik disambungkan:
+  /*
   useEffect(() => {
     let buffer = '';
     let lastKeyTime = 0;
 
     const handleKeyDown = (e) => {
-      // Don't intercept if user is typing normally inside an active form input
       const activeEl = document.activeElement;
       const isInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable);
       if (isInput && !activeEl.classList.contains('scanner-input')) {
@@ -335,7 +332,6 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
       const diff = now - lastKeyTime;
       lastKeyTime = now;
 
-      // Scanners transmit keys rapidly (< 100ms between strokes) and finish with Enter
       if (e.key === 'Enter') {
         const scannedText = buffer.trim();
         buffer = '';
@@ -349,12 +345,10 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
         return;
       }
 
-      // If user is typing very slowly (> 150ms between keys), reset buffer
       if (diff > 150 && buffer.length > 0) {
         buffer = '';
       }
 
-      // Collect printable characters
       if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
         buffer += e.key;
       }
@@ -363,6 +357,7 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentScreen, isProcessingBarcodeStudent, detectedStudent, isProcessingBookBarcode, pendingBookModal]);
+  */
 
   // Handle Student Barcode Detection (Kartu Pelajar Barcode / QR Code Tunggal)
   const handleStudentBarcodeDetected = async (rawCode) => {

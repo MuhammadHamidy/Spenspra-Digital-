@@ -113,8 +113,8 @@ export default function PerpusAttendanceSuccessScreen({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
             </svg>
           </button>
-          <p className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            SISTEM AKAN KEMBALI KE BERANDA OTOMATIS DALAM {attendanceCountdown} DETIK.
+          <p className="text-center text-[11px] font-semibold text-slate-400">
+            Tekan tombol di atas untuk kembali ke menu awal
           </p>
         </div>
       </div>

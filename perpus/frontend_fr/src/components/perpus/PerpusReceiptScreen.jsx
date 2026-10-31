@@ -134,9 +134,9 @@ export default function PerpusReceiptScreen({
             </svg>
           </button>
 
-          {/* 15s Auto-Redirect Note */}
-          <p className="text-center text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-            SISTEM AKAN KEMBALI KE LAYAR UTAMA SECARA OTOMATIS DALAM {countdown} DETIK.
+          {/* Guidance Note */}
+          <p className="text-center text-[11px] font-semibold text-slate-400">
+            Tekan tombol di atas jika sudah selesai
           </p>
         </div>
       </div>
