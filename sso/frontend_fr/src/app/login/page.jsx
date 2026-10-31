@@ -80,46 +80,16 @@ function LoginForm() {
         return;
       }
 
-      // 2. ADMIN RAPOR: Selalu wajib masuk ke halaman Administrasi e-Rapor
+      // 2. ADMIN RAPOR MURNI: Masuk ke halaman Administrasi e-Rapor
       if (roleName === 'ADMIN_RAPOR' || roleName === 'ADMIN-RAPOR') {
         const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
         window.location.href = `${raporBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent('/admin/teachers')}`;
         return;
       }
 
-      // 3. GURU / PENDIDIK / WALI KELAS / KEPALA SEKOLAH:
-      // Harus SELALU masuk ke /dashboard SSO agar dapat memilih kartu aplikasi (e-Rapor, e-Perpus, Belajar Spenspra).
-      if (isEducator) {
-        // Cek jika memang ada deep redirect ke halaman spesifik e-Rapor
-        const isDeepRapor = targetUrl && (targetUrl.includes('rapor') || targetUrl.includes('erapor')) && !targetUrl.endsWith('.spenspra.com') && !targetUrl.endsWith('.spenspra.com/') && !targetUrl.endsWith('/login');
-        if (isDeepRapor) {
-          const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
-          let destinationPath = '/';
-          try {
-            if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
-              const parsed = new URL(targetUrl);
-              destinationPath = parsed.pathname + parsed.search;
-            } else if (targetUrl.startsWith('/')) {
-              destinationPath = targetUrl;
-            }
-          } catch {}
-          window.location.href = `${raporBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent(destinationPath)}`;
-          return;
-        }
-
-        // Default untuk Guru: langsung ke dashboard portal SSO
-        window.location.href = '/dashboard';
-        return;
-      }
-
-      // 4. ADMIN PERPUS / PUSTAKAWAN MURNI:
-      if (roleName === 'ADMIN_PERPUS' || roleName === 'PUSTAKAWAN') {
-        const perpusBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus');
-        window.location.href = `${perpusBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent('/pustakawan')}`;
-        return;
-      }
-
-      // 5. Default Civitas (Siswa, dsb): Arahkan ke /dashboard SSO
+      // 3. GURU / PENDIDIK / ADMIN PERPUS / CIVITAS:
+      // Harus SELALU masuk ke /dashboard SSO agar dapat memilih kartu aplikasi
+      // (Spenspra Belajar, e-Rapor Guru Pengampu, dan e-Perpustakaan).
       window.location.href = '/dashboard';
       return;
     } catch (err) {
