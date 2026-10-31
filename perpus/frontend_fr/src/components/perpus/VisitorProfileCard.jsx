@@ -5,6 +5,7 @@ import { Barcode } from '@/lib/common/barcodeGenerator';
 
 export default function VisitorProfileCard({
   selectedPurpose,
+  activeBarcodeMode = 'PINJAM',
   detectedStudent,
   setDetectedStudent,
   barcodeScanError,
@@ -14,6 +15,7 @@ export default function VisitorProfileCard({
   handleResetBarcodeScan,
 }) {
   const isGuestOrClass = selectedPurpose === 'PEMBELAJARAN' || selectedPurpose === 'TAMU';
+  const activeLoans = detectedStudent?.activeLoans || [];
 
   return (
     <div className="lg:col-span-5 bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/90 shadow-sm flex flex-col justify-between">
@@ -32,12 +34,12 @@ export default function VisitorProfileCard({
         </div>
         <hr className="my-4 border-slate-100" />
 
-        {/* Avatar, Barcode & Info */}
+        {/* Avatar, Info & Active Loans */}
         <div className="flex flex-col items-center text-center my-2">
           {detectedStudent ? (
             <div className="w-full flex flex-col items-center space-y-3">
               {/* Photo or Initials */}
-              <div className="w-24 h-24 rounded-full border-4 border-emerald-200 bg-slate-100 flex items-center justify-center overflow-hidden shadow-inner">
+              <div className="w-20 h-20 rounded-full border-4 border-emerald-200 bg-slate-100 flex items-center justify-center overflow-hidden shadow-inner">
                 {detectedStudent.photo ? (
                   <img
                     src={detectedStudent.photo}
@@ -45,7 +47,7 @@ export default function VisitorProfileCard({
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full bg-gradient-to-tr from-[#0066CC] to-[#0084FF] text-white flex items-center justify-center text-2xl font-black">
+                  <div className="w-full h-full bg-gradient-to-tr from-[#0066CC] to-[#0084FF] text-white flex items-center justify-center text-xl font-black">
                     {detectedStudent.name ? detectedStudent.name.slice(0, 2).toUpperCase() : 'SP'}
                   </div>
                 )}
@@ -56,27 +58,50 @@ export default function VisitorProfileCard({
                 <h4 className="text-lg font-black text-[#0A1931]">{detectedStudent.name}</h4>
                 <div className="flex items-center justify-center gap-2 flex-wrap text-xs pt-0.5">
                   <span className="px-2.5 py-0.5 rounded-lg bg-blue-50 border border-blue-200 text-[#0066CC] font-mono font-bold">
-                    NISN: {detectedStudent.identityNumber || detectedStudent.id}
+                    NISN / NIP: {detectedStudent.identityNumber || detectedStudent.id}
                   </span>
                   <span className="px-2.5 py-0.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold">
-                    Kelas: {detectedStudent.className || 'Siswa'}
+                    {detectedStudent.className || 'Civitas Sekolah'}
                   </span>
                 </div>
               </div>
 
-              {/* Barcode Visual Stiker Kartu Pelajar */}
-              <div className="w-full bg-slate-50 p-3 rounded-2xl border border-slate-200/90 flex flex-col items-center shadow-2xs">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                  Barcode Kartu Pelajar
-                </p>
-                <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-200">
-                  <Barcode
-                    value={detectedStudent.memberCode || detectedStudent.identityNumber || detectedStudent.id}
-                    width={180}
-                    height={50}
-                    showText={true}
-                  />
+              {/* Active Loans Section (Daftar Buku Yang Sedang Dipinjam) */}
+              <div className="w-full bg-slate-50 p-3 rounded-2xl border border-slate-200/90 text-left shadow-2xs">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                    <span>📚</span>
+                    <span>Buku yang Sedang Dipinjam ({activeLoans.length})</span>
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-500">
+                    Maks: {detectedStudent.maxBorrowLimit || 3} Buku
+                  </span>
                 </div>
+
+                {activeLoans.length > 0 ? (
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                    {activeLoans.map((loan, idx) => (
+                      <div key={loan.id || idx} className="p-2 rounded-xl bg-white border border-slate-200 text-xs shadow-2xs">
+                        <p className="font-bold text-slate-800 line-clamp-1">{loan.book_title || 'Buku Perpustakaan'}</p>
+                        <div className="flex items-center justify-between text-[10px] text-slate-500 mt-0.5">
+                          <span className="font-mono text-slate-600">{loan.barcode}</span>
+                          <span className={loan.status === 'OVERDUE' ? 'text-rose-600 font-bold' : 'text-slate-600'}>
+                            Jatuh tempo: {loan.due_date ? new Date(loan.due_date).toLocaleDateString('id-ID') : '-'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-2 text-center text-slate-500 text-xs">
+                    <p className="font-semibold text-slate-700">Tidak ada pinjaman buku aktif</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {activeBarcodeMode === 'KEMBALI'
+                        ? 'Siswa ini tidak memiliki tanggungan buku yang perlu dikembalikan.'
+                        : `Siswa dapat meminjam hingga ${detectedStudent.maxBorrowLimit || 3} buku.`}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {detectedStudent.hasActiveSessionToday && (
@@ -96,9 +121,9 @@ export default function VisitorProfileCard({
                 </svg>
               </div>
               <div className="w-full space-y-2 text-center">
-                <p className="text-xs font-bold text-slate-600">Belum Ada Barcode yang Dipindai</p>
+                <p className="text-xs font-bold text-slate-600">Belum Ada Akun yang Dipindai</p>
                 <p className="text-[11px] text-slate-400 max-w-[260px] mx-auto leading-relaxed">
-                  Arahkan barcode kartu pelajar ke kamera, scan dengan scanner USB, atau masukkan kode di sebelah kiri.
+                  Arahkan QR Code kartu pelajar/guru ke kamera pemindai, atau ketikkan NISN / NIP di sebelah kiri.
                 </p>
               </div>
             </div>
@@ -110,7 +135,7 @@ export default function VisitorProfileCard({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
               <div className="flex-1">
-                <p className="font-bold text-rose-800">Barcode Tidak Ditemukan</p>
+                <p className="font-bold text-rose-800">QR Code Tidak Ditemukan</p>
                 <p className="text-[11px] text-rose-600 mt-0.5 leading-relaxed">{barcodeScanError}</p>
               </div>
             </div>
@@ -118,7 +143,7 @@ export default function VisitorProfileCard({
         </div>
       </div>
 
-      {/* Buttons: Dynamic based on selectedPurpose */}
+      {/* Buttons: Dynamic based on selectedPurpose & activeBarcodeMode */}
       <div className="space-y-2.5 mt-4">
         <button
           type="button"
@@ -142,8 +167,8 @@ export default function VisitorProfileCard({
               ? detectedStudent?.hasActiveSessionToday
                 ? 'Konfirmasi Bukti Presensi (Sesi Aktif)'
                 : 'Selesaikan Presensi Kehadiran'
-              : detectedStudent?.hasActiveSessionToday
-              ? 'Lanjutkan Ke Pindai Buku (Sesi Aktif)'
+              : activeBarcodeMode === 'KEMBALI'
+              ? 'Lanjut Ke Pengembalian Buku'
               : 'Lanjutkan Ke Pindai Buku'}
           </span>
           <svg className="w-4 h-4 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">

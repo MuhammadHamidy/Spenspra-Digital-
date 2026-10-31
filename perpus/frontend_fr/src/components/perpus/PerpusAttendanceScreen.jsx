@@ -7,6 +7,7 @@ import AttendanceStepsGuide from './AttendanceStepsGuide';
 
 export default function PerpusAttendanceScreen({
   selectedPurpose,
+  activeBarcodeMode = 'PINJAM',
   setCurrentScreen,
   detectedStudent,
   setDetectedStudent,
@@ -28,14 +29,26 @@ export default function PerpusAttendanceScreen({
       ? 'Belajar di Kelas'
       : selectedPurpose === 'TAMU'
       ? 'Tamu / Pengunjung'
-      : 'Membaca / Meminjam';
+      : activeBarcodeMode === 'KEMBALI'
+      ? 'Pengembalian Buku'
+      : 'Peminjaman Buku';
 
   const purposeColor =
     selectedPurpose === 'PEMBELAJARAN'
       ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
       : selectedPurpose === 'TAMU'
       ? 'bg-sky-50 border-sky-200 text-sky-700'
+      : activeBarcodeMode === 'KEMBALI'
+      ? 'bg-amber-50 border-amber-200 text-amber-700'
       : 'bg-blue-50 border-blue-200 text-[#0066CC]';
+
+  const isGuestOrClass = selectedPurpose === 'PEMBELAJARAN' || selectedPurpose === 'TAMU';
+  const screenTitle = 'Pindai QR Code Kartu Pelajar / Guru';
+  const screenSubtitle = isGuestOrClass
+    ? 'Presensi QR code mandiri untuk pencatatan kunjungan perpus'
+    : activeBarcodeMode === 'KEMBALI'
+    ? 'Identifikasi siswa/guru untuk mengenali akun & mengecek buku yang dipinjam'
+    : 'Identifikasi siswa/guru via QR code sebelum meminjam buku';
 
   // Quick preset samples
   const defaultPresets = [
@@ -81,6 +94,7 @@ export default function PerpusAttendanceScreen({
           <span>
             {selectedPurpose === 'PEMBELAJARAN' ? '🎓'
               : selectedPurpose === 'TAMU' ? '🤝'
+              : activeBarcodeMode === 'KEMBALI' ? '🔄'
               : '📚'}
           </span>
           <span>{purposeName}</span>
@@ -88,22 +102,18 @@ export default function PerpusAttendanceScreen({
 
         {/* Right-side title (desktop) */}
         <div className="ml-auto hidden sm:flex flex-col items-end">
-          <span className="text-sm font-extrabold text-[#0A1931] leading-tight">Pindai Barcode Kartu Pelajar</span>
+          <span className="text-sm font-extrabold text-[#0A1931] leading-tight">{screenTitle}</span>
           <span className="text-[11px] text-slate-400 font-medium">
-            {selectedPurpose === 'PEMBELAJARAN' || selectedPurpose === 'TAMU'
-              ? 'Presensi barcode langsung, tanpa peminjaman buku'
-              : 'Identifikasi siswa via barcode sebelum meminjam buku'}
+            {screenSubtitle}
           </span>
         </div>
       </div>
 
       {/* Mobile-only title */}
       <div className="w-full max-w-5xl text-left mb-4 sm:hidden">
-        <h2 className="text-xl font-extrabold text-[#0A1931] tracking-tight">Pindai Barcode Kartu Pelajar</h2>
+        <h2 className="text-xl font-extrabold text-[#0A1931] tracking-tight">{screenTitle}</h2>
         <p className="text-xs text-slate-400 mt-0.5">
-          {selectedPurpose === 'PEMBELAJARAN' || selectedPurpose === 'TAMU'
-            ? 'Presensi barcode langsung, tanpa peminjaman buku'
-            : 'Identifikasi siswa via barcode sebelum meminjam buku'}
+          {screenSubtitle}
         </p>
       </div>
 
@@ -169,9 +179,9 @@ export default function PerpusAttendanceScreen({
                   ⌨️
                 </div>
                 <div className="space-y-1 max-w-sm">
-                  <h4 className="text-base font-black text-slate-800">Input Kode Barcode Siswa</h4>
+                  <h4 className="text-base font-black text-slate-800">Input Kode QR / NISN / NIP</h4>
                   <p className="text-xs text-slate-500">
-                    Gunakan alat barcode scanner USB atau ketikkan Nomor Induk Siswa (NISN) / Kode Anggota kartu pelajar.
+                    Gunakan scanner USB atau ketikkan NISN / NIP / Token QR kartu pelajar.
                   </p>
                 </div>
                 <form onSubmit={handleManualSubmit} className="w-full max-w-md flex items-center gap-2">
@@ -180,7 +190,7 @@ export default function PerpusAttendanceScreen({
                     type="text"
                     value={manualCode}
                     onChange={(e) => setManualCode(e.target.value)}
-                    placeholder="Contoh: MBR-2026-0001 atau NISN..."
+                    placeholder="Contoh: PRAMBON-E454... atau NISN / NIP"
                     className="flex-1 px-4 py-3 bg-white border border-slate-300 rounded-xl text-sm font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs"
                     autoFocus
                   />
@@ -200,6 +210,7 @@ export default function PerpusAttendanceScreen({
         {/* Right Card: Visitor / Student Profile */}
         <VisitorProfileCard
           selectedPurpose={selectedPurpose}
+          activeBarcodeMode={activeBarcodeMode}
           detectedStudent={detectedStudent}
           setDetectedStudent={setDetectedStudent}
           barcodeScanError={barcodeScanError}

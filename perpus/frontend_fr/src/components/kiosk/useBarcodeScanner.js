@@ -204,45 +204,66 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
         } catch {}
       }
 
-      // 2. ZXing canvas fallback
-      if (!detectedText && window.ZXing && canvasRef.current) {
-        try {
-          const canvas = canvasRef.current;
-          const w = video.videoWidth || 640;
-          const h = video.videoHeight || 480;
-          canvas.width = w;
-          canvas.height = h;
-          const ctx = canvas.getContext('2d');
+      // 2. Fallback to ZXing decoding (Direct video + Dual-pass canvas)
+      if (!detectedText && window.ZXing) {
+        if (!zxingReaderRef.current) {
+          try {
+            zxingReaderRef.current = new window.ZXing.BrowserMultiFormatReader();
+          } catch {}
+        }
 
-          if (ctx) {
-            ctx.drawImage(video, 0, 0, w, h);
-            if (!zxingReaderRef.current) {
-              zxingReaderRef.current = new window.ZXing.BrowserMultiFormatReader();
+        // Pass A: Direct from playing HTMLVideoElement
+        if (zxingReaderRef.current) {
+          try {
+            const res = await zxingReaderRef.current.decodeFromVideoElement(video);
+            if (res && res.getText()) {
+              detectedText = res.getText();
             }
-
-            try {
-              const result = await zxingReaderRef.current.decodeFromCanvas(canvas);
-              if (result && result.getText()) {
-                detectedText = result.getText();
-              }
-            } catch {}
-
-            if (!detectedText && facingMode === 'user') {
-              ctx.save();
-              ctx.translate(w, 0);
-              ctx.scale(-1, 1);
-              ctx.drawImage(video, 0, 0, w, h);
-              ctx.restore();
-
-              try {
-                const result = await zxingReaderRef.current.decodeFromCanvas(canvas);
-                if (result && result.getText()) {
-                  detectedText = result.getText();
-                }
-              } catch {}
-            }
+          } catch {
+            // Frame not found or scanning next frame
           }
-        } catch {}
+        }
+
+        // Pass B: Canvas fallback (with luminance source & mirroring support)
+        if (!detectedText && canvasRef.current) {
+          try {
+            const canvas = canvasRef.current;
+            const w = video.videoWidth || 640;
+            const h = video.videoHeight || 480;
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+
+            if (ctx) {
+              const decodeCanvasWithZXing = (cvs) => {
+                try {
+                  if (window.ZXing.HTMLCanvasElementLuminanceSource) {
+                    const lum = new window.ZXing.HTMLCanvasElementLuminanceSource(cvs);
+                    const bitmap = new window.ZXing.BinaryBitmap(new window.ZXing.HybridBinarizer(lum));
+                    const reader = new window.ZXing.MultiFormatReader();
+                    const r = reader.decode(bitmap);
+                    return r ? r.getText() : null;
+                  }
+                } catch {}
+                return null;
+              };
+
+              ctx.drawImage(video, 0, 0, w, h);
+              detectedText = decodeCanvasWithZXing(canvas);
+
+              // Pass C: Invert/Mirror if user facing or initial pass failed
+              if (!detectedText && facingMode === 'user') {
+                ctx.save();
+                ctx.translate(w, 0);
+                ctx.scale(-1, 1);
+                ctx.drawImage(video, 0, 0, w, h);
+                ctx.restore();
+
+                detectedText = decodeCanvasWithZXing(canvas);
+              }
+            }
+          } catch {}
+        }
       }
 
       if (detectedText) {

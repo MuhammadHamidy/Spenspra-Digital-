@@ -474,9 +474,20 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
         const existingSession = getStudentActiveSessionToday(studentId);
         const sessionTime = existingSession?.time || new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
+        // Tarik data buku yang sedang dipinjam oleh siswa/guru ini
+        let activeLoans = [];
+        try {
+          const loansRes = await loansApi.getLoans({ member_id: matchedMember.id });
+          const list = Array.isArray(loansRes) ? loansRes : loansRes?.data || [];
+          activeLoans = list.filter((l) => l.status === 'BORROWED' || l.status === 'OVERDUE');
+        } catch (loanErr) {
+          console.warn('Failed fetching active loans for member:', loanErr);
+        }
+
         const studentProfile = {
           name: matchedMember.full_name || matchedMember.name,
           id: studentId,
+          memberId: matchedMember.id,
           memberCode: matchedMember.member_code || cleanCode,
           identityNumber: matchedMember.identity_number || studentId,
           className: matchedMember.class_name || matchedMember.address || 'Siswa',
@@ -484,6 +495,8 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
           status: 'ready',
           hasActiveSessionToday: Boolean(existingSession),
           activeSessionTime: sessionTime,
+          activeLoans: activeLoans,
+          maxBorrowLimit: matchedMember.max_borrow_limit || 3,
         };
 
         // Rekam kunjungan di backend perpus
@@ -618,6 +631,15 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
           item_condition: 'GOOD',
           notes: 'Pengembalian mandiri siswa',
         });
+
+        // Hapus buku yang sudah dikembalikan dari daftar pinjaman aktif
+        setDetectedStudent((prev) => {
+          if (!prev) return prev;
+          const updated = (prev.activeLoans || []).filter(
+            (l) => l.barcode !== bookData.barcode && l.book_barcode !== bookData.barcode
+          );
+          return { ...prev, activeLoans: updated };
+        });
       }
 
       setLastTransaction({
@@ -666,7 +688,7 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
     }
 
     if (!detectedStudent) {
-      alert('Identitas siswa belum terverifikasi. Silakan lakukan scan barcode kartu pelajar terlebih dahulu.');
+      alert('Identitas siswa belum terverifikasi. Silakan lakukan scan QR code kartu pelajar terlebih dahulu.');
       handleFullResetToAttendance();
       return;
     }
@@ -712,6 +734,7 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
         {currentScreen === 'attendance' && (
           <PerpusAttendanceScreen
             selectedPurpose={selectedPurpose}
+            activeBarcodeMode={activeBarcodeMode}
             setCurrentScreen={setCurrentScreen}
             detectedStudent={detectedStudent}
             setDetectedStudent={setDetectedStudent}
@@ -751,6 +774,7 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
             handleConfirmTransaction={handleConfirmTransaction}
             scannedBooks={scannedBooks}
             handleRemoveBook={handleRemoveBook}
+            handleReturnBookDirectly={(book) => handleExecuteSingleAction(book, 'KEMBALI')}
           />
         )}
 

@@ -40,10 +40,10 @@ export default function PerpusPurposeScreen({ handleSelectPurpose }) {
 
           <div className="mt-6 pt-4 border-t border-slate-100 space-y-1">
             <p className="text-xs font-bold text-blue-600 group-hover:text-blue-700 transition-colors">
-              Pindai Kartu &rarr;
+              Pindai QR Siswa/Guru &rarr;
             </p>
             <p className="text-[11px] text-slate-400">
-              Setelah kartu, lanjut pindai buku
+              Kenali akun, lalu lanjut pindai buku
             </p>
           </div>
         </div>
@@ -67,10 +67,10 @@ export default function PerpusPurposeScreen({ handleSelectPurpose }) {
 
           <div className="mt-6 pt-4 border-t border-slate-100 space-y-1">
             <p className="text-xs font-bold text-amber-600 group-hover:text-amber-700 transition-colors">
-              Pindai Barcode Buku &rarr;
+              Pindai QR Siswa/Guru &rarr;
             </p>
             <p className="text-[11px] text-slate-400">
-              Pindai barcode pada buku pinjaman
+              Cek daftar buku pinjaman, lalu kembalikan
             </p>
           </div>
         </div>

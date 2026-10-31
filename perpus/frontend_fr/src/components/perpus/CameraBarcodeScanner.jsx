@@ -56,8 +56,8 @@ export default function CameraBarcodeScanner({
           ) : (
             <div className="space-y-3">
               <div className="w-9 h-9 border-3 border-[#0084FF] border-t-transparent rounded-full animate-spin mx-auto" />
-              <p className="text-xs text-slate-300 font-bold tracking-wide">Mengaktifkan Kamera Barcode...</p>
-              <p className="text-[11px] text-slate-500">Arahkan kamera ke stiker barcode pada buku</p>
+              <p className="text-xs text-slate-300 font-bold tracking-wide">Mengaktifkan Kamera Pemindai...</p>
+              <p className="text-[11px] text-slate-500">Mendukung QR Code Kartu Pelajar dan Barcode Buku</p>
             </div>
           )}
         </div>
@@ -65,20 +65,20 @@ export default function CameraBarcodeScanner({
 
       <canvas ref={canvasRef} className="hidden" />
 
-      {/* Barcode Targeting Reticle */}
+      {/* Barcode & QR Targeting Reticle (Versatile Square-Rounded for QR & Barcode) */}
       <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
         <div
-          className={`relative w-72 sm:w-80 h-44 sm:h-48 border-2 rounded-2xl transition-all duration-300 flex items-center justify-center ${
+          className={`relative w-60 sm:w-72 h-60 sm:h-72 border-2 rounded-3xl transition-all duration-300 flex items-center justify-center ${
             justScanned
               ? 'border-emerald-400 shadow-[0_0_30px_rgba(52,211,153,0.6)] bg-emerald-500/10'
               : 'border-blue-400/80 shadow-[0_0_20px_rgba(0,132,255,0.2)] bg-black/15'
           }`}
         >
           {/* Corner Brackets */}
-          <div className={`absolute -top-1.5 -left-1.5 w-6 h-6 border-t-4 border-l-4 rounded-tl-sm transition-colors ${justScanned ? 'border-emerald-400' : 'border-[#0084FF]'}`} />
-          <div className={`absolute -top-1.5 -right-1.5 w-6 h-6 border-t-4 border-r-4 rounded-tr-sm transition-colors ${justScanned ? 'border-emerald-400' : 'border-[#0084FF]'}`} />
-          <div className={`absolute -bottom-1.5 -left-1.5 w-6 h-6 border-b-4 border-l-4 rounded-bl-sm transition-colors ${justScanned ? 'border-emerald-400' : 'border-[#0084FF]'}`} />
-          <div className={`absolute -bottom-1.5 -right-1.5 w-6 h-6 border-b-4 border-r-4 rounded-br-sm transition-colors ${justScanned ? 'border-emerald-400' : 'border-[#0084FF]'}`} />
+          <div className={`absolute -top-1.5 -left-1.5 w-7 h-7 border-t-4 border-l-4 rounded-tl-xl transition-colors ${justScanned ? 'border-emerald-400' : 'border-[#0084FF]'}`} />
+          <div className={`absolute -top-1.5 -right-1.5 w-7 h-7 border-t-4 border-r-4 rounded-tr-xl transition-colors ${justScanned ? 'border-emerald-400' : 'border-[#0084FF]'}`} />
+          <div className={`absolute -bottom-1.5 -left-1.5 w-7 h-7 border-b-4 border-l-4 rounded-bl-xl transition-colors ${justScanned ? 'border-emerald-400' : 'border-[#0084FF]'}`} />
+          <div className={`absolute -bottom-1.5 -right-1.5 w-7 h-7 border-b-4 border-r-4 rounded-br-xl transition-colors ${justScanned ? 'border-emerald-400' : 'border-[#0084FF]'}`} />
 
           {/* Animated Laser Beam */}
           {cameraActive && !disabled && (
@@ -90,15 +90,15 @@ export default function CameraBarcodeScanner({
             />
           )}
 
-          <div className="absolute bottom-2.5 inset-x-0 flex justify-center">
+          <div className="absolute bottom-3 inset-x-2 flex flex-col items-center text-center">
             <span
               className={`px-3 py-1 rounded-full text-[10px] font-bold backdrop-blur-md transition-all ${
                 justScanned
                   ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/50'
-                  : 'bg-black/70 text-slate-200 border border-white/10'
+                  : 'bg-black/75 text-slate-200 border border-white/10'
               }`}
             >
-              {justScanned ? `✅ Barcode Terbaca: ${lastScannedCode}` : 'Arahkan Barcode Buku ke Sini'}
+              {justScanned ? `✅ Terdeteksi: ${lastScannedCode}` : 'Arahkan QR Code Kartu / Barcode Buku ke Sini'}
             </span>
           </div>
         </div>
