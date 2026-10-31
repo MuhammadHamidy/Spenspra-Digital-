@@ -10,7 +10,7 @@ import { deadlineApiAdapter } from '@/lib/features/deadlines/infrastructure/dead
 import { exportToExcelXml } from '@/lib/excelExport';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 import { attendanceApi } from '@/lib/attendanceApi';
-import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
+import { getSchoolAcademicPeriod, syncSchoolAcademicPeriod } from '@/lib/academicPeriod';
 import { classApiAdapter } from '@/lib/features/classes/infrastructure/classApiAdapter';
 
 function AdminMonitoringContent() {
@@ -36,6 +36,12 @@ function AdminMonitoringContent() {
         setActiveTab(upper);
       }
     }
+
+    syncSchoolAcademicPeriod().then((p) => {
+      if (p?.year) setAcademicYear(p.year);
+      if (p?.semester) setSemester(p.semester);
+      if (p?.kkm) setSchoolKkm(p.kkm);
+    });
   }, [searchParams]);
 
   // Pengesahan Rapor States

@@ -8,14 +8,14 @@ import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApi
 import { tokenStorage } from '@/lib/common/tokenStorage';
 import { deadlineApiAdapter } from '@/lib/features/deadlines/infrastructure/deadlineApiAdapter';
 
-import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
+import { getSchoolAcademicPeriod, syncSchoolAcademicPeriod } from '@/lib/academicPeriod';
 
 const DEFAULT_KKM = 75.0;
 
 export default function MainPage() {
   const [user, setUser] = useState(null);
-  const [academicYear, setAcademicYear] = useState(() => getSchoolAcademicPeriod().year || '2025/2026');
-  const [semester, setSemester] = useState(() => getSchoolAcademicPeriod().semester || 'GENAP');
+  const [academicYear, setAcademicYear] = useState(() => getSchoolAcademicPeriod().year || '2026/2027');
+  const [semester, setSemester] = useState(() => getSchoolAcademicPeriod().semester || 'GANJIL');
   const [schoolKkm, setSchoolKkm] = useState(() => getSchoolAcademicPeriod().kkm || 75);
   const [levelFilter, setLevelFilter] = useState('ALL');
   const [deadlines, setDeadlines] = useState([]);
@@ -35,11 +35,12 @@ export default function MainPage() {
     const currentUser = tokenStorage.getUser();
     setUser(currentUser);
 
-    // Ambil sinkronisasi periode & KKM dari Super Admin
-    const period = getSchoolAcademicPeriod();
-    if (period.year) setAcademicYear(period.year);
-    if (period.semester) setSemester(period.semester);
-    if (period.kkm) setSchoolKkm(period.kkm);
+    // Ambil sinkronisasi periode & KKM dari server Super Admin
+    syncSchoolAcademicPeriod().then((period) => {
+      if (period?.year) setAcademicYear(period.year);
+      if (period?.semester) setSemester(period.semester);
+      if (period?.kkm) setSchoolKkm(period.kkm);
+    });
   }, []);
 
   useEffect(() => {
@@ -497,42 +498,20 @@ export default function MainPage() {
             </p>
           </div>
 
-          {/* Filter Bar Toolbar */}
+          {/* Filter Bar Toolbar & Quick Action */}
           <div className="flex flex-wrap items-center gap-3 bg-slate-50/80 p-2.5 rounded-lg border border-slate-200 shrink-0">
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
-                Tahun Ajaran
-              </label>
-              <select
-                value={academicYear}
-                onChange={(e) => setAcademicYear(e.target.value)}
-                className="bg-white text-slate-800 text-xs font-semibold px-3 py-1.5 rounded-md outline-none cursor-pointer border border-slate-300 hover:border-[#4B3B78] focus:ring-2 focus:ring-[#4B3B78]/20 transition"
-              >
-                <option value="2024/2025">2024/2025</option>
-                <option value="2025/2026">2025/2026</option>
-                <option value="2026/2027">2026/2027</option>
-              </select>
+            <div className="flex items-center gap-2.5 bg-white px-3.5 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Tahun Ajaran: <strong className="text-slate-900">{academicYear}</strong></span>
+              <span className="text-slate-300">•</span>
+              <span>Semester: <strong className="text-slate-900">{semester === 'GANJIL' ? 'Ganjil' : 'Genap'}</strong></span>
             </div>
 
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
-                Semester
-              </label>
-              <select
-                value={semester}
-                onChange={(e) => setSemester(e.target.value)}
-                className="bg-white text-slate-800 text-xs font-semibold px-3 py-1.5 rounded-md outline-none cursor-pointer border border-slate-300 hover:border-[#4B3B78] focus:ring-2 focus:ring-[#4B3B78]/20 transition"
-              >
-                <option value="GANJIL">Ganjil</option>
-                <option value="GENAP">Genap</option>
-              </select>
-            </div>
-
-            <div className="self-end pt-1">
+            <div className="self-center">
               {isAdmin || isKepalaSekolah ? (
                 <Link
                   href="/admin/monitoring"
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[#4B3B78] hover:bg-[#3D2E66] text-white text-xs font-semibold shadow-2xs transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#193D9B] hover:bg-[#1E4DBD] text-white text-xs font-semibold shadow-2xs transition-colors"
                 >
                   <span>Monitoring e-Rapor</span>
                   <span>→</span>
@@ -540,7 +519,7 @@ export default function MainPage() {
               ) : (
                 <Link
                   href="/wali-kelas"
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[#4B3B78] hover:bg-[#3D2E66] text-white text-xs font-semibold shadow-2xs transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#193D9B] hover:bg-[#1E4DBD] text-white text-xs font-semibold shadow-2xs transition-colors"
                 >
                   <span>Rekap Nilai Walas</span>
                   <span>→</span>

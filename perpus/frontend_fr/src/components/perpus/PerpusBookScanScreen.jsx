@@ -159,26 +159,6 @@ export default function PerpusBookScanScreen({
               </button>
             </form>
           </div>
-
-          {/* Quick preset buttons */}
-          <div className="mt-4 pt-3 border-t border-slate-100">
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-              Uji Coba Cepat (Barcode Buku dari Database):
-            </p>
-            <div className="flex items-center gap-2 flex-wrap">
-              {presetBarcodes.slice(0, 5).map((p) => (
-                <button
-                  key={p.barcode}
-                  type="button"
-                  onClick={() => handleBarcodeDetected(p.barcode)}
-                  className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 border border-slate-200 text-slate-700 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  <span className="font-mono font-bold text-[11px]">{p.barcode}</span>
-                  <span className="text-[10px] text-slate-400 truncate max-w-[120px]">({p.title})</span>
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
 
         {/* Right Column: Scanned Book List & Confirmation */}

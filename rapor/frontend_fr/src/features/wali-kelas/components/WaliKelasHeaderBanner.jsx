@@ -80,41 +80,13 @@ export default function WaliKelasHeaderBanner({
           </div>
         </div>
 
-        {/* Kolom Kanan: Selector Tahun Ajaran & Semester */}
-        {setAcademicYear && setSemester && (
-          <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 bg-slate-50/80 p-2.5 rounded-lg border border-slate-200 shrink-0 print:hidden">
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
-                Tahun Ajaran
-              </label>
-              <select
-                value={academicYear}
-                onChange={(e) => setAcademicYear(e.target.value)}
-                className="bg-white text-slate-800 text-xs font-semibold px-3 py-1.5 rounded-md outline-none cursor-pointer border border-slate-300 hover:border-[#193D9B] focus:ring-2 focus:ring-[#193D9B]/15 transition"
-              >
-                {yearOptions.map((y) => (
-                  <option key={y} value={y}>
-                    {y} {y === academicYear ? '(Aktif)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
-                Semester
-              </label>
-              <select
-                value={semester}
-                onChange={(e) => setSemester(e.target.value)}
-                className="bg-white text-slate-800 text-xs font-semibold px-3 py-1.5 rounded-md outline-none cursor-pointer border border-slate-300 hover:border-[#193D9B] focus:ring-2 focus:ring-[#193D9B]/15 transition"
-              >
-                <option value="Ganjil">Ganjil</option>
-                <option value="Genap">Genap</option>
-              </select>
-            </div>
-          </div>
-        )}
+        {/* Kolom Kanan: Periode Akademik Terkunci */}
+        <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 shrink-0 print:hidden shadow-2xs">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Tahun Ajaran: <strong className="text-slate-900">{academicYear}</strong></span>
+          <span className="text-slate-300">•</span>
+          <span>Semester: <strong className="text-slate-900">{semester}</strong></span>
+        </div>
       </div>
     </section>
   );

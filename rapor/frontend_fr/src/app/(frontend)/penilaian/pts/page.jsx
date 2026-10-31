@@ -9,7 +9,7 @@ import Pagination from '@/components/Pagination';
 import { exportToExcelXml } from '@/lib/excelExport';
 import Modal from '@/components/Modal';
 import ImportGradesModal from '@/components/ImportGradesModal';
-import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
+import { getSchoolAcademicPeriod, syncSchoolAcademicPeriod } from '@/lib/academicPeriod';
 
 const PREDICATE_LABELS = {
   A: 'Sangat baik dalam',
@@ -82,9 +82,10 @@ export default function PenilaianPTSPage() {
 
   // Load master courses & classes from backend filtered by logged-in teacher
   useEffect(() => {
-    const period = getSchoolAcademicPeriod();
-    if (period?.year) setAcademicYear(period.year);
-    if (period?.semester) setSemester(period.semester);
+    syncSchoolAcademicPeriod().then((period) => {
+      if (period?.year) setAcademicYear(period.year);
+      if (period?.semester) setSemester(period.semester);
+    });
 
     deadlineApiAdapter.getDeadlines().then((list) => {
       const dl = list.find((d) => d.type === 'PTS');
@@ -875,45 +876,18 @@ export default function PenilaianPTSPage() {
       )}
 
       {/* Toolbar Filter & Aksi Tambahan */}
-      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-[0.9fr_0.9fr_1.2fr_0.8fr_1.2fr]">
-        <label className="text-xs font-semibold text-slate-700">
-          <div className="flex items-center justify-between">
-            <span>Tahun Ajaran</span>
-            {currentUser && (currentUser.role === 'GURU' || currentUser.roleName === 'GURU') && (
-              <span className="text-[10px] text-blue-600 font-normal">Terkunci Super Admin</span>
-            )}
+      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-[1.3fr_1.2fr_0.9fr_1.2fr]">
+        <div className="flex flex-col justify-center rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            Tahun Ajaran & Semester
+          </span>
+          <div className="flex items-center gap-1.5 mt-1 text-xs font-semibold text-slate-800">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>{academicYear}</span>
+            <span className="text-slate-300">•</span>
+            <span>{semester === 'GANJIL' ? 'Ganjil' : 'Genap'}</span>
           </div>
-          <select
-            value={academicYear}
-            disabled={Boolean(currentUser && (currentUser.role === 'GURU' || currentUser.roleName === 'GURU'))}
-            onChange={(e) => setAcademicYear(e.target.value)}
-            className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-600"
-          >
-            <option value="2024/2025">{`2024/2025 ${academicYear === '2024/2025' ? '(Aktif)' : '(Arsip)'}`}</option>
-            <option value="2025/2026">{`2025/2026 ${academicYear === '2025/2026' ? '(Aktif)' : ''}`}</option>
-            <option value="2026/2027">{`2026/2027 ${academicYear === '2026/2027' ? '(Aktif)' : ''}`}</option>
-            {academicYear && !['2024/2025', '2025/2026', '2026/2027'].includes(academicYear) && (
-              <option value={academicYear}>{`${academicYear} (Aktif)`}</option>
-            )}
-          </select>
-        </label>
-        <label className="text-xs font-semibold text-slate-700">
-          <div className="flex items-center justify-between">
-            <span>Semester</span>
-            {currentUser && (currentUser.role === 'GURU' || currentUser.roleName === 'GURU') && (
-              <span className="text-[10px] text-blue-600 font-normal">Terkunci Super Admin</span>
-            )}
-          </div>
-          <select
-            value={semester}
-            disabled={Boolean(currentUser && (currentUser.role === 'GURU' || currentUser.roleName === 'GURU'))}
-            onChange={(e) => setSemester(e.target.value)}
-            className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-600"
-          >
-            <option value="GANJIL">Ganjil</option>
-            <option value="GENAP">Genap</option>
-          </select>
-        </label>
+        </div>
         <label className="text-xs font-semibold text-slate-700">
           Mata Pelajaran
           <select value={subject} onChange={(event) => setSubject(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100">

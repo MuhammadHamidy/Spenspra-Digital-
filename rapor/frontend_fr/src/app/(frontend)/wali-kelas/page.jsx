@@ -6,7 +6,7 @@ import { tokenStorage } from '@/lib/common/tokenStorage';
 import { accountApiAdapter } from '@/lib/features/auth/infrastructure/accountApiAdapter';
 import { gradeApi } from '@/lib/gradeApi';
 import { exportToExcelXml } from '@/lib/excelExport';
-import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
+import { getSchoolAcademicPeriod, syncSchoolAcademicPeriod } from '@/lib/academicPeriod';
 import { classApiAdapter } from '@/lib/features/classes/infrastructure/classApiAdapter';
 import WaliKelasHeaderBanner from '@/features/wali-kelas/components/WaliKelasHeaderBanner';
 import WaliKelasStatsBar from '@/features/wali-kelas/components/WaliKelasStatsBar';
@@ -68,9 +68,11 @@ export default function WaliKelasRaporPage() {
   const [allTeachers, setAllTeachers] = useState([]);
 
   useEffect(() => {
-    const period = getSchoolAcademicPeriod();
-    if (period?.year) setAcademicYear(period.year);
-    if (period?.semester) setSemester(period.semester);
+    syncSchoolAcademicPeriod().then((period) => {
+      if (period?.year) setAcademicYear(period.year);
+      if (period?.semester) setSemester(period.semester);
+      if (period?.kkm) setSchoolKkm(period.kkm);
+    });
 
     const user = tokenStorage.getUser();
     if (user) {
