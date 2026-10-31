@@ -143,6 +143,5 @@ export default function PerpusPurposeScreen({ handleSelectPurpose }) {
         </button>
       </div>
     </div>
-    </div>
   );
 }

@@ -206,6 +206,7 @@ export default function VisitorProfileCard({
               if (setBarcodeScanError) setBarcodeScanError(null);
             }}
             className="w-full py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-1"
+          >
             <AppIcon name="human" color="blue" size={14} />
             <span>Masuk Sebagai Tamu Umum (Tanpa Kartu)</span>
           </button>
