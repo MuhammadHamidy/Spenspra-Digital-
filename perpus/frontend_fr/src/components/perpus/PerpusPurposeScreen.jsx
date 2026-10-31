@@ -9,7 +9,7 @@ export default function PerpusPurposeScreen({ handleSelectPurpose }) {
       <div className="text-center space-y-2.5 max-w-2xl">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-[#0066CC] text-xs font-bold mb-1">
           <span>🏛️</span>
-          <span>Kiosk Layanan Mandiri Perpustakaan SMPN 1 Prambon</span>
+          <span>Layanan Mandiri Perpustakaan SMPN 1 Prambon</span>
         </div>
         <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-[#0A1931] tracking-tight leading-tight">
           Ada keperluan apa hari ini?

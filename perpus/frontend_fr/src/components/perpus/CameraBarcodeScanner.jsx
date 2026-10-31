@@ -86,7 +86,7 @@ export default function CameraBarcodeScanner({
               className={`absolute inset-x-2 h-0.5 shadow-lg transition-colors animate-pulse ${
                 justScanned ? 'bg-emerald-400 shadow-[0_0_12px_#34d399]' : 'bg-red-500 shadow-[0_0_14px_#ef4444]'
               }`}
-              style={{ animation: 'kioskLaserMove 2.4s ease-in-out infinite alternate' }}
+              style={{ animation: 'laserMove 2.4s ease-in-out infinite alternate' }}
             />
           )}
 
@@ -142,7 +142,7 @@ export default function CameraBarcodeScanner({
       </div>
 
       <style jsx>{`
-        @keyframes kioskLaserMove {
+        @keyframes laserMove {
           0% { top: 15%; }
           100% { top: 85%; }
         }

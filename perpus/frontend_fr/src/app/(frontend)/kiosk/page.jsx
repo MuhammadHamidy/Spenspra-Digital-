@@ -1,9 +1,14 @@
 'use client';
 
-import React from 'react';
-import StudentPerpus from '@/components/perpus/StudentPerpus';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
-export default function KioskPage() {
-  return <StudentPerpus initialScreen="purpose" />;
+export default function KioskRedirectPage() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/layanan-mandiri');
+  }, [router]);
+  return null;
 }
+
 

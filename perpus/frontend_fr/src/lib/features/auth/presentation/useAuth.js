@@ -21,8 +21,8 @@ export function useAuth() {
     if (!storedUser || !token) {
       setUser(null);
       setLoading(false);
-      // Jika mencoba mengakses rute terproteksi (bukan login, bukan root /perpus /kiosk)
-      if (pathname !== '/login' && pathname !== '/' && pathname !== '/perpus' && pathname !== '/kiosk') {
+      // Jika mencoba mengakses rute terproteksi (bukan login, bukan root /perpus /layanan-mandiri)
+      if (pathname !== '/login' && pathname !== '/' && pathname !== '/perpus' && pathname !== '/layanan-mandiri' && pathname !== '/kiosk') {
         router.replace('/login');
       }
       return;
@@ -40,7 +40,7 @@ export function useAuth() {
       // Hapus sesi lokal karena backend mati atau token tidak valid
       tokenStorage.clear();
       setUser(null);
-      if (pathname !== '/login' && pathname !== '/' && pathname !== '/perpus' && pathname !== '/kiosk') {
+      if (pathname !== '/login' && pathname !== '/' && pathname !== '/perpus' && pathname !== '/layanan-mandiri' && pathname !== '/kiosk') {
         router.replace('/login?error=backend_offline');
       }
     } finally {

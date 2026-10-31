@@ -43,9 +43,10 @@ export function middleware(request) {
     } catch {}
   }
 
-  // Hanya rute callback SSO dan Kiosk mandiri yang dapat diakses publik tanpa login personal
+  // Hanya rute callback SSO dan Layanan Mandiri yang dapat diakses publik tanpa login personal
   const isPublicPath =
     pathname.startsWith('/sso/callback') ||
+    pathname === '/layanan-mandiri' ||
     pathname === '/kiosk';
 
   // Rute /login kini dialihkan langsung ke SSO terpusat

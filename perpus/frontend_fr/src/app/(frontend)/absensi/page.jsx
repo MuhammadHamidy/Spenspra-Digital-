@@ -195,7 +195,7 @@ export default function AbsensiPage() {
               </div>
               <h3 className="text-base font-bold text-slate-800">Belum Ada Riwayat Kunjungan</h3>
               <p className="mt-1 text-sm text-slate-500 max-w-sm mx-auto">
-                Anda belum memiliki catatan presensi di perpustakaan. Kunjungi perpustakaan dan lakukan presensi di Kiosk presensi mandiri.
+                Anda belum memiliki catatan presensi di perpustakaan. Kunjungi perpustakaan dan lakukan presensi di layanan presensi mandiri.
               </p>
             </div>
           )}

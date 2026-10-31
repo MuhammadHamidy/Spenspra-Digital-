@@ -23,6 +23,7 @@ export default function AppLayoutWrapper({ children }) {
     pathname === '/akun' ||
     pathname === '/pinjam' ||
     pathname === '/kiosk' ||
+    pathname === '/layanan-mandiri' ||
     pathname === '/perpus' ||
     pathname === '/pembelajaran' ||
     pathname.startsWith('/sso') ||

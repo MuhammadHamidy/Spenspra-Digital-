@@ -68,7 +68,7 @@ export default function PustakawanAbsensiPage() {
                   method: l.method || 'BARCODE_SCAN',
                   timestamp: l.timestamp,
                   created_at: l.timestamp,
-                  notes: l.notes || 'Presensi Kiosk/Admin',
+                  notes: l.notes || 'Presensi Mandiri/Admin',
                 });
                 existingIds.add(String(l.id));
               }

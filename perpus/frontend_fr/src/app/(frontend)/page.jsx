@@ -3,7 +3,7 @@
 import React from 'react';
 import StudentPerpus from '@/components/perpus/StudentPerpus';
 
-export default function RootPerpusKioskPage() {
+export default function RootPerpusPage() {
   return <StudentPerpus initialScreen="purpose" />;
 }
 

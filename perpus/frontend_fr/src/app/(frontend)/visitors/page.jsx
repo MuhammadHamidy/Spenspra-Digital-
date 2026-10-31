@@ -96,7 +96,7 @@ export default function VisitorTrackingPage() {
         .map((l) => ({
           id: l.id || `local-${Math.random()}`,
           member_id: l.studentId || null,
-          visitor_name: l.name || 'Pengunjung Kiosk',
+          visitor_name: l.name || 'Pengunjung Layanan Mandiri',
           visitor_type: l.className === 'Tamu Umum' ? 'GUEST' : 'MEMBER',
           method: 'FACE_RECOGNITION',
           purpose: l.purpose || 'PEMBELAJARAN',
