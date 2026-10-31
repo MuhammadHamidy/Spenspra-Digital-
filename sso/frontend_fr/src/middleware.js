@@ -1,9 +1,20 @@
 import { NextResponse } from 'next/server';
 
 export function middleware(request) {
+  const { pathname } = request.nextUrl;
+  if (pathname === '/login') {
+    return NextResponse.next();
+  }
+
   const token = request.cookies.get('perpusdig_auth_token')?.value;
-  if (!token && request.nextUrl.pathname !== '/login') {
-    return NextResponse.redirect(new URL('/login', request.url));
+  if (!token) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/login';
+    const proto = request.headers.get('x-forwarded-proto');
+    if (proto) {
+      url.protocol = `${proto}:`;
+    }
+    return NextResponse.redirect(url);
   }
   return NextResponse.next();
 }

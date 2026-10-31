@@ -22,7 +22,9 @@ function getSsoLoginUrl(request, reason = '') {
   const redirectUrl = new URL(ssoLoginUrl, request.url);
 
   // Simpan URL aplikasi agar SSO mengarahkan kembali setelah login berhasil
-  redirectUrl.searchParams.set('redirect_uri', perpusUrl);
+  if (reason !== 'unauthorized_app') {
+    redirectUrl.searchParams.set('redirect_uri', perpusUrl);
+  }
 
   if (reason) {
     redirectUrl.searchParams.set('reason', reason);
@@ -58,10 +60,9 @@ export function middleware(request) {
   // Rute /login kini dialihkan langsung ke SSO terpusat
   if (pathname === '/login') {
     if (isAuthenticated) {
-      if (userRole === 'SISWA') {
-        return NextResponse.redirect(new URL('/', request.url));
-      }
-      return NextResponse.redirect(new URL('/pustakawan', request.url));
+      const url = request.nextUrl.clone();
+      url.pathname = userRole === 'SISWA' ? '/' : '/pustakawan';
+      return NextResponse.redirect(url);
     }
     return NextResponse.redirect(getSsoLoginUrl(request));
   }
@@ -74,7 +75,9 @@ export function middleware(request) {
   // Jika sudah login di root ('/') dan role adalah pustakawan/admin -> alihkan ke dashboard pustakawan
   if (isAuthenticated && pathname === '/') {
     if (userRole === 'PUSTAKAWAN' || userRole === 'ADMIN_PERPUS' || userRole === 'SUPER_ADMIN') {
-      return NextResponse.redirect(new URL('/pustakawan', request.url));
+      const url = request.nextUrl.clone();
+      url.pathname = '/pustakawan';
+      return NextResponse.redirect(url);
     }
   }
 
