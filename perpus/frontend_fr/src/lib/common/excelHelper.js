@@ -108,14 +108,6 @@ export async function loadSheetJs() {
   if (typeof window !== "undefined" && window.XLSX) {
     return window.XLSX;
   }
-  try {
-    const mod = await import("xlsx");
-    if (mod && (mod.read || mod.default?.read)) {
-      const xlsxInstance = mod.read ? mod : mod.default;
-      if (typeof window !== "undefined") window.XLSX = xlsxInstance;
-      return xlsxInstance;
-    }
-  } catch (e) {}
 
   if (typeof window === "undefined") {
     throw new Error("SheetJS hanya dapat dimuat di browser.");
