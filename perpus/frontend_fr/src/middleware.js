@@ -93,7 +93,13 @@ export function middleware(request) {
     pathname.startsWith('/loans') ||
     pathname.startsWith('/reading-insights');
 
-  if (userRole === 'SISWA' && isLibrarianAdminPath) {
+  if (
+    (userRole === 'SISWA' || userRole === 'GURU') &&
+    userRole !== 'PUSTAKAWAN' &&
+    userRole !== 'ADMIN_PERPUS' &&
+    userRole !== 'SUPER_ADMIN' &&
+    isLibrarianAdminPath
+  ) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 

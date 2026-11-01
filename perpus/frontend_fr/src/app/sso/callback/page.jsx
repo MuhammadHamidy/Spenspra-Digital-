@@ -76,8 +76,14 @@ function SSOCallbackContent() {
         }
       }
 
-      // Siswa TIDAK boleh diarahkan ke dashboard admin pustakawan
-      if (roleUpper === 'SISWA' && destination.startsWith('/pustakawan')) {
+      // Siswa dan Guru (selain Admin Perpus/Pustakawan/Super Admin) diarahkan ke beranda utama
+      if (
+        (roleUpper === 'SISWA' || roleUpper === 'GURU') &&
+        roleUpper !== 'ADMIN_PERPUS' &&
+        roleUpper !== 'PUSTAKAWAN' &&
+        roleUpper !== 'SUPER_ADMIN' &&
+        destination.startsWith('/pustakawan')
+      ) {
         destination = '/';
       }
 

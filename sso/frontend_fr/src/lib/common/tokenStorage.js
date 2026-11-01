@@ -93,6 +93,48 @@ function purgeBloatedCookies() {
 // Jalankan pembersihan saat modul pertama kali di-load
 purgeBloatedCookies();
 
+function parseJwtUser(token) {
+  if (!token) return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const parsed = JSON.parse(jsonPayload);
+    if (!parsed || (!parsed.sub && !parsed.id && !parsed.username)) return null;
+
+    const rawRole = parsed.role_name || parsed.role || parsed.roleId || '';
+    const roleName = String(rawRole).toUpperCase();
+    const fullName = parsed.full_name || parsed.fullName || parsed.name || parsed.username || '';
+    const className = parsed.class_name || parsed.className || parsed.kelas || (roleName === 'SISWA' ? 'Peserta Didik' : 'Civitas Spenspra');
+
+    return {
+      id: parsed.id || parsed.sub,
+      username: parsed.username || '',
+      fullName: fullName,
+      full_name: fullName,
+      roleName: roleName,
+      peran: roleName,
+      className: className,
+      nimNip: parsed.nim_nip || parsed.nimNip || '',
+      email: parsed.email || '',
+      phone: parsed.phone || '',
+      courseNames: parsed.course_names || parsed.courseNames || [],
+      courseIds: parsed.course_ids || parsed.courseIds || [],
+      classCodes: parsed.class_codes || parsed.classCodes || [],
+      classIds: parsed.class_ids || parsed.classIds || [],
+    };
+  } catch {
+    return null;
+  }
+}
+
 export const tokenStorage = {
   getToken: () => {
     if (typeof window === 'undefined') return null;
@@ -145,6 +187,9 @@ export const tokenStorage = {
     if (typeof window === 'undefined') return null;
     purgeBloatedCookies();
 
+    const currentToken = tokenStorage.getToken();
+    const jwtUser = parseJwtUser(currentToken);
+
     let data = null;
     try {
       data = sessionStorage.getItem(USER_KEY);
@@ -159,13 +204,34 @@ export const tokenStorage = {
       } catch (e) {}
     }
 
-    if (!data) return null;
-
-    try {
-      return JSON.parse(data);
-    } catch {
-      return null;
+    if (data) {
+      try {
+        const parsed = JSON.parse(data);
+        if (jwtUser && parsed) {
+          const matchId = !jwtUser.id || !parsed.id || String(jwtUser.id) === String(parsed.id);
+          const matchUsername = !jwtUser.username || !parsed.username || String(jwtUser.username).toLowerCase() === String(parsed.username).toLowerCase();
+          if (matchId && matchUsername) {
+            return parsed;
+          }
+          // Sesi lama di localStorage tidak cocok dengan token login aktif, perbarui secara otomatis
+        } else if (parsed && (parsed.id || parsed.username)) {
+          return parsed;
+        }
+      } catch {
+        // Fallback
+      }
     }
+
+    if (jwtUser) {
+      try {
+        const userStr = JSON.stringify(jwtUser);
+        sessionStorage.setItem(USER_KEY, userStr);
+        localStorage.setItem(USER_KEY, userStr);
+      } catch (e) {}
+      return jwtUser;
+    }
+
+    return null;
   },
 
   setUser: (user) => {

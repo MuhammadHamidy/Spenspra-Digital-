@@ -182,6 +182,9 @@ export const tokenStorage = {
     if (typeof window === 'undefined') return null;
     purgeBloatedCookies();
 
+    const currentToken = tokenStorage.getToken();
+    const jwtUser = parseJwtUser(currentToken);
+
     let data = null;
     try {
       data = sessionStorage.getItem(USER_KEY);
@@ -199,7 +202,14 @@ export const tokenStorage = {
     if (data) {
       try {
         const parsed = JSON.parse(data);
-        if (parsed && (parsed.id || parsed.username || parsed.fullName || parsed.full_name)) {
+        if (jwtUser && parsed) {
+          const matchId = !jwtUser.id || !parsed.id || String(jwtUser.id) === String(parsed.id);
+          const matchUsername = !jwtUser.username || !parsed.username || String(jwtUser.username).toLowerCase() === String(parsed.username).toLowerCase();
+          if (matchId && matchUsername) {
+            return parsed;
+          }
+          // Identity mismatch: purge and use jwtUser
+        } else if (parsed && (parsed.id || parsed.username || parsed.fullName || parsed.full_name)) {
           return parsed;
         }
       } catch {
@@ -207,18 +217,13 @@ export const tokenStorage = {
       }
     }
 
-    // Fallback otomatis: Dekode dari JWT token SSO yang dibagikan via cookie
-    const token = tokenStorage.getToken();
-    if (token) {
-      const userFromJwt = parseJwtUser(token);
-      if (userFromJwt) {
-        try {
-          const userStr = JSON.stringify(userFromJwt);
-          sessionStorage.setItem(USER_KEY, userStr);
-          localStorage.setItem(USER_KEY, userStr);
-        } catch (e) {}
-        return userFromJwt;
-      }
+    if (jwtUser) {
+      try {
+        const userStr = JSON.stringify(jwtUser);
+        sessionStorage.setItem(USER_KEY, userStr);
+        localStorage.setItem(USER_KEY, userStr);
+      } catch (e) {}
+      return jwtUser;
     }
 
     return null;
