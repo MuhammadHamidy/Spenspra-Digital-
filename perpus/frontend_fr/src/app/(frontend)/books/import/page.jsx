@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { booksApi } from '@/lib/features/library/api/booksApi';
-import { parseBookCSV, downloadBookImportTemplate, SAMPLE_BOOK_IMPORT_DATA } from '@/lib/common/excelHelper';
+import { parseBookCSV, downloadBookImportTemplate, SAMPLE_BOOK_IMPORT_DATA, getCategoryFromDDC, generateCallNumber } from '@/lib/common/excelHelper';
 import CircularProgress from '@mui/material/CircularProgress';
 
 export default function BooksImportPage() {
@@ -64,17 +64,22 @@ export default function BooksImportPage() {
   const handleUseDemoData = () => {
     setErrorMsg('');
     setImportResult(null);
-    const mapped = SAMPLE_BOOK_IMPORT_DATA.map((item) => ({
-      title: item.Judul,
-      isbn: item.ISBN,
-      author: item.Pengarang,
-      publisher: item.Penerbit,
-      publish_year: item.Tahun,
-      category: item.Kategori,
-      call_number: item.NomorPanggil,
-      copies_count: item.JumlahEksemplar,
-      description: item.Deskripsi,
-    }));
+    const mapped = SAMPLE_BOOK_IMPORT_DATA.map((item) => {
+      const fullPublisher = item.KotaTerbit ? `${item.KotaTerbit} : ${item.Penerbit}` : item.Penerbit;
+      return {
+        title: item.JudulBuku,
+        isbn: item.ISBN,
+        author: item.Pengarang,
+        publisher: fullPublisher,
+        publish_year: item.TahunTerbit,
+        category: item.Kategori || getCategoryFromDDC(item.KlasifikasiDDC),
+        call_number: generateCallNumber(item.KlasifikasiDDC, item.Pengarang, item.JudulBuku),
+        ddc: item.KlasifikasiDDC,
+        city: item.KotaTerbit,
+        copies_count: item.JumlahEksemplar,
+        description: item.Deskripsi,
+      };
+    });
     setParsedRows(mapped);
     setFile({ name: 'sampel_data_perpustakaan_smpn1prambon.xlsx' });
   };
@@ -325,9 +330,11 @@ export default function BooksImportPage() {
                     <th className="py-3 px-3">No</th>
                     <th className="py-3 px-3">Judul Buku</th>
                     <th className="py-3 px-3">Pengarang</th>
+                    <th className="py-3 px-3">Penerbit & Kota</th>
+                    <th className="py-3 px-3">Tahun</th>
                     <th className="py-3 px-3">ISBN</th>
+                    <th className="py-3 px-3">DDC / No. Panggil</th>
                     <th className="py-3 px-3">Kategori</th>
-                    <th className="py-3 px-3">Lokasi Rak</th>
                     <th className="py-3 px-3 text-center">Eksemplar</th>
                   </tr>
                 </thead>
@@ -337,13 +344,15 @@ export default function BooksImportPage() {
                       <td className="py-3 px-3 text-slate-400 font-bold">{idx + 1}</td>
                       <td className="py-3 px-3 font-bold text-slate-900 max-w-xs">{row.title}</td>
                       <td className="py-3 px-3 text-slate-600">{row.author}</td>
+                      <td className="py-3 px-3 text-slate-600 max-w-xs truncate">{row.publisher || '-'}</td>
+                      <td className="py-3 px-3 text-slate-600">{row.publish_year || '-'}</td>
                       <td className="py-3 px-3 font-mono text-slate-500">{row.isbn || '-'}</td>
+                      <td className="py-3 px-3 font-mono text-slate-700 font-semibold">{row.call_number || '-'}</td>
                       <td className="py-3 px-3">
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
                           {row.category}
                         </span>
                       </td>
-                      <td className="py-3 px-3 font-mono text-slate-700 font-semibold">{row.call_number || 'Rak A-01'}</td>
                       <td className="py-3 px-3 text-center font-bold text-emerald-700">
                         {row.copies_count} unit
                       </td>
@@ -362,9 +371,9 @@ export default function BooksImportPage() {
           <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs">
             📋
           </div>
-          <h4 className="text-xs font-bold text-slate-900">Format Kolom Wajib</h4>
+          <h4 className="text-xs font-bold text-slate-900">Format Kolom Baku</h4>
           <p className="text-[11px] text-slate-500 leading-relaxed">
-            Pastikan kolom Judul, Pengarang, ISBN, Kategori, dan JumlahEksemplar terisi dengan benar pada baris spreadsheet Anda.
+            Kolom: <strong>Judul Buku, Pengarang, Penerbit, Kota Terbit, Tahun Terbit, ISBN, Jumlah Eksemplar, Klasifikasi DDC</strong>. Kolom Kategori dan Deskripsi bersifat opsional (kategori dan nomor panggil otomatis terisi dari DDC jika dikosongkan).
           </p>
         </div>
 

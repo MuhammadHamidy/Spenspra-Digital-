@@ -3,63 +3,98 @@
  */
 
 export const BOOK_TEMPLATE_COLUMNS = [
-  "Judul",
-  "ISBN",
+  "Judul Buku",
   "Pengarang",
   "Penerbit",
-  "Tahun",
-  "Kategori",
-  "NomorPanggil",
-  "JumlahEksemplar",
-  "Deskripsi",
+  "Kota Terbit",
+  "Tahun Terbit",
+  "ISBN",
+  "Jumlah Eksemplar",
+  "Klasifikasi DDC",
+  "Kategori (Opsional)",
+  "Deskripsi (Opsional)",
 ];
 
 export const SAMPLE_BOOK_IMPORT_DATA = [
   {
-    Judul: "Clean Architecture: A Craftsman's Guide to Software Structure",
-    ISBN: "978-0134494166",
-    Pengarang: "Robert C. Martin",
-    Penerbit: "Prentice Hall",
-    Tahun: 2017,
-    Kategori: "Teknologi",
-    NomorPanggil: "005.1 MAR c",
-    JumlahEksemplar: 3,
-    Deskripsi: "Buku panduan arsitektur perangkat lunak modern untuk memisahkan domain dan infrastruktur.",
-  },
-  {
-    Judul: "Bumi Manusia",
-    ISBN: "978-979-97312-3-4",
+    JudulBuku: "Bumi Manusia",
     Pengarang: "Pramoedya Ananta Toer",
     Penerbit: "Lentera Dipantara",
-    Tahun: 1980,
-    Kategori: "Sastra & Sejarah",
-    NomorPanggil: "813 TOE b",
+    KotaTerbit: "Jakarta",
+    TahunTerbit: 1980,
+    ISBN: "978-979-97312-3-4",
     JumlahEksemplar: 4,
+    KlasifikasiDDC: "813",
+    Kategori: "Kesusastraan & Novel",
     Deskripsi: "Kisah roman sejarah pergerakan kebangkitan nasional Indonesia di era kolonial Belanda.",
   },
   {
-    Judul: "Atomic Habits: Perubahan Kecil yang Memberikan Hasil Luar Biasa",
-    ISBN: "978-602-06-3318-3",
+    JudulBuku: "Atomic Habits: Perubahan Kecil yang Memberikan Hasil Luar Biasa",
     Pengarang: "James Clear",
     Penerbit: "Gramedia Pustaka Utama",
-    Tahun: 2019,
-    Kategori: "Pengembangan Diri",
-    NomorPanggil: "158.1 CLE a",
+    KotaTerbit: "Jakarta",
+    TahunTerbit: 2019,
+    ISBN: "978-602-06-3318-3",
     JumlahEksemplar: 5,
+    KlasifikasiDDC: "158.1",
+    Kategori: "Pengembangan Diri",
     Deskripsi: "Strategi praktis membangun kebiasaan baik dan menghilangkan kebiasaan buruk setiap hari.",
   },
   {
-    Judul: "Cosmos: Menjelajahi Alam Semesta",
-    ISBN: "978-602-424-695-2",
+    JudulBuku: "Cosmos: Menjelajahi Alam Semesta",
     Pengarang: "Carl Sagan",
     Penerbit: "Kepustakaan Populer Gramedia",
-    Tahun: 2016,
-    Kategori: "Sains & Astronomi",
-    NomorPanggil: "520 SAG c",
+    KotaTerbit: "Jakarta",
+    TahunTerbit: 2016,
+    ISBN: "978-602-424-695-2",
     JumlahEksemplar: 2,
+    KlasifikasiDDC: "520",
+    Kategori: "Sains & Astronomi",
     Deskripsi: "Eksplorasi ilmu falak dan evolusi pemikiran manusia tentang alam semesta yang maha luas.",
   },
+  {
+    JudulBuku: "Matematika untuk SMP/MTs Kelas VII",
+    Pengarang: "Tim Kemendikbudristek",
+    Penerbit: "Pusat Perbukuan Kemendikbud",
+    KotaTerbit: "Jakarta",
+    TahunTerbit: 2022,
+    ISBN: "978-602-244-883-9",
+    JumlahEksemplar: 30,
+    KlasifikasiDDC: "510",
+    Kategori: "Buku Paket Pelajaran",
+    Deskripsi: "Buku teks utama mata pelajaran Matematika Kurikulum Merdeka untuk jenjang SMP Kelas 7.",
+  },
 ];
+
+export function getCategoryFromDDC(ddc) {
+  if (!ddc) return "Umum";
+  const cleaned = String(ddc).trim().replace(/[^0-9]/g, "");
+  if (!cleaned) return "Umum";
+  const num = parseInt(cleaned.slice(0, 3).padEnd(3, "0"), 10);
+  if (num < 100) return "Karya Umum & Komputer";
+  if (num < 200) return "Filsafat & Psikologi";
+  if (num < 300) return "Agama";
+  if (num < 400) return "Ilmu Sosial & Pendidikan";
+  if (num < 500) return "Bahasa & Linguistik";
+  if (num < 600) return "Sains & Matematika";
+  if (num < 700) return "Teknologi & Terapan";
+  if (num < 800) return "Kesenian & Olahraga";
+  if (num < 900) return "Kesusastraan & Novel";
+  if (num < 1000) return "Sejarah & Geografi";
+  return "Umum";
+}
+
+export function generateCallNumber(ddc, author, title) {
+  const ddcPart = String(ddc || "000").trim();
+  const authorClean = String(author || "ANN").trim().replace(/[^a-zA-Z]/g, "");
+  const authorPart =
+    authorClean.length >= 3
+      ? authorClean.slice(0, 3).toUpperCase()
+      : authorClean.padEnd(3, "X").toUpperCase();
+  const titleClean = String(title || "b").trim().replace(/[^a-zA-Z]/g, "");
+  const titlePart = titleClean.length > 0 ? titleClean.slice(0, 1).toLowerCase() : "b";
+  return `${ddcPart} ${authorPart} ${titlePart}`;
+}
 
 /**
  * Parses raw CSV or text content into an array of book objects.
@@ -69,7 +104,9 @@ export function parseBookCSV(content) {
   if (lines.length <= 1) return [];
 
   const delimiter = lines[0].includes(";") ? ";" : ",";
-  const headerTokens = splitCSVLine(lines[0], delimiter).map((h) => h.trim().toLowerCase());
+  const headerTokens = splitCSVLine(lines[0], delimiter).map((h) =>
+    h.trim().toLowerCase().replace(/[^a-z0-9]/g, "")
+  );
 
   const results = [];
   for (let i = 1; i < lines.length; i++) {
@@ -81,25 +118,100 @@ export function parseBookCSV(content) {
       row[key] = (rawCols[idx] || "").trim();
     });
 
-    const title = row["judul"] || row["title"] || rawCols[0] || "";
-    const isbn = row["isbn"] || rawCols[1] || "";
-    const author = row["pengarang"] || row["author"] || rawCols[2] || "";
-    const publisher = row["penerbit"] || row["publisher"] || rawCols[3] || "";
-    const year = parseInt(row["tahun"] || row["year"] || rawCols[4] || "2024", 10);
-    const category = row["kategori"] || row["category"] || rawCols[5] || "Umum";
-    const callNumber = row["nomorpanggil"] || row["call_number"] || row["rak"] || rawCols[6] || "";
-    const copies = parseInt(row["jumlaheksemplar"] || row["copies"] || rawCols[7] || "1", 10);
-    const desc = row["deskripsi"] || row["description"] || rawCols[8] || "";
+    const title =
+      row["judulbuku"] ||
+      row["judul"] ||
+      row["title"] ||
+      row["namabuku"] ||
+      rawCols[0] ||
+      "";
+
+    const author =
+      row["pengarang"] ||
+      row["penulis"] ||
+      row["author"] ||
+      rawCols[1] ||
+      "";
+
+    const publisher =
+      row["penerbit"] ||
+      row["publisher"] ||
+      rawCols[2] ||
+      "";
+
+    const city =
+      row["kotaterbit"] ||
+      row["kota"] ||
+      row["city"] ||
+      rawCols[3] ||
+      "";
+
+    const rawYear =
+      row["tahunterbit"] ||
+      row["tahun"] ||
+      row["year"] ||
+      rawCols[4] ||
+      "";
+    const year = parseInt(String(rawYear).replace(/[^0-9]/g, ""), 10);
+
+    const isbn =
+      row["isbn"] ||
+      row["no_isbn"] ||
+      rawCols[5] ||
+      "";
+
+    const rawCopies =
+      row["jumlaheksemplar"] ||
+      row["eksemplar"] ||
+      row["jumlah"] ||
+      row["copies"] ||
+      rawCols[6] ||
+      "";
+    const copies = parseInt(String(rawCopies).replace(/[^0-9]/g, ""), 10);
+
+    const ddc =
+      row["klasifikasiddc"] ||
+      row["ddc"] ||
+      row["klasifikasi"] ||
+      rawCols[7] ||
+      "";
+
+    let category =
+      row["kategoriopsional"] ||
+      row["kategori"] ||
+      row["category"] ||
+      "";
+    if (!category) {
+      category = getCategoryFromDDC(ddc);
+    }
+
+    const desc =
+      row["deskripsiopsional"] ||
+      row["deskripsi"] ||
+      row["description"] ||
+      row["sinopsis"] ||
+      "";
+
+    const callNumber = generateCallNumber(ddc, author, title);
+
+    let fullPublisher = publisher;
+    if (city && publisher && !publisher.includes(city)) {
+      fullPublisher = `${city} : ${publisher}`;
+    } else if (city && !publisher) {
+      fullPublisher = city;
+    }
 
     if (title && author) {
       results.push({
         title,
-        isbn,
+        isbn: isbn || "-",
         author,
-        publisher,
-        publish_year: isNaN(year) ? 2024 : year,
+        publisher: fullPublisher,
+        publish_year: isNaN(year) || year <= 0 ? new Date().getFullYear() : year,
         category,
         call_number: callNumber,
+        ddc: ddc || "000",
+        city: city || "",
         copies_count: isNaN(copies) || copies <= 0 ? 1 : copies,
         description: desc,
       });
@@ -138,15 +250,16 @@ export function downloadBookImportTemplate(includeSample = true) {
 
   dataToExport.forEach((item) => {
     const row = [
-      `"${item.Judul.replace(/"/g, '""')}"`,
-      `"${item.ISBN}"`,
-      `"${item.Pengarang.replace(/"/g, '""')}"`,
-      `"${item.Penerbit.replace(/"/g, '""')}"`,
-      item.Tahun,
-      `"${item.Kategori}"`,
-      `"${item.NomorPanggil}"`,
-      item.JumlahEksemplar,
-      `"${item.Deskripsi.replace(/"/g, '""')}"`,
+      `"${(item.JudulBuku || "").replace(/"/g, '""')}"`,
+      `"${(item.Pengarang || "").replace(/"/g, '""')}"`,
+      `"${(item.Penerbit || "").replace(/"/g, '""')}"`,
+      `"${(item.KotaTerbit || "").replace(/"/g, '""')}"`,
+      item.TahunTerbit || 2024,
+      `"${item.ISBN || ""}"`,
+      item.JumlahEksemplar || 1,
+      `"${item.KlasifikasiDDC || ""}"`,
+      `"${(item.Kategori || "").replace(/"/g, '""')}"`,
+      `"${(item.Deskripsi || "").replace(/"/g, '""')}"`,
     ];
     csvContent += row.join(",") + "\n";
   });
