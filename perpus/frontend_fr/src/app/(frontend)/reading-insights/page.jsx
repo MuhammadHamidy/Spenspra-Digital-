@@ -21,6 +21,9 @@ export default function ReadingInsightsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
+  const [selectedClass, setSelectedClass] = useState('ALL');
+  const [currentUser, setCurrentUser] = useState(null);
+
   // Dropdown options
   const [members, setMembers] = useState([]);
   const [books, setBooks] = useState([]);
@@ -61,6 +64,19 @@ export default function ReadingInsightsPage() {
     loadData();
     loadDropdowns();
     loadQuizzes();
+
+    // Auto-detect if logged in as teacher/walas with assigned class
+    try {
+      const u = JSON.parse(localStorage.getItem('perpusdig_auth_user') || '{}');
+      if (u && u.nama) {
+        setCurrentUser(u);
+        const job = (u.kelas_atau_jabatan || u.jabatan || u.nama || '').toLowerCase();
+        const match = job.match(/(7|8|9)[a-f]/i);
+        if (match) {
+          setSelectedClass(`Kelas ${match[0].toUpperCase()}`);
+        }
+      }
+    } catch (e) {}
   }, []);
 
   const loadData = async () => {
@@ -424,9 +440,197 @@ export default function ReadingInsightsPage() {
         </div>
       </div>
 
+  const CLASSES_LIST = [
+    'ALL',
+    'Kelas 7A',
+    'Kelas 7B',
+    'Kelas 7C',
+    'Kelas 7D',
+    'Kelas 7E',
+    'Kelas 7F',
+    'Kelas 8A',
+    'Kelas 8B',
+    'Kelas 8C',
+    'Kelas 8D',
+    'Kelas 8E',
+    'Kelas 8F',
+    'Kelas 9A',
+    'Kelas 9B',
+    'Kelas 9C',
+    'Kelas 9D',
+    'Kelas 9E',
+    'Kelas 9F',
+  ];
+
+  const filteredResumes = resumes.filter((r) => {
+    if (selectedClass === 'ALL') return true;
+    const target = selectedClass.toLowerCase().replace('kelas ', '').trim();
+    const itemClass = (r.member_class || r.class_name || '').toLowerCase();
+    const itemMember = (r.member_code || '').toLowerCase();
+    const itemName = (r.member_name || '').toLowerCase();
+    return itemClass.includes(target) || itemMember.includes(target) || itemName.includes(target);
+  });
+
+  const filteredQuizzes = quizzes.filter((q) => {
+    if (selectedClass === 'ALL') return true;
+    const target = selectedClass.toLowerCase().replace('kelas ', '').trim();
+    const itemClass = (q.class_name || '').toLowerCase();
+    return itemClass.includes(target);
+  });
+
+  return (
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-semibold text-[#1A3D63] uppercase tracking-wider mb-1">
+            <span>Perpustakaan SMPN 1 Prambon</span>
+            <span>&bull;</span>
+            <span className="text-emerald-700 font-bold">Portal Evaluasi Guru &amp; Wali Kelas</span>
+          </div>
+          <h1 className="text-2xl font-black text-slate-800 tracking-tight">
+            Penilaian Literasi &amp; Kuis Pemahaman Buku
+          </h1>
+          <p className="text-xs md:text-sm text-slate-500 mt-1">
+            Pustakawan, Wali Kelas, dan Guru Pengajar dapat membaca jawaban siswa per kelas binaan, memberi skor nilai (0-100), dan menuliskan catatan masukan evaluasi.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="contained"
+            onClick={() => setOpenAddModal(true)}
+            sx={{
+              bgcolor: '#1A3D63',
+              borderRadius: '12px',
+              textTransform: 'none',
+              fontWeight: 700,
+              fontSize: '0.8125rem',
+              px: 2.5,
+              py: 1,
+              '&:hover': { bgcolor: '#0A1931' },
+            }}
+            startIcon={<AppIcon name="edit" color="white" size={16} />}
+          >
+            + Tulis Resume Bacaan
+          </Button>
+        </div>
+      </div>
+
+      {/* Aggregate Insights Dashboard Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Card 1: Metrik Utama */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="text-sm font-bold text-slate-800">Indikator Literasi</h3>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
+              Agregat
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-4 rounded-2xl bg-purple-50/60 border border-purple-100 text-center">
+              <span className="text-[11px] font-bold text-purple-700 uppercase">Total Resume</span>
+              <div className="text-3xl font-black text-purple-900 mt-1">
+                {insights?.total_resumes_submitted || resumes.length || 0}
+              </div>
+              <span className="text-[10px] text-purple-600">Karya refleksi</span>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-100 text-center">
+              <span className="text-[11px] font-bold text-emerald-700 uppercase">Kuis Masuk</span>
+              <div className="text-3xl font-black text-emerald-900 mt-1">
+                {quizzes.length}
+              </div>
+              <span className="text-[10px] text-emerald-600">Jawaban siswa</span>
+            </div>
+          </div>
+
+          {/* Literacy Quote */}
+          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/60 italic text-xs text-slate-600 leading-relaxed">
+            "Membaca tanpa merangkum bagai menyantap hidangan tanpa mencernanya. Catatan resume dan refleksi kuis mengubah informasi menjadi kebijaksanaan."
+          </div>
+        </div>
+
+        {/* Card 2: Top Kategori Minat Membaca */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="text-sm font-bold text-slate-800">Genre & Kategori Terfavorit</h3>
+            <span className="text-xs text-slate-400">Distribusi</span>
+          </div>
+
+          <div className="space-y-3">
+            {(insights?.top_categories?.length ? insights.top_categories : [
+              { category: 'Kesusastraan & Novel', count: 4, percentage: 40 },
+              { category: 'Filsafat & Etika', count: 3, percentage: 30 },
+              { category: 'Pengembangan Diri', count: 2, percentage: 20 },
+              { category: 'Sains & MIPA', count: 1, percentage: 10 },
+            ]).map((cat, idx) => (
+              <div key={idx} className="space-y-1">
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-slate-700">{cat.category}</span>
+                  <span className="text-slate-500">{cat.count} buku ({cat.percentage.toFixed(0)}%)</span>
+                </div>
+                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-[#1A3D63] to-[#4A7FA7] rounded-full"
+                    style={{ width: `${cat.percentage}%` }}
+                  ></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Card 3: Leaderboard Pembaca Teraktif */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="text-sm font-bold text-slate-800">Peringkat Pembaca Teraktif</h3>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+              Leaderboard
+            </span>
+          </div>
+
+          <div className="space-y-2.5">
+            {(insights?.leaderboard?.length ? insights.leaderboard : [
+              { rank: 1, member_name: 'Ahmad Fauzi', member_code: 'MBR-2026-0001', total_resumes: 5 },
+              { rank: 2, member_name: 'Siti Nurhaliza', member_code: 'MBR-2026-0002', total_resumes: 4 },
+              { rank: 3, member_name: 'Dewi Lestari', member_code: 'MBR-2026-0004', total_resumes: 3 },
+            ]).map((lead, idx) => (
+              <div
+                key={idx}
+                className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs ${
+                      lead.rank === 1
+                        ? 'bg-amber-400 text-amber-950 shadow-xs'
+                        : lead.rank === 2
+                        ? 'bg-slate-300 text-slate-800'
+                        : 'bg-amber-700/30 text-amber-900'
+                    }`}
+                  >
+                    #{lead.rank}
+                  </span>
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">{lead.member_name}</div>
+                    <div className="text-[10px] font-mono text-slate-400">{lead.member_code}</div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-xs font-black text-[#1A3D63]">{lead.total_resumes}</span>
+                  <span className="text-[10px] text-slate-400 block">Resume / Kuis</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* Tabs Navigation: Resume Literasi vs Jawaban Kuis Pemahaman */}
       <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-100 pb-4">
           <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-2xl border border-slate-200">
             <button
               onClick={() => setActiveTab('resumes')}
@@ -438,7 +642,7 @@ export default function ReadingInsightsPage() {
             >
               <span>📄 Resume Membaca Siswa</span>
               <span className="px-2 py-0.5 rounded-full text-[10px] bg-blue-100 text-blue-800">
-                {resumes.length}
+                {filteredResumes.length}
               </span>
             </button>
             <button
@@ -451,29 +655,62 @@ export default function ReadingInsightsPage() {
             >
               <span>✍️ Jawaban Kuis Pemahaman Buku</span>
               <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 text-emerald-800">
-                {quizzes.length}
+                {filteredQuizzes.length}
               </span>
             </button>
           </div>
 
-          <form onSubmit={handleSearchSubmit} className="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="Cari siswa, judul, atau catatan..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="text-xs px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none"
-            />
-            <Button
-              type="submit"
-              size="small"
-              variant="contained"
-              sx={{ bgcolor: '#1A3D63', borderRadius: '10px', textTransform: 'none', fontWeight: 700 }}
-            >
-              Cari
-            </Button>
-          </form>
+          {/* Filter Per Kelas / Wali Kelas & Search Bar */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex items-center gap-2 bg-slate-100/80 border border-slate-200 px-3 py-1.5 rounded-xl text-xs">
+              <span className="font-bold text-slate-700">🏛️ Filter Kelas (Walas):</span>
+              <select
+                value={selectedClass}
+                onChange={(e) => setSelectedClass(e.target.value)}
+                className="bg-transparent font-bold text-[#1A3D63] focus:outline-none cursor-pointer"
+              >
+                {CLASSES_LIST.map((cls) => (
+                  <option key={cls} value={cls}>
+                    {cls === 'ALL' ? 'Semua Kelas' : cls}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <form onSubmit={handleSearchSubmit} className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Cari siswa, judul, atau catatan..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="text-xs px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none"
+              />
+              <Button
+                type="submit"
+                size="small"
+                variant="contained"
+                sx={{ bgcolor: '#1A3D63', borderRadius: '10px', textTransform: 'none', fontWeight: 700 }}
+              >
+                Cari
+              </Button>
+            </form>
+          </div>
         </div>
+
+        {/* Active Class Filter Notice */}
+        {selectedClass !== 'ALL' && (
+          <div className="p-3 rounded-2xl bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-900 flex items-center justify-between">
+            <span>
+              📌 Menampilkan karya literasi dan jawaban kuis khusus <strong>{selectedClass}</strong> (Binaan Wali Kelas).
+            </span>
+            <button
+              onClick={() => setSelectedClass('ALL')}
+              className="text-xs font-bold text-blue-700 hover:underline cursor-pointer"
+            >
+              Tampilkan Semua Kelas
+            </button>
+          </div>
+        )}
 
         {/* TAB 1: RESUME MEMBACA */}
         {activeTab === 'resumes' && (
@@ -482,13 +719,13 @@ export default function ReadingInsightsPage() {
               <div className="py-16 text-center text-slate-400">
                 <CircularProgress size={24} />
               </div>
-            ) : resumes.length === 0 ? (
+            ) : filteredResumes.length === 0 ? (
               <div className="py-16 text-center text-slate-400 text-sm">
-                Belum ada resume bacaan yang tersimpan. Klik "+ Tulis Resume Bacaan" untuk membuat resume pertama!
+                Belum ada resume bacaan untuk {selectedClass === 'ALL' ? 'kategori ini' : selectedClass}. Klik "+ Tulis Resume Bacaan" untuk membuat resume pertama!
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {resumes.map((r) => (
+                {filteredResumes.map((r) => (
                   <div
                     key={r.id}
                     className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs hover:shadow-md transition-all space-y-3 flex flex-col justify-between"

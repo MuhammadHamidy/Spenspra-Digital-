@@ -90,15 +90,23 @@ export function middleware(request) {
     pathname.startsWith('/faces') ||
     pathname.startsWith('/books') ||
     pathname.startsWith('/visitors') ||
-    pathname.startsWith('/loans') ||
-    pathname.startsWith('/reading-insights');
+    pathname.startsWith('/loans');
 
+  const isReadingInsights = pathname.startsWith('/reading-insights');
+
+  // Siswa tidak boleh masuk ke panel admin pustakawan
+  if (userRole === 'SISWA' && (isLibrarianAdminPath || isReadingInsights)) {
+    return NextResponse.redirect(new URL('/', request.url));
+  }
+
+  // Guru diizinkan mengakses /reading-insights untuk mengoreksi literasi/kuis kelasnya
   if (
-    (userRole === 'SISWA' || userRole === 'GURU') &&
+    userRole === 'GURU' &&
     userRole !== 'PUSTAKAWAN' &&
     userRole !== 'ADMIN_PERPUS' &&
     userRole !== 'SUPER_ADMIN' &&
-    isLibrarianAdminPath
+    isLibrarianAdminPath &&
+    !isReadingInsights
   ) {
     return NextResponse.redirect(new URL('/', request.url));
   }

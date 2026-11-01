@@ -37,7 +37,23 @@ export default function Navbar({ user }) {
       href: '/peminjaman',
       isActive: (path) => path.startsWith('/peminjaman') || path.startsWith('/pinjam'),
     },
+    {
+      name: 'Koreksi Literasi & Kuis',
+      href: '/reading-insights',
+      isActive: (path) => path.startsWith('/reading-insights'),
+      teacherOnly: true,
+    },
   ];
+
+  const userRole = (user?.peran || user?.roleName || user?.role || '').toUpperCase();
+  const isTeacherOrStaff =
+    userRole === 'GURU' ||
+    userRole === 'WALI_KELAS' ||
+    userRole === 'PUSTAKAWAN' ||
+    userRole === 'ADMIN_PERPUS' ||
+    userRole === 'SUPER_ADMIN';
+
+  const visibleNavLinks = navLinks.filter((item) => !item.teacherOnly || isTeacherOrStaff);
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-xs">
@@ -58,7 +74,7 @@ export default function Navbar({ user }) {
 
         {/* Center: Navigation Links */}
         <nav className="hidden md:flex items-center gap-8">
-          {navLinks.map((item) => {
+          {visibleNavLinks.map((item) => {
             const isActive = item.isActive(pathname);
             return (
               <Link
