@@ -3,7 +3,13 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { booksApi } from '@/lib/features/library/api/booksApi';
-import { parseBookCSV, downloadBookImportTemplate, SAMPLE_BOOK_IMPORT_DATA, getCategoryFromDDC, generateCallNumber } from '@/lib/common/excelHelper';
+import {
+  parseBookSpreadsheet,
+  downloadBookImportTemplate,
+  SAMPLE_BOOK_IMPORT_DATA,
+  getCategoryFromDDC,
+  generateCallNumber,
+} from '@/lib/common/excelHelper';
 import CircularProgress from '@mui/material/CircularProgress';
 
 export default function BooksImportPage() {
@@ -47,8 +53,7 @@ export default function BooksImportPage() {
     setImportResult(null);
 
     try {
-      const text = await fileObj.text();
-      const rows = parseBookCSV(text);
+      const rows = await parseBookSpreadsheet(fileObj);
       if (rows.length === 0) {
         throw new Error('File tidak memiliki data buku yang valid atau format kolom tidak sesuai.');
       }

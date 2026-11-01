@@ -102,6 +102,211 @@ export function generateCallNumber(ddc, author, title) {
 }
 
 /**
+ * Memuat library SheetJS (XLSX) baik via import lokal atau dynamic CDN
+ */
+export async function loadSheetJs() {
+  if (typeof window !== "undefined" && window.XLSX) {
+    return window.XLSX;
+  }
+  try {
+    const mod = await import("xlsx");
+    if (mod && (mod.read || mod.default?.read)) {
+      const xlsxInstance = mod.read ? mod : mod.default;
+      if (typeof window !== "undefined") window.XLSX = xlsxInstance;
+      return xlsxInstance;
+    }
+  } catch (e) {}
+
+  if (typeof window === "undefined") {
+    throw new Error("SheetJS hanya dapat dimuat di browser.");
+  }
+
+  return new Promise((resolve, reject) => {
+    const existing = document.getElementById("sheetjs-cdn-script");
+    if (existing) {
+      if (window.XLSX) return resolve(window.XLSX);
+      existing.addEventListener("load", () => resolve(window.XLSX));
+      existing.addEventListener("error", () =>
+        reject(new Error("Gagal memuat library Excel (SheetJS)"))
+      );
+      return;
+    }
+    const script = document.createElement("script");
+    script.id = "sheetjs-cdn-script";
+    script.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+    script.onload = () => resolve(window.XLSX);
+    script.onerror = () =>
+      reject(
+        new Error(
+          "Gagal memuat parser Excel (.xlsx). Pastikan koneksi internet aktif."
+        )
+      );
+    document.head.appendChild(script);
+  });
+}
+
+/**
+ * Universal Book Spreadsheet Parser (.xlsx, .xls, .csv)
+ */
+export async function parseBookSpreadsheet(fileObj) {
+  if (!fileObj) return [];
+  const fileName = (fileObj.name || "").toLowerCase();
+  const isExcel = fileName.endsWith(".xlsx") || fileName.endsWith(".xls");
+
+  // Periksa byte header file: ZIP Magic number 0x50 0x4B ('PK')
+  const buffer = await fileObj.arrayBuffer();
+  const uint8 = new Uint8Array(buffer.slice(0, 4));
+  const isZipBinary = uint8[0] === 0x50 && uint8[1] === 0x4b;
+
+  if (isExcel || isZipBinary) {
+    const XLSX = await loadSheetJs();
+    const wb = XLSX.read(buffer, { type: "array" });
+    if (!wb.SheetNames || wb.SheetNames.length === 0) return [];
+    const ws = wb.Sheets[wb.SheetNames[0]];
+
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+    if (!rows || rows.length <= 1) return [];
+
+    let headerRowIdx = 0;
+    for (let i = 0; i < Math.min(rows.length, 5); i++) {
+      const lineStr = (rows[i] || []).join(" ").toLowerCase();
+      if (
+        lineStr.includes("judul") ||
+        lineStr.includes("pengarang") ||
+        lineStr.includes("title") ||
+        lineStr.includes("author")
+      ) {
+        headerRowIdx = i;
+        break;
+      }
+    }
+
+    const headerTokens = (rows[headerRowIdx] || []).map((h) =>
+      String(h || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "")
+    );
+
+    const results = [];
+    for (let i = headerRowIdx + 1; i < rows.length; i++) {
+      const rawCols = rows[i] || [];
+      if (!rawCols || rawCols.length < 2) continue;
+
+      const row = {};
+      headerTokens.forEach((key, idx) => {
+        row[key] = String(
+          rawCols[idx] !== undefined && rawCols[idx] !== null ? rawCols[idx] : ""
+        ).trim();
+      });
+
+      const title =
+        row["judulbuku"] ||
+        row["judul"] ||
+        row["title"] ||
+        row["namabuku"] ||
+        String(rawCols[0] || "").trim();
+
+      const author =
+        row["pengarang"] ||
+        row["penulis"] ||
+        row["author"] ||
+        String(rawCols[1] || "").trim();
+
+      const publisher =
+        row["penerbit"] ||
+        row["publisher"] ||
+        String(rawCols[2] || "").trim();
+
+      const city =
+        row["kotaterbit"] ||
+        row["kota"] ||
+        row["city"] ||
+        String(rawCols[3] || "").trim();
+
+      const rawYear =
+        row["tahunterbit"] ||
+        row["tahun"] ||
+        row["year"] ||
+        String(rawCols[4] || "").trim();
+      const year = parseInt(String(rawYear).replace(/[^0-9]/g, ""), 10);
+
+      const isbn =
+        row["isbn"] ||
+        row["no_isbn"] ||
+        String(rawCols[5] || "").trim();
+
+      const rawCopies =
+        row["jumlaheksemplar"] ||
+        row["eksemplar"] ||
+        row["jumlah"] ||
+        row["copies"] ||
+        row["stok"] ||
+        String(rawCols[6] || "").trim();
+      const copies = parseInt(String(rawCopies).replace(/[^0-9]/g, ""), 10);
+
+      const ddc =
+        row["klasifikasiddc"] ||
+        row["ddc"] ||
+        row["klasifikasi"] ||
+        String(rawCols[7] || "").trim();
+
+      const shelf =
+        row["nomorrak"] ||
+        row["norak"] ||
+        row["rak"] ||
+        row["lokasirak"] ||
+        String(rawCols[8] || "").trim();
+
+      let category =
+        row["kategoriopsional"] ||
+        row["kategori"] ||
+        row["category"] ||
+        String(rawCols[9] || "").trim();
+      if (!category) {
+        category = getCategoryFromDDC(ddc);
+      }
+
+      const desc =
+        row["deskripsiopsional"] ||
+        row["deskripsi"] ||
+        row["description"] ||
+        row["sinopsis"] ||
+        String(rawCols[10] || "").trim();
+
+      const baseCallNumber = generateCallNumber(ddc, author, title);
+      const callNumber = shelf ? `${baseCallNumber} [${shelf}]` : baseCallNumber;
+
+      let fullPublisher = publisher;
+      if (city && publisher && !publisher.includes(city)) {
+        fullPublisher = `${city} : ${publisher}`;
+      } else if (city && !publisher) {
+        fullPublisher = city;
+      }
+
+      if (title && author) {
+        results.push({
+          title,
+          isbn: isbn || "-",
+          author,
+          publisher: fullPublisher,
+          publish_year: isNaN(year) || year <= 0 ? new Date().getFullYear() : year,
+          category,
+          call_number: callNumber,
+          ddc: ddc || "000",
+          shelf_location: shelf || "Rak A-01",
+          city: city || "",
+          copies_count: isNaN(copies) || copies <= 0 ? 1 : copies,
+          description: desc,
+        });
+      }
+    }
+    return results;
+  }
+
+  // Fallback CSV plain text
+  const text = new TextDecoder("utf-8").decode(buffer);
+  return parseBookCSV(text);
+}
+
+/**
  * Parses raw CSV or text content into an array of book objects.
  */
 export function parseBookCSV(content) {
@@ -257,9 +462,49 @@ function splitCSVLine(line, delimiter) {
 }
 
 /**
- * Triggers client-side browser download for standard CSV / Excel template.
+ * Triggers client-side browser download for standard XLSX / CSV template.
  */
-export function downloadBookImportTemplate(includeSample = true) {
+export async function downloadBookImportTemplate(includeSample = true) {
+  try {
+    const XLSX = await loadSheetJs();
+    const headers = [BOOK_TEMPLATE_COLUMNS];
+    const dataToExport = includeSample ? SAMPLE_BOOK_IMPORT_DATA : [];
+    const rows = dataToExport.map((item) => [
+      item.JudulBuku || "",
+      item.Pengarang || "",
+      item.Penerbit || "",
+      item.KotaTerbit || "",
+      item.TahunTerbit || 2024,
+      item.ISBN || "",
+      item.JumlahEksemplar || 1,
+      item.KlasifikasiDDC || "",
+      item.NomorRak || "",
+      item.Kategori || "",
+      item.Deskripsi || "",
+    ]);
+
+    const ws = XLSX.utils.aoa_to_sheet([...headers, ...rows]);
+    ws["!cols"] = [
+      { wch: 35 },
+      { wch: 25 },
+      { wch: 25 },
+      { wch: 15 },
+      { wch: 12 },
+      { wch: 20 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 18 },
+      { wch: 22 },
+      { wch: 45 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Katalog Buku");
+    XLSX.writeFile(wb, "template_import_buku_perpustakaan.xlsx");
+    return;
+  } catch (err) {
+    console.warn("Fallback download template CSV:", err);
+  }
+
   let csvContent = BOOK_TEMPLATE_COLUMNS.join(",") + "\n";
   const dataToExport = includeSample ? SAMPLE_BOOK_IMPORT_DATA : [];
 
@@ -365,6 +610,150 @@ export const SAMPLE_MEMBER_IMPORT_DATA = [
     BatasPinjam: 3,
   },
 ];
+
+/**
+ * Universal Member Spreadsheet Parser (.xlsx, .xls, .csv)
+ */
+export async function parseMemberSpreadsheet(fileObj) {
+  if (!fileObj) return [];
+  const fileName = (fileObj.name || "").toLowerCase();
+  const isExcel = fileName.endsWith(".xlsx") || fileName.endsWith(".xls");
+
+  const buffer = await fileObj.arrayBuffer();
+  const uint8 = new Uint8Array(buffer.slice(0, 4));
+  const isZipBinary = uint8[0] === 0x50 && uint8[1] === 0x4b;
+
+  if (isExcel || isZipBinary) {
+    const XLSX = await loadSheetJs();
+    const wb = XLSX.read(buffer, { type: "array" });
+    if (!wb.SheetNames || wb.SheetNames.length === 0) return [];
+    const ws = wb.Sheets[wb.SheetNames[0]];
+
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+    if (!rows || rows.length <= 1) return [];
+
+    let headerRowIdx = 0;
+    for (let i = 0; i < Math.min(rows.length, 5); i++) {
+      const lineStr = (rows[i] || []).join(" ").toLowerCase();
+      if (
+        lineStr.includes("nama") ||
+        lineStr.includes("nisn") ||
+        lineStr.includes("nip")
+      ) {
+        headerRowIdx = i;
+        break;
+      }
+    }
+
+    const headerTokens = (rows[headerRowIdx] || []).map((h) =>
+      String(h || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "")
+    );
+
+    const isDapodikFormat =
+      headerTokens.includes("nisn") &&
+      (headerTokens.includes("namasiswa") || headerTokens.includes("nama"));
+
+    const results = [];
+    for (let i = headerRowIdx + 1; i < rows.length; i++) {
+      const rawCols = rows[i] || [];
+      if (!rawCols || rawCols.length < 2) continue;
+
+      const row = {};
+      headerTokens.forEach((key, idx) => {
+        row[key] = String(
+          rawCols[idx] !== undefined && rawCols[idx] !== null ? rawCols[idx] : ""
+        ).trim();
+      });
+
+      let fullName =
+        row["namasiswa"] ||
+        row["namalengkap"] ||
+        row["nama"] ||
+        row["name"] ||
+        "";
+      if (!fullName && isDapodikFormat && rawCols.length >= 2) {
+        fullName = String(rawCols[1] || "").trim();
+      } else if (!fullName && !isDapodikFormat) {
+        fullName = String(rawCols[0] || "").trim();
+      }
+
+      let identityNumber =
+        row["nisn"] ||
+        row["nisnnip"] ||
+        row["nomoridentitas"] ||
+        row["nip"] ||
+        row["nis"] ||
+        "";
+      if (!identityNumber && isDapodikFormat && rawCols.length >= 1) {
+        identityNumber = String(rawCols[0] || "").trim();
+      } else if (!identityNumber && rawCols.length >= 3) {
+        identityNumber = String(rawCols[2] || "").trim();
+      }
+
+      const rawRole = (
+        row["peransiswaguru"] ||
+        row["peran"] ||
+        row["tipeanggota"] ||
+        row["tipe"] ||
+        row["role"] ||
+        ""
+      ).toUpperCase();
+
+      let memberType = "SISWA";
+      if (
+        rawRole.includes("GURU") ||
+        rawRole.includes("TEACHER") ||
+        rawRole.includes("STAFF") ||
+        rawRole.includes("DOSEN") ||
+        identityNumber.toUpperCase().includes("NIP")
+      ) {
+        memberType = "GURU";
+      }
+
+      let className =
+        row["kelas"] ||
+        row["kelasjabatan"] ||
+        row["kelasataujabatan"] ||
+        row["rombel"] ||
+        row["jabatan"] ||
+        "";
+      if (!className && isDapodikFormat && rawCols.length >= 4) {
+        className = String(rawCols[3] || "").trim();
+      }
+
+      let email = row["email"] || "";
+      let phone =
+        row["notelepon"] ||
+        row["nomorhp"] ||
+        row["hp"] ||
+        row["telepon"] ||
+        "";
+      let borrowLimit = memberType === "GURU" ? 5 : 3;
+
+      if (fullName) {
+        results.push({
+          full_name: fullName,
+          member_type: memberType,
+          identity_number: identityNumber || "-",
+          class_name:
+            className ||
+            (memberType === "GURU" ? "Tenaga Pendidik" : "Peserta Didik"),
+          email:
+            email ||
+            `${(fullName || "anggota")
+              .toLowerCase()
+              .replace(/[^a-z0-9]/g, "")}@smpn1prambon.sch.id`,
+          phone: phone || "081234567890",
+          max_borrow_limit: borrowLimit,
+        });
+      }
+    }
+    return results;
+  }
+
+  const text = new TextDecoder("utf-8").decode(buffer);
+  return parseMemberCSV(text);
+}
 
 export function parseMemberCSV(content) {
   const lines = content.split(/\r?\n/).filter((line) => line.trim() !== "");

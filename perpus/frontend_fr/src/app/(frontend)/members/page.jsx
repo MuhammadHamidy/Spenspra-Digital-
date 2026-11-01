@@ -6,7 +6,7 @@ import { membersApi } from '@/lib/features/library/api/membersApi';
 import { faceApiAdapter } from '@/lib/features/faces/infrastructure/faceApiAdapter';
 import { Barcode } from '@/lib/common/barcodeGenerator';
 import {
-  parseMemberCSV,
+  parseMemberSpreadsheet,
   downloadMemberImportTemplate,
   downloadStudentDapodikTemplate,
   SAMPLE_MEMBER_IMPORT_DATA,
@@ -454,8 +454,7 @@ export default function MembersAndEnrollmentPage() {
     setImportError('');
 
     try {
-      const text = await fileObj.text();
-      const parsed = parseMemberCSV(text);
+      const parsed = await parseMemberSpreadsheet(fileObj);
       if (parsed.length === 0) {
         throw new Error('File tidak memiliki data siswa/guru yang valid atau format kolom tidak sesuai.');
       }
