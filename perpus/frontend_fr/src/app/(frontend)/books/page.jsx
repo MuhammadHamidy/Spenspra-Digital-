@@ -623,10 +623,10 @@ export default function BooksInventoryPage() {
               setBatchFeedback(null);
               setOpenBatchBarcodeModal(true);
             }}
-            className="px-3.5 py-2 rounded-xl border border-amber-300 hover:border-amber-400 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+            className="px-3.5 py-2 rounded-xl border border-[#B9B0D2] hover:border-[#4B3B78] bg-[#EDEAF5] hover:bg-[#FAF9FD] text-[#4B3B78] text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
             title="Atur format barcode kustom dan generate penomoran berurutan"
           >
-            <svg className="w-3.5 h-3.5 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5 text-[#4B3B78]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
@@ -1473,19 +1473,21 @@ export default function BooksInventoryPage() {
           Requirement: "iya buatkan barcode kustom dan bisa menyeluruh secara urut anpa harus di input manual perbuku"
           ========================================================================= */}
       {openBatchBarcodeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#172033]/60 backdrop-blur-xs animate-in fade-in duration-150 font-sans">
+          <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-[#E5E7EB]">
             {/* Modal Header */}
-            <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent">
+            <div className="p-5 sm:p-6 border-b border-[#E5E7EB] flex items-center justify-between bg-gradient-to-r from-[#EDEAF5] via-[#FAF9FD] to-white">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-amber-500 text-white flex items-center justify-center text-xl shadow-md shadow-amber-500/25 shrink-0">
-                  ⚡
+                <div className="w-11 h-11 rounded-2xl bg-[#4B3B78] text-[#F2C94C] flex items-center justify-center text-xl shadow-md shadow-[#4B3B78]/20 shrink-0">
+                  <svg className="w-5 h-5 text-[#F2C94C]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
                 </div>
                 <div>
-                  <h3 className="text-lg sm:text-xl font-black text-slate-900 leading-tight">
+                  <h3 className="text-lg sm:text-xl font-bold text-[#172033] leading-tight">
                     Generator Barcode Kustom &amp; Penomoran Berurutan
                   </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-[#667085] mt-0.5">
                     Terapkan format barcode kustom ke seluruh koleksi buku secara berurutan tanpa input manual satu per satu.
                   </p>
                 </div>
@@ -1493,7 +1495,8 @@ export default function BooksInventoryPage() {
               <button
                 type="button"
                 onClick={() => setOpenBatchBarcodeModal(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center text-sm font-bold transition-all cursor-pointer"
+                className="w-8 h-8 rounded-full bg-[#F8F9FC] hover:bg-[#E5E7EB] text-[#667085] hover:text-[#172033] flex items-center justify-center text-sm font-bold transition-all cursor-pointer border border-[#E5E7EB]"
+                aria-label="Tutup Modal"
               >
                 ✕
               </button>
@@ -1503,10 +1506,10 @@ export default function BooksInventoryPage() {
             <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
               {batchFeedback && (
                 <div
-                  className={`p-4 rounded-2xl border text-xs font-semibold flex items-center gap-2.5 ${
+                  className={`p-4 rounded-xl border text-xs font-semibold flex items-center gap-2.5 ${
                     batchFeedback.type === 'success'
-                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                      : 'bg-rose-50 border-rose-200 text-rose-800'
+                      ? 'bg-[#F7FCF9] border-[#A9D8BC] text-[#2E7D5B]'
+                      : 'bg-[#FFF9F8] border-[#F1B4AC] text-[#C0392B]'
                   }`}
                 >
                   <span className="text-base">{batchFeedback.type === 'success' ? '✓' : '⚠️'}</span>
@@ -1517,15 +1520,15 @@ export default function BooksInventoryPage() {
               {/* Grid 2 Columns: Config Controls & Live Preview */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 {/* Left Column: Config Controls (5 cols) */}
-                <div className="lg:col-span-5 bg-slate-50 p-5 rounded-2xl border border-slate-200/80 space-y-4">
-                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>⚙️</span>
+                <div className="lg:col-span-5 bg-[#F8F9FC] p-5 rounded-2xl border border-[#E5E7EB] space-y-4">
+                  <h4 className="text-xs font-bold text-[#172033] uppercase tracking-wider flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#4B3B78]"></span>
                     <span>Pengaturan Format Barcode</span>
                   </h4>
 
                   {/* 1. Prefix Barcode */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                    <label className="block text-xs font-bold text-[#344054] mb-1">
                       Awalan (Prefix) Barcode
                     </label>
                     <input
@@ -1535,9 +1538,9 @@ export default function BooksInventoryPage() {
                         setBarcodeConfig({ ...barcodeConfig, prefix: e.target.value.toUpperCase() })
                       }
                       placeholder="Contoh: PERPUS-, SMKN1-, LIB-BK-"
-                      className="w-full px-3 py-2 text-xs font-mono font-bold uppercase rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      className="w-full px-3 py-2 text-xs font-mono font-bold uppercase rounded-xl border border-[#E5E7EB] bg-white text-[#172033] focus:outline-none focus:ring-2 focus:ring-[#4B3B78] focus:border-[#4B3B78]"
                     />
-                    <p className="text-[10px] text-slate-400 mt-1">
+                    <p className="text-[10px] text-[#667085] mt-1">
                       Bisa disesuaikan dengan kode sekolah atau perpustakaan Anda.
                     </p>
                   </div>
@@ -1551,9 +1554,9 @@ export default function BooksInventoryPage() {
                       onChange={(e) =>
                         setBarcodeConfig({ ...barcodeConfig, includeYear: e.target.checked })
                       }
-                      className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                      className="w-4 h-4 text-[#4B3B78] rounded border-[#E5E7EB] focus:ring-[#4B3B78] cursor-pointer accent-[#4B3B78]"
                     />
-                    <label htmlFor="includeYearCheck" className="text-xs font-bold text-slate-700 cursor-pointer">
+                    <label htmlFor="includeYearCheck" className="text-xs font-bold text-[#344054] cursor-pointer">
                       Sertakan Tahun Berjalan ({new Date().getFullYear()}-)
                     </label>
                   </div>
@@ -1561,7 +1564,7 @@ export default function BooksInventoryPage() {
                   {/* 3. Nomor Urut Mulai & Digit Padding */}
                   <div className="grid grid-cols-2 gap-3 pt-1">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label className="block text-xs font-bold text-[#344054] mb-1">
                         Nomor Mulai
                       </label>
                       <input
@@ -1574,11 +1577,11 @@ export default function BooksInventoryPage() {
                             startNumber: Math.max(1, parseInt(e.target.value, 10) || 1),
                           })
                         }
-                        className="w-full px-3 py-2 text-xs font-mono font-bold rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        className="w-full px-3 py-2 text-xs font-mono font-bold rounded-xl border border-[#E5E7EB] bg-white text-[#172033] focus:outline-none focus:ring-2 focus:ring-[#4B3B78] focus:border-[#4B3B78]"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                      <label className="block text-xs font-bold text-[#344054] mb-1">
                         Digit Penomoran
                       </label>
                       <select
@@ -1589,7 +1592,7 @@ export default function BooksInventoryPage() {
                             padLength: parseInt(e.target.value, 10),
                           })
                         }
-                        className="w-full px-3 py-2 text-xs font-bold rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        className="w-full px-3 py-2 text-xs font-bold rounded-xl border border-[#E5E7EB] bg-white text-[#172033] focus:outline-none focus:ring-2 focus:ring-[#4B3B78] focus:border-[#4B3B78]"
                       >
                         <option value={3}>3 Digit (001)</option>
                         <option value={4}>4 Digit (0001)</option>
@@ -1601,7 +1604,7 @@ export default function BooksInventoryPage() {
 
                   {/* 4. Gaya Penomoran Eksemplar Ganda */}
                   <div className="pt-2">
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    <label className="block text-xs font-bold text-[#344054] mb-1.5">
                       Gaya Penomoran Eksemplar
                     </label>
                     <div className="space-y-2">
@@ -1609,8 +1612,8 @@ export default function BooksInventoryPage() {
                         onClick={() => setBarcodeConfig({ ...barcodeConfig, copyStyle: 'SUFFIX' })}
                         className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
                           barcodeConfig.copyStyle === 'SUFFIX'
-                            ? 'bg-amber-50 border-amber-300 text-amber-900 font-bold shadow-2xs'
-                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                            ? 'bg-[#EDEAF5] border-[#B9B0D2] text-[#172033] font-bold shadow-xs'
+                            : 'bg-white border-[#E5E7EB] text-[#667085] hover:bg-[#F8F9FC]'
                         }`}
                       >
                         <input
@@ -1618,11 +1621,11 @@ export default function BooksInventoryPage() {
                           name="copyStyleRadio"
                           checked={barcodeConfig.copyStyle === 'SUFFIX'}
                           onChange={() => {}}
-                          className="mt-0.5 text-amber-600 focus:ring-amber-500"
+                          className="mt-0.5 text-[#4B3B78] focus:ring-[#4B3B78] accent-[#4B3B78]"
                         />
                         <div>
                           <p className="font-bold">Per Judul + Suffix Eksemplar (-C01)</p>
-                          <p className="text-[10px] font-mono text-slate-500 mt-0.5">
+                          <p className="text-[10px] font-mono text-[#667085] mt-0.5">
                             {barcodeConfig.prefix}{barcodeConfig.includeYear ? `${new Date().getFullYear()}-` : ''}0001-C01, ...-C02
                           </p>
                         </div>
@@ -1632,8 +1635,8 @@ export default function BooksInventoryPage() {
                         onClick={() => setBarcodeConfig({ ...barcodeConfig, copyStyle: 'CONTINUOUS' })}
                         className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
                           barcodeConfig.copyStyle === 'CONTINUOUS'
-                            ? 'bg-amber-50 border-amber-300 text-amber-900 font-bold shadow-2xs'
-                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                            ? 'bg-[#EDEAF5] border-[#B9B0D2] text-[#172033] font-bold shadow-xs'
+                            : 'bg-white border-[#E5E7EB] text-[#667085] hover:bg-[#F8F9FC]'
                         }`}
                       >
                         <input
@@ -1641,11 +1644,11 @@ export default function BooksInventoryPage() {
                           name="copyStyleRadio"
                           checked={barcodeConfig.copyStyle === 'CONTINUOUS'}
                           onChange={() => {}}
-                          className="mt-0.5 text-amber-600 focus:ring-amber-500"
+                          className="mt-0.5 text-[#4B3B78] focus:ring-[#4B3B78] accent-[#4B3B78]"
                         />
                         <div>
                           <p className="font-bold">Nomor Seri Fisik Berkelanjutan</p>
-                          <p className="text-[10px] font-mono text-slate-500 mt-0.5">
+                          <p className="text-[10px] font-mono text-[#667085] mt-0.5">
                             {barcodeConfig.prefix}{barcodeConfig.includeYear ? `${new Date().getFullYear()}-` : ''}00001, ...00002
                           </p>
                         </div>
@@ -1654,8 +1657,8 @@ export default function BooksInventoryPage() {
                   </div>
 
                   {/* Summary Box */}
-                  <div className="bg-amber-100/60 border border-amber-200/90 rounded-xl p-3 text-[11px] text-amber-900 leading-relaxed font-medium">
-                    💡 <strong>Otomatis &amp; Rapi:</strong> Seluruh buku fisik di perpustakaan akan diurutkan dan diberikan stiker barcode baru secara sistematis. Scanner di Kios Siswa akan langsung membaca kode baru ini.
+                  <div className="bg-[#FAF9FD] border border-[#B9B0D2]/70 rounded-xl p-3 text-[11px] text-[#30264F] leading-relaxed font-medium">
+                    💡 <strong>Otomatis &amp; Rapi:</strong> Seluruh buku fisik di perpustakaan akan diurutkan dan diberikan stiker barcode baru secara sistematis. Scanner di Layanan Mandiri akan langsung membaca kode baru ini.
                   </div>
                 </div>
 
@@ -1666,42 +1669,42 @@ export default function BooksInventoryPage() {
                     return (
                       <>
                         <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                            <span>👁️</span>
+                          <h4 className="text-xs font-bold text-[#172033] uppercase tracking-wider flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-[#4F8FBB]"></span>
                             <span>Pratinjau Hasil Penomoran ({totalCount} Eksemplar)</span>
                           </h4>
-                          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-blue-50 border border-blue-200 text-[#0066CC]">
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#EDEAF5] border border-[#B9B0D2] text-[#4B3B78]">
                             {books.length} Judul Buku Terpilih
                           </span>
                         </div>
 
-                        <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-2xs">
+                        <div className="border border-[#E5E7EB] rounded-2xl overflow-hidden bg-white shadow-xs">
                           <div className="max-h-96 overflow-y-auto">
                             <table className="w-full text-left text-xs">
-                              <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[10px] border-b border-slate-100 sticky top-0 z-10 backdrop-blur-sm">
+                              <thead className="bg-[#F8F9FC] text-[#667085] font-semibold uppercase tracking-wider text-[10px] border-b border-[#E5E7EB] sticky top-0 z-10 backdrop-blur-sm">
                                 <tr>
                                   <th className="px-3 py-2.5">Buku &amp; Eksemplar</th>
                                   <th className="px-3 py-2.5">Barcode Lama</th>
                                   <th className="px-3 py-2.5">Barcode Baru (Otomatis)</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-slate-100">
+                              <tbody className="divide-y divide-[#E5E7EB]">
                                 {previewList.map((b) =>
                                   b.items.map((item) => (
-                                    <tr key={`${b.bookId}-${item.copy_number}`} className="hover:bg-slate-50/70">
+                                    <tr key={`${b.bookId}-${item.copy_number}`} className="hover:bg-[#FAF9FD] transition-colors">
                                       <td className="px-3 py-2">
-                                        <span className="font-bold text-slate-900 block truncate max-w-[200px]" title={b.title}>
+                                        <span className="font-bold text-[#172033] block truncate max-w-[200px]" title={b.title}>
                                           {b.title}
                                         </span>
-                                        <span className="text-[10px] text-slate-400">
+                                        <span className="text-[10px] text-[#667085]">
                                           Eksemplar #{item.copy_number} {b.callNumber ? `• ${b.callNumber}` : ''}
                                         </span>
                                       </td>
-                                      <td className="px-3 py-2 font-mono text-[11px] text-slate-400 line-through">
+                                      <td className="px-3 py-2 font-mono text-[11px] text-[#98A2B3] line-through">
                                         {item.old_barcode || '-'}
                                       </td>
                                       <td className="px-3 py-2">
-                                        <span className="font-mono text-[11px] font-black px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-[#0066CC]">
+                                        <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#EDEAF5] border border-[#B9B0D2] text-[#4B3B78]">
                                           {item.new_barcode}
                                         </span>
                                       </td>
@@ -1720,11 +1723,11 @@ export default function BooksInventoryPage() {
             </div>
 
             {/* Modal Footer Actions */}
-            <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
+            <div className="p-4 sm:p-5 border-t border-[#E5E7EB] bg-[#F8F9FC] flex items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={() => setOpenBatchBarcodeModal(false)}
-                className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
+                className="px-4 py-2.5 rounded-xl border border-[#E5E7EB] hover:bg-white hover:border-[#B9B0D2] text-[#344054] text-xs font-semibold transition-all cursor-pointer"
               >
                 Batal
               </button>
@@ -1732,7 +1735,7 @@ export default function BooksInventoryPage() {
                 type="button"
                 onClick={handleApplyBatchBarcodes}
                 disabled={isApplyingBatch}
-                className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold shadow-md shadow-amber-500/25 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                className="px-5 py-2.5 rounded-xl bg-[#4B3B78] hover:bg-[#3D2E66] text-white text-xs font-bold shadow-md shadow-[#4B3B78]/25 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
               >
                 {isApplyingBatch ? (
                   <>
@@ -1741,7 +1744,10 @@ export default function BooksInventoryPage() {
                   </>
                 ) : (
                   <>
-                    <span>⚡ Terapkan Penomoran ke Seluruh Buku</span>
+                    <svg className="w-4 h-4 text-[#F2C94C]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    <span>Terapkan Penomoran ke Seluruh Buku</span>
                   </>
                 )}
               </button>
