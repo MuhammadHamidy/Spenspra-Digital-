@@ -5,6 +5,7 @@ import { readingApi } from '@/lib/features/library/api/readingApi';
 import { membersApi } from '@/lib/features/library/api/membersApi';
 import { booksApi } from '@/lib/features/library/api/booksApi';
 import { literacyAssignmentApi } from '@/lib/features/library/api/literacyAssignmentApi';
+import { tokenStorage } from '@/lib/common/tokenStorage';
 import Navbar from '@/components/perpus/home/Navbar';
 import AppIcon from '@/components/AppIcon';
 import Button from '@mui/material/Button';
@@ -41,6 +42,9 @@ export default function ReadingInsightsPage() {
 
   const [selectedClass, setSelectedClass] = useState('ALL');
   const [currentUser, setCurrentUser] = useState(null);
+  const [userWalasClass, setUserWalasClass] = useState(null);
+  const [isWalas, setIsWalas] = useState(false);
+  const [isAdminOrLibrarian, setIsAdminOrLibrarian] = useState(false);
 
   // Dropdown options
   const [members, setMembers] = useState([]);
@@ -62,7 +66,7 @@ export default function ReadingInsightsPage() {
   const [selectedAssignmentSub, setSelectedAssignmentSub] = useState(null);
   const [gradeAssignmentForm, setGradeAssignmentForm] = useState({
     score: 85,
-    grader_name: 'Ibu Conie, S.Pd. (Wali Kelas)',
+    grader_name: '',
     teacher_notes: 'Rangkuman pemahaman buku baik dan refleksi budi pekerti sangat aplikatif.',
   });
 
@@ -83,7 +87,7 @@ export default function ReadingInsightsPage() {
   const [selectedResume, setSelectedResume] = useState(null);
   const [gradeResumeForm, setGradeResumeForm] = useState({
     score: 85,
-    grader_name: 'Ibu Conie, S.Pd. (Wali Kelas)',
+    grader_name: '',
     notes: 'Pemahaman materi bacaan baik dan runut. Refleksi relevan.',
     status: 'TERVERIFIKASI',
   });
@@ -93,7 +97,7 @@ export default function ReadingInsightsPage() {
   const [selectedQuiz, setSelectedQuiz] = useState(null);
   const [gradeQuizForm, setGradeQuizForm] = useState({
     score: 90,
-    grader_name: 'Petugas Perpustakaan / Wali Kelas',
+    grader_name: '',
     notes: 'Analisis esai sangat tajam dan memahami pesan moral pengarang.',
     status: 'DINILAI',
   });
@@ -103,18 +107,48 @@ export default function ReadingInsightsPage() {
     loadDropdowns();
     loadQuizzes();
 
-    // Auto-detect if logged in as teacher/walas with assigned class
+    // Auto-detect Walas & Teacher Profile dari SSO
     try {
-      const u = JSON.parse(localStorage.getItem('perpusdig_auth_user') || '{}');
-      if (u && u.nama) {
+      const u = tokenStorage.getUser();
+      if (u) {
         setCurrentUser(u);
-        const job = (u.kelas_atau_jabatan || u.jabatan || u.nama || '').toLowerCase();
-        const match = job.match(/(7|8|9)[a-f]/i);
-        if (match) {
-          setSelectedClass(`Kelas ${match[0].toUpperCase()}`);
+        const role = (u.peran || u.roleName || u.role || '').toUpperCase();
+        const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'ADMIN_PERPUS', 'PUSTAKAWAN'].includes(role);
+        setIsAdminOrLibrarian(isAdmin);
+
+        // Check for Walas class assignment
+        const candidates = [
+          u.class_name,
+          u.className,
+          u.kelas,
+          u.kelas_atau_jabatan,
+          u.jabatan,
+          ...(Array.isArray(u.class_codes) ? u.class_codes : []),
+        ];
+
+        let matchedClass = null;
+        for (const c of candidates) {
+          if (!c || typeof c !== 'string') continue;
+          const trimmed = c.trim();
+          if (['Pendidik', 'Civitas Spenspra', 'Peserta Didik', 'GURU'].includes(trimmed)) continue;
+          const match = trimmed.match(/(?:Kelas\s*)?([789]\s*[A-Fa-f])/i);
+          if (match) {
+            matchedClass = `Kelas ${match[1].toUpperCase().replace(/\s+/, '')}`;
+            break;
+          }
+        }
+
+        const walasFlag = role === 'WALI_KELAS' || Boolean(matchedClass);
+        setIsWalas(walasFlag);
+
+        if (matchedClass) {
+          setUserWalasClass(matchedClass);
+          setSelectedClass(matchedClass); // Otomatis filter ke kelas binaan walas
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Error reading user:', e);
+    }
   }, []);
 
   const loadData = async () => {
@@ -158,61 +192,24 @@ export default function ReadingInsightsPage() {
     }
   };
 
+  const getDefaultGraderName = () => {
+    if (userWalasClass) {
+      return `${currentUser?.nama || 'Wali Kelas'} (Wali Kelas ${userWalasClass})`;
+    }
+    if (currentUser?.nama) {
+      return `${currentUser.nama} (Pendidik / Guru)`;
+    }
+    return 'Wali Kelas';
+  };
+
   const loadQuizzes = () => {
     try {
       const rawStored = localStorage.getItem('spenspra_quizzes');
-      let storedList = rawStored ? JSON.parse(rawStored) : [];
-
-      // If empty, provide rich demo student submissions
-      if (!storedList || storedList.length === 0) {
-        storedList = [
-          {
-            id: 'quiz-1',
-            loan_id: 'LN-202611-001',
-            student_name: 'Ahmad Fauzi',
-            class_name: 'Kelas 7A',
-            book_title: 'Etika Politik',
-            book_author: 'Franz Magnis-Suseno',
-            submitted_at: '2026-11-01T08:30:00Z',
-            answers: {
-              1: 'Etika politik adalah pedoman moral dan kesadaran berbangsa agar kekuasaan digunakan secara adil untuk kesejahteraan rakyat banyak.',
-              2: 'Menurut Franz Magnis-Suseno, etika politik menuntut legitimasi kekuasaan agar tunduk pada martabat kemanusiaan dan keadilan sosial (bonum commune).',
-              3: 'Faktor yang memengaruhi adalah integritas para pemimpin, kepatuhan hukum, sistem demokrasi terbuka, dan kejujuran warga negara.',
-              4: 'Penerapannya di sekolah: musyawarah pemilihan ketua kelas secara tertib dan menghargai pendapat teman tanpa perundungan.',
-              5: 'Pesan moral utama: Jabatan dan kepemimpinan adalah amanah untuk melayani, bukan alat untuk mencari keuntungan pribadi.',
-            },
-            score: null,
-            grader_name: null,
-            notes: null,
-            status: 'MENUNGGU_KOREKSI',
-          },
-          {
-            id: 'quiz-2',
-            loan_id: 'LN-202611-002',
-            student_name: 'Siti Nurhaliza',
-            class_name: 'Kelas 7B',
-            book_title: 'Bumi Manusia',
-            book_author: 'Pramoedya Ananta Toer',
-            submitted_at: '2026-10-31T14:15:00Z',
-            answers: {
-              1: 'Buku ini menceritakan perjuangan seorang pemuda pribumi (Minke) yang memperjuangkan harga diri dan hak-hak kemanusiaannya di era kolonial.',
-              2: 'Pramoedya mendefinisikan perjuangan sebagai keberanian berpikir mandiri dan berbuat adil sejak dalam pikiran tanpa takut ancaman feodalisme.',
-              3: 'Dipengaruhi oleh stratifikasi sosial kolonial, ketidakadilan pengadilan kulit putih, dan bangkitnya kesadaran pendidikan.',
-              4: 'Penerapannya: tidak membeda-bedakan teman berdasarkan status sosial atau ekonomi di lingkungan sekolah.',
-              5: '"Seorang terpelajar harus sudah berbuat adil sejak dalam pikiran, apalagi dalam perbuatan." - Selalu bersikap jujur dan membela kebenaran.',
-            },
-            score: 95,
-            grader_name: 'Ibu Conie, S.Pd. (Wali Kelas 7B)',
-            notes: 'Uraian jawaban sangat cerdas, kutipan filosofis Minke dipahami dengan sangat baik.',
-            status: 'DINILAI',
-          },
-        ];
-        localStorage.setItem('spenspra_quizzes', JSON.stringify(storedList));
-      }
+      const storedList = rawStored ? JSON.parse(rawStored) : [];
 
       // Check for grading overrides
       const gradedOverrides = JSON.parse(localStorage.getItem('spenspra_graded_quizzes') || '{}');
-      const enrichedQuizzes = storedList.map((q) => {
+      const enrichedQuizzes = (storedList || []).map((q) => {
         const qId = q.id || q.loan_id || q.loanId;
         if (gradedOverrides[qId]) {
           return { ...q, ...gradedOverrides[qId] };
@@ -223,6 +220,7 @@ export default function ReadingInsightsPage() {
       setQuizzes(enrichedQuizzes);
     } catch (e) {
       console.warn('Gagal memuat daftar kuis:', e);
+      setQuizzes([]);
     }
   };
 
@@ -236,7 +234,7 @@ export default function ReadingInsightsPage() {
     setSelectedResume(r);
     setGradeResumeForm({
       score: r.score || 88,
-      grader_name: r.grader_name || 'Ibu Conie, S.Pd. (Wali Kelas)',
+      grader_name: r.grader_name || getDefaultGraderName(),
       notes: r.notes || 'Rangkuman pemahaman buku baik dan bermanfaat bagi pembaca.',
       status: r.status === 'TERVERIFIKASI' ? 'TERVERIFIKASI' : 'TERVERIFIKASI',
     });
@@ -273,7 +271,7 @@ export default function ReadingInsightsPage() {
     setSelectedQuiz(q);
     setGradeQuizForm({
       score: q.score || 90,
-      grader_name: q.grader_name || 'Ibu Conie, S.Pd. (Wali Kelas)',
+      grader_name: q.grader_name || getDefaultGraderName(),
       notes: q.notes || 'Jawaban kuis esai relevan dan mencerminkan pemahaman mendalam isi buku.',
       status: 'DINILAI',
     });
@@ -393,12 +391,11 @@ export default function ReadingInsightsPage() {
     }
   };
 
-  // Handler Nilai Tugas Literasi Siswa
   const handleOpenGradeAssignment = (sub) => {
     setSelectedAssignmentSub(sub);
     setGradeAssignmentForm({
       score: sub.score !== null && sub.score !== undefined ? sub.score : 88,
-      grader_name: sub.grader_name || (currentUser?.nama ? `${currentUser.nama} (${currentUser.kelas_atau_jabatan || 'Wali Kelas'})` : 'Ibu Conie, S.Pd. (Wali Kelas)'),
+      grader_name: sub.grader_name || getDefaultGraderName(),
       teacher_notes: sub.teacher_notes || 'Intisari bacaan sangat baik dan pesan moral dipahami secara mendalam.',
     });
     setOpenGradeAssignmentModal(true);
@@ -452,7 +449,7 @@ export default function ReadingInsightsPage() {
         {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#1A3D63] uppercase tracking-wider mb-1">
+          <div className="flex items-center gap-2 text-xs font-semibold text-[#4B3B78] uppercase tracking-wider mb-1">
             <span>Perpustakaan SMPN 1 Prambon</span>
             <span>&bull;</span>
             <span className="text-emerald-700 font-bold">Portal Evaluasi Guru &amp; Wali Kelas</span>
@@ -461,23 +458,24 @@ export default function ReadingInsightsPage() {
             Penilaian Literasi &amp; Kuis Pemahaman Buku
           </h1>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
-            Pustakawan, Wali Kelas, dan Guru Pengajar dapat membaca jawaban siswa per kelas binaan, memberi skor nilai (0-100), dan menuliskan catatan masukan evaluasi.
+            Wali Kelas dan Guru Pengajar berwenang memeriksa jawaban siswa per kelas binaan, memberikan skor nilai (0-100), dan menuliskan catatan masukan evaluasi.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Button
             variant="contained"
             onClick={() => setOpenAddModal(true)}
             sx={{
-              bgcolor: '#1A3D63',
+              bgcolor: '#4B3B78',
               borderRadius: '12px',
               textTransform: 'none',
               fontWeight: 700,
               fontSize: '0.8125rem',
               px: 2.5,
               py: 1,
-              '&:hover': { bgcolor: '#0A1931' },
+              boxShadow: 'none',
+              '&:hover': { bgcolor: '#372b5c' },
             }}
             startIcon={<AppIcon name="edit" color="white" size={16} />}
           >
@@ -486,32 +484,70 @@ export default function ReadingInsightsPage() {
         </div>
       </div>
 
-      {/* Aggregate Insights Dashboard Cards */}
+      {/* Walas Authorization Banner */}
+      {isWalas && userWalasClass && (
+        <div className="bg-gradient-to-r from-purple-50 via-indigo-50/40 to-white border border-purple-200/80 p-4 sm:p-5 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-[#4B3B78] text-white flex items-center justify-center font-black text-xl shrink-0 shadow-xs">
+              🏛️
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black text-[#4B3B78] uppercase tracking-wider">
+                  Hak Koreksi Wali Kelas Terverifikasi
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-[#4B3B78] text-white shadow-xs">
+                  {userWalasClass}
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                Selamat bertugas, <strong>{currentUser?.nama || 'Bapak/Ibu Guru'}</strong>. Anda memiliki wewenang penuh untuk memeriksa karya literasi, mengoreksi kuis pemahaman buku, dan memberikan nilai bagi siswa binaan di <strong>{userWalasClass}</strong>.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs font-bold text-emerald-700 bg-emerald-100/90 px-3.5 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-2 shadow-xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Walas Aktif: {userWalasClass}</span>
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Aggregate Insights Dashboard Cards (Koneksi Backend Riil) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Card 1: Metrik Utama */}
+        {/* Card 1: Indikator Literasi Riil */}
         <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <h3 className="text-sm font-bold text-slate-800">Indikator Literasi</h3>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
-              Agregat
+              Data Riil Backend
             </span>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-4 rounded-2xl bg-purple-50/60 border border-purple-100 text-center">
-              <span className="text-[11px] font-bold text-purple-700 uppercase">Total Resume</span>
-              <div className="text-3xl font-black text-purple-900 mt-1">
+          <div className="grid grid-cols-3 gap-2.5">
+            <div className="p-3.5 rounded-2xl bg-purple-50/60 border border-purple-100 text-center">
+              <span className="text-[10px] font-bold text-purple-700 uppercase block">Total Resume</span>
+              <div className="text-2xl font-black text-purple-900 mt-1">
                 {insights?.total_resumes_submitted || resumes.length || 0}
               </div>
-              <span className="text-[10px] text-purple-600">Karya refleksi</span>
+              <span className="text-[9px] text-purple-600 block mt-0.5">Karya refleksi</span>
             </div>
 
-            <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-100 text-center">
-              <span className="text-[11px] font-bold text-emerald-700 uppercase">Kuis Masuk</span>
-              <div className="text-3xl font-black text-emerald-900 mt-1">
+            <div className="p-3.5 rounded-2xl bg-emerald-50/60 border border-emerald-100 text-center">
+              <span className="text-[10px] font-bold text-emerald-700 uppercase block">Kuis Masuk</span>
+              <div className="text-2xl font-black text-emerald-900 mt-1">
                 {quizzes.length}
               </div>
-              <span className="text-[10px] text-emerald-600">Jawaban siswa</span>
+              <span className="text-[9px] text-emerald-600 block mt-0.5">Jawaban siswa</span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-blue-50/60 border border-blue-100 text-center">
+              <span className="text-[10px] font-bold text-blue-700 uppercase block">Tugas Masuk</span>
+              <div className="text-2xl font-black text-blue-900 mt-1">
+                {assignmentSubmissions.length}
+              </div>
+              <span className="text-[9px] text-blue-600 block mt-0.5">Pengumpulan</span>
             </div>
           </div>
 
@@ -521,7 +557,7 @@ export default function ReadingInsightsPage() {
           </div>
         </div>
 
-        {/* Card 2: Top Kategori Minat Membaca */}
+        {/* Card 2: Top Kategori Minat Membaca (Tanpa Dummy) */}
         <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <h3 className="text-sm font-bold text-slate-800">Genre & Kategori Terfavorit</h3>
@@ -529,29 +565,38 @@ export default function ReadingInsightsPage() {
           </div>
 
           <div className="space-y-3">
-            {(insights?.top_categories?.length ? insights.top_categories : [
-              { category: 'Kesusastraan & Novel', count: 4, percentage: 40 },
-              { category: 'Filsafat & Etika', count: 3, percentage: 30 },
-              { category: 'Pengembangan Diri', count: 2, percentage: 20 },
-              { category: 'Sains & MIPA', count: 1, percentage: 10 },
-            ]).map((cat, idx) => (
-              <div key={idx} className="space-y-1">
-                <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-slate-700">{cat.category}</span>
-                  <span className="text-slate-500">{cat.count} buku ({cat.percentage.toFixed(0)}%)</span>
+            {insights?.top_categories && insights.top_categories.length > 0 ? (
+              insights.top_categories.map((cat, idx) => (
+                <div key={idx} className="space-y-1">
+                  <div className="flex justify-between text-xs font-semibold">
+                    <span className="text-slate-700">{cat.category || 'Umum'}</span>
+                    <span className="text-slate-500">
+                      {cat.count} buku ({cat.percentage ? cat.percentage.toFixed(0) : 0}%)
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-[#4B3B78] to-[#6C5CE7] rounded-full"
+                      style={{ width: `${Math.min(cat.percentage || 0, 100)}%` }}
+                    ></div>
+                  </div>
                 </div>
-                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-[#1A3D63] to-[#4A7FA7] rounded-full"
-                    style={{ width: `${cat.percentage}%` }}
-                  ></div>
+              ))
+            ) : (
+              <div className="py-7 text-center">
+                <div className="w-10 h-10 rounded-2xl bg-purple-50 text-[#4B3B78] flex items-center justify-center mx-auto mb-2">
+                  <AppIcon name="document-book" color="purple" size={20} />
                 </div>
+                <p className="text-xs font-bold text-slate-700">Belum Ada Distribusi Genre</p>
+                <p className="text-[11px] text-slate-400 mt-1 max-w-[220px] mx-auto">
+                  Statistik kategori terfavorit akan terisi otomatis saat siswa mengunggah resume bacaan.
+                </p>
               </div>
-            ))}
+            )}
           </div>
         </div>
 
-        {/* Card 3: Leaderboard Pembaca Teraktif */}
+        {/* Card 3: Leaderboard Pembaca Teraktif (Tanpa Dummy) */}
         <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <h3 className="text-sm font-bold text-slate-800">Peringkat Pembaca Teraktif</h3>
@@ -561,38 +606,46 @@ export default function ReadingInsightsPage() {
           </div>
 
           <div className="space-y-2.5">
-            {(insights?.leaderboard?.length ? insights.leaderboard : [
-              { rank: 1, member_name: 'Ahmad Fauzi', member_code: 'MBR-2026-0001', total_resumes: 5 },
-              { rank: 2, member_name: 'Siti Nurhaliza', member_code: 'MBR-2026-0002', total_resumes: 4 },
-              { rank: 3, member_name: 'Dewi Lestari', member_code: 'MBR-2026-0004', total_resumes: 3 },
-            ]).map((lead, idx) => (
-              <div
-                key={idx}
-                className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs ${
-                      lead.rank === 1
-                        ? 'bg-amber-400 text-amber-950 shadow-xs'
-                        : lead.rank === 2
-                        ? 'bg-slate-300 text-slate-800'
-                        : 'bg-amber-700/30 text-amber-900'
-                    }`}
-                  >
-                    #{lead.rank}
-                  </span>
-                  <div>
-                    <div className="text-xs font-bold text-slate-800">{lead.member_name}</div>
-                    <div className="text-[10px] font-mono text-slate-400">{lead.member_code}</div>
+            {insights?.leaderboard && insights.leaderboard.length > 0 ? (
+              insights.leaderboard.map((lead, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs ${
+                        lead.rank === 1
+                          ? 'bg-amber-400 text-amber-950 shadow-xs'
+                          : lead.rank === 2
+                          ? 'bg-slate-300 text-slate-800'
+                          : 'bg-amber-700/30 text-amber-900'
+                      }`}
+                    >
+                      #{lead.rank}
+                    </span>
+                    <div>
+                      <div className="text-xs font-bold text-slate-800">{lead.member_name}</div>
+                      <div className="text-[10px] font-mono text-slate-400">{lead.member_code}</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs font-black text-[#4B3B78]">{lead.total_resumes}</span>
+                    <span className="text-[10px] text-slate-400 block">Karya Literasi</span>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className="text-xs font-black text-[#1A3D63]">{lead.total_resumes}</span>
-                  <span className="text-[10px] text-slate-400 block">Resume / Kuis</span>
+              ))
+            ) : (
+              <div className="py-7 text-center">
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-2">
+                  <AppIcon name="star" color="gold" size={20} />
                 </div>
+                <p className="text-xs font-bold text-slate-700">Belum Ada Pembaca Teraktif</p>
+                <p className="text-[11px] text-slate-400 mt-1 max-w-[220px] mx-auto">
+                  Peringkat leaderboard akan muncul otomatis seiring penyerahan karya literasi oleh siswa.
+                </p>
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>
@@ -644,16 +697,20 @@ export default function ReadingInsightsPage() {
 
           {/* Filter Per Kelas / Wali Kelas & Search Bar */}
           <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex items-center gap-2 bg-slate-100/80 border border-slate-200 px-3 py-1.5 rounded-xl text-xs">
-              <span className="font-bold text-slate-700">🏛️ Filter Kelas (Walas):</span>
+            <div className="flex items-center gap-2 bg-slate-100/90 border border-slate-200 px-3.5 py-1.5 rounded-xl text-xs shadow-xs">
+              <span className="font-bold text-slate-700">🏛️ Filter Kelas:</span>
               <select
                 value={selectedClass}
                 onChange={(e) => setSelectedClass(e.target.value)}
-                className="bg-transparent font-bold text-[#1A3D63] focus:outline-none cursor-pointer"
+                className="bg-transparent font-bold text-[#4B3B78] focus:outline-none cursor-pointer"
               >
                 {CLASSES_LIST.map((cls) => (
                   <option key={cls} value={cls}>
-                    {cls === 'ALL' ? 'Semua Kelas' : cls}
+                    {cls === 'ALL'
+                      ? 'Semua Kelas'
+                      : cls === userWalasClass
+                      ? `⭐ ${cls} (Kelas Anda)`
+                      : cls}
                   </option>
                 ))}
               </select>
@@ -671,7 +728,7 @@ export default function ReadingInsightsPage() {
                 type="submit"
                 size="small"
                 variant="contained"
-                sx={{ bgcolor: '#1A3D63', borderRadius: '10px', textTransform: 'none', fontWeight: 700 }}
+                sx={{ bgcolor: '#4B3B78', borderRadius: '10px', textTransform: 'none', fontWeight: 700, boxShadow: 'none', '&:hover': { bgcolor: '#372b5c' } }}
               >
                 Cari
               </Button>
@@ -681,15 +738,23 @@ export default function ReadingInsightsPage() {
 
         {/* Active Class Filter Notice */}
         {selectedClass !== 'ALL' && (
-          <div className="p-3 rounded-2xl bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-900 flex items-center justify-between">
-            <span>
-              📌 Menampilkan karya literasi dan jawaban kuis khusus <strong>{selectedClass}</strong> (Binaan Wali Kelas).
-            </span>
+          <div className="p-3.5 rounded-2xl bg-purple-50/80 border border-purple-200 text-xs font-semibold text-purple-950 flex flex-wrap items-center justify-between gap-2 shadow-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-base">📌</span>
+              <span>
+                Menampilkan karya literasi, tugas, dan kuis siswa <strong>{selectedClass}</strong>
+                {selectedClass === userWalasClass && (
+                  <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-[#4B3B78] text-white">
+                    Kelas Binaan Anda
+                  </span>
+                )}
+              </span>
+            </div>
             <button
               onClick={() => setSelectedClass('ALL')}
-              className="text-xs font-bold text-blue-700 hover:underline cursor-pointer"
+              className="text-xs font-bold text-[#4B3B78] hover:underline cursor-pointer"
             >
-              Tampilkan Semua Kelas
+              Lihat Semua Kelas
             </button>
           </div>
         )}

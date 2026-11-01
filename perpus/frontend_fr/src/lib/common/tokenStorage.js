@@ -106,7 +106,10 @@ function parseJwtUser(token) {
       }
     }
     const fullName = parsed.full_name || parsed.fullName || parsed.name || parsed.username || '';
-    const className = parsed.class_name || parsed.className || parsed.kelas || (roleName === 'SISWA' ? 'Peserta Didik' : 'Civitas Spenspra');
+    const rawClass = parsed.class_name || parsed.className || parsed.kelas || '';
+    const className = rawClass || (roleName === 'SISWA' ? 'Peserta Didik' : 'Civitas Spenspra');
+    const classCodes = Array.isArray(parsed.class_codes) ? parsed.class_codes : [];
+    const courseNames = Array.isArray(parsed.course_names) ? parsed.course_names : [];
     const photo = parsed.photo || parsed.photoUrl || parsed.avatar || null;
 
     return {
@@ -121,7 +124,10 @@ function parseJwtUser(token) {
       peran: roleName,
       kelas_atau_jabatan: className,
       className: className,
+      class_name: rawClass,
       kelas: className,
+      class_codes: classCodes,
+      course_names: courseNames,
       foto: photo,
       photoUrl: photo,
       roleId: parsed.role_id || parsed.roleId || '',

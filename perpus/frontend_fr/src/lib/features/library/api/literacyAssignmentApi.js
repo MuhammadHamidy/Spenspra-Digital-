@@ -5,92 +5,9 @@
 const STORAGE_ASSIGNMENTS_KEY = 'spenspra_literacy_assignments';
 const STORAGE_SUBMISSIONS_KEY = 'spenspra_literacy_submissions';
 
-// Data bawaan awal (Seed realistis jika storage masih kosong)
-const DEFAULT_ASSIGNMENTS = [
-  {
-    id: 'lit-task-001',
-    title: 'Kegiatan Literasi Bersama: Resensi Novel Sejarah & Tokoh Inspiratif',
-    description: 'Pilihlah satu buku fiksi sejarah, novel biografi, atau tokoh nasional di perpustakaan. Tuliskan ringkasan alur cerita serta 3 nilai keteladanan yang dapat diterapkan dalam kehidupan sehari-hari.',
-    target_type: 'ALL', // 'ALL' | 'GRADE' | 'SPECIFIC'
-    target_classes: ['Semua Kelas'],
-    book_requirement: 'ANY_BOOK',
-    book_title: '',
-    due_date: '2026-11-15T23:59:00',
-    created_by: 'Admin Perpustakaan SMPN 1 Prambon',
-    status: 'ACTIVE',
-    created_at: '2026-10-28T08:00:00Z',
-  },
-  {
-    id: 'lit-task-002',
-    title: 'Pekan Literasi Sains & Lingkungan Hidup Kelas 7',
-    description: 'Bacalah buku tentang pelestarian alam, sains populer, atau pemanasan global. Uraikan intisari masalah lingkungan yang dibahas dan aksi nyata yang bisa dilakukan di lingkungan sekolah.',
-    target_type: 'SPECIFIC',
-    target_classes: ['Kelas 7A', 'Kelas 7B', 'Kelas 7C', 'Kelas 7D', 'Kelas 7E', 'Kelas 7F'],
-    book_requirement: 'ANY_BOOK',
-    book_title: '',
-    due_date: '2026-11-10T15:00:00',
-    created_by: 'Budi Santoso, S.Pd. (Pustakawan)',
-    status: 'ACTIVE',
-    created_at: '2026-10-30T09:30:00Z',
-  },
-];
-
-const DEFAULT_SUBMISSIONS = [
-  {
-    id: 'sub-001',
-    assignment_id: 'lit-task-001',
-    student_id: 'std-001',
-    student_name: 'Ahmad Fauzi',
-    student_nisn: '202607011',
-    student_class: 'Kelas 7A',
-    book_title: 'Bumi Manusia',
-    book_author: 'Pramoedya Ananta Toer',
-    pages_read: 45,
-    summary: 'Minke seorang pemuda pribumi yang gigih belajar dan mempertahankan prinsip keadilan di tengah diskriminasi zaman kolonial. Dia mencintai tulisan dan ilmu pengetahuan modern.',
-    moral_value: 'Pendidikan harus melahirkan keberanian untuk bersikap adil sejak dalam pikiran, serta pantang menyerah dalam membela kebenaran.',
-    submitted_at: '2026-11-01T08:15:00Z',
-    score: null,
-    grader_name: null,
-    teacher_notes: null,
-    status: 'MENUNGGU_KOREKSI',
-  },
-  {
-    id: 'sub-002',
-    assignment_id: 'lit-task-001',
-    student_id: 'std-002',
-    student_name: 'Siti Nurhaliza',
-    student_nisn: '202607012',
-    student_class: 'Kelas 7B',
-    book_title: 'Laskar Pelangi',
-    book_author: 'Andrea Hirata',
-    pages_read: 60,
-    summary: 'Kisah 10 anak di Belitung yang memiliki semangat membara menuntut ilmu di SD Muhammadiyah Gantong walau dengan kondisi fasilitas yang serba kekurangan.',
-    moral_value: 'Keterbatasan ekonomi bukan penghalang untuk meraih impian dan cita-cita yang tinggi.',
-    submitted_at: '2026-10-31T13:40:00Z',
-    score: 92,
-    grader_name: 'Ibu Conie, S.Pd. (Wali Kelas 7B)',
-    teacher_notes: 'Rangkuman sangat rapi dan refleksi nilai moral sangat menginspirasi. Pertahankan!',
-    status: 'DINILAI',
-  },
-  {
-    id: 'sub-003',
-    assignment_id: 'lit-task-002',
-    student_id: 'std-003',
-    student_name: 'Rizky Ramadhan',
-    student_nisn: '202607018',
-    student_class: 'Kelas 7B',
-    book_title: 'Menyelamatkan Bumi dari Sampah Plastik',
-    book_author: 'Dr. Ir. Hendra Kusuma',
-    pages_read: 30,
-    summary: 'Buku ini menguraikan dampak limbah mikroplastik bagi ekosistem laut dan kesehatan manusia, serta solusi 3R (Reduce, Reuse, Recycle) yang bisa dimulai dari kantin sekolah.',
-    moral_value: 'Membawa tumbler dan wadah makanan sendiri dari rumah adalah langkah kecil yang berdampak besar bagi kelestarian lingkungan.',
-    submitted_at: '2026-11-01T07:20:00Z',
-    score: 88,
-    grader_name: 'Ibu Conie, S.Pd. (Wali Kelas 7B)',
-    teacher_notes: 'Contoh aksi nyata sangat aplikatif untuk program Adiwiyata Spenspra.',
-    status: 'DINILAI',
-  },
-];
+// Data awal kosong - terisi dari kegiatan literasi dan submit siswa riil
+const DEFAULT_ASSIGNMENTS = [];
+const DEFAULT_SUBMISSIONS = [];
 
 export const literacyAssignmentApi = {
   /**
