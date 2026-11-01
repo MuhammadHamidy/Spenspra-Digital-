@@ -23,10 +23,18 @@ export default function RingkasanPribadi({ user }) {
     async function loadData() {
       try {
         setLoading(true);
+        setError(null);
         const res = await berandaApi.getBeranda();
-        if (isMounted) setData(res);
+        if (isMounted) setData(res || { pinjaman_aktif: [], aktivitas_baca_terakhir: null });
       } catch (err) {
-        if (isMounted) setError(err.message);
+        // Fallback anggun: Jangan tampilkan pesan error teknis 'Unauthorized' yang merusak UI siswa
+        console.warn('Kendala memuat /beranda backend:', err?.message);
+        if (isMounted) {
+          setData({ pinjaman_aktif: [], aktivitas_baca_terakhir: null });
+          if (!err?.message?.toLowerCase().includes('unauthorized')) {
+            setError(err.message);
+          }
+        }
       } finally {
         if (isMounted) setLoading(false);
       }

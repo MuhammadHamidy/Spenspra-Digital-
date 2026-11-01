@@ -55,14 +55,26 @@ func (r *repository) GetBukuList(ctx context.Context, query string, limit, offse
 	if limit <= 0 {
 		limit = 10
 	}
+	// Prioritaskan tabel katalog utama 'books' yang diisi oleh admin perpustakaan
 	baseQuery := `
-		SELECT id, judul, penulis, kategori, jenis, barcode, stok, (stok > 0) AS tersedia, cover_url, deskripsi, created_at
-		FROM buku
+		SELECT 
+			id, 
+			title AS judul, 
+			author AS penulis, 
+			category AS kategori, 
+			'NON-FIKSI' AS jenis, 
+			COALESCE(isbn, call_number, '') AS barcode, 
+			COALESCE(available_copies, total_copies, 1) AS stok, 
+			(COALESCE(available_copies, total_copies, 1) > 0) AS tersedia, 
+			COALESCE(cover_url, '') AS cover_url, 
+			COALESCE(description, '') AS deskripsi, 
+			created_at
+		FROM books
 	`
 	var args []interface{}
 	qTrim := strings.TrimSpace(query)
 	if qTrim != "" {
-		baseQuery += ` WHERE judul ILIKE $1 OR penulis ILIKE $1 OR kategori ILIKE $1`
+		baseQuery += ` WHERE title ILIKE $1 OR author ILIKE $1 OR category ILIKE $1`
 		args = append(args, "%"+qTrim+"%")
 		baseQuery += ` ORDER BY created_at DESC LIMIT $2 OFFSET $3`
 		args = append(args, limit, offset)
@@ -73,7 +85,12 @@ func (r *repository) GetBukuList(ctx context.Context, query string, limit, offse
 
 	rows, err := r.db.Query(ctx, baseQuery, args...)
 	if err != nil {
-		return nil, err
+		// Fallback ke tabel buku lama jika tabel books belum siap
+		legacyQuery := `SELECT id, judul, penulis, kategori, jenis, barcode, stok, (stok > 0) AS tersedia, cover_url, deskripsi, created_at FROM buku ORDER BY created_at DESC LIMIT $1 OFFSET $2`
+		rows, err = r.db.Query(ctx, legacyQuery, limit, offset)
+		if err != nil {
+			return nil, err
+		}
 	}
 	defer rows.Close()
 
