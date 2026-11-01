@@ -124,11 +124,11 @@ export default function BarcodeLabelPrintPage() {
           <h1 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
             Pencetakan Label Buku Perpustakaan
             <span className="bg-emerald-50 text-emerald-700 text-xs px-2.5 py-0.5 rounded-full font-bold border border-emerald-200">
-              Mendukung QR Code Kiosk
+              Mendukung QR Code Mandiri
             </span>
           </h1>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
-            Format label dengan QR Code otomatis terbaca cepat oleh kamera peminjaman di anjungan Layanan Mandiri.
+            Format label dengan QR Code otomatis terbaca cepat oleh scanner peminjaman di Layanan Mandiri.
           </p>
         </div>
 
@@ -144,7 +144,7 @@ export default function BarcodeLabelPrintPage() {
               }`}
             >
               <AppIcon name="qr_code" size={14} />
-              <span>QR Code (Kamera Kiosk)</span>
+              <span>QR Code (Layanan Mandiri)</span>
             </button>
             <button
               onClick={() => setCodeType('barcode')}
@@ -351,8 +351,8 @@ export default function BarcodeLabelPrintPage() {
                           value={label.barcode}
                           size={labelFormat === 'thermal_50x30' ? 62 : 68}
                         />
-                        <span className="text-[6.5px] print:text-[5.5px] font-mono font-semibold text-slate-500 uppercase tracking-tight mt-0.5">
-                          Scan Kiosk
+                        <span className="text-[6.5px] print:text-[5.5px] font-mono font-bold text-slate-700 uppercase tracking-tight mt-0.5">
+                          PINJAM MANDIRI
                         </span>
                       </div>
                     </div>
