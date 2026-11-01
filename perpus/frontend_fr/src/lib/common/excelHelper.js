@@ -11,6 +11,7 @@ export const BOOK_TEMPLATE_COLUMNS = [
   "ISBN",
   "Jumlah Eksemplar",
   "Klasifikasi DDC",
+  "Nomor Rak",
   "Kategori (Opsional)",
   "Deskripsi (Opsional)",
 ];
@@ -25,6 +26,7 @@ export const SAMPLE_BOOK_IMPORT_DATA = [
     ISBN: "978-979-97312-3-4",
     JumlahEksemplar: 4,
     KlasifikasiDDC: "813",
+    NomorRak: "Rak Sastra 01",
     Kategori: "Kesusastraan & Novel",
     Deskripsi: "Kisah roman sejarah pergerakan kebangkitan nasional Indonesia di era kolonial Belanda.",
   },
@@ -37,6 +39,7 @@ export const SAMPLE_BOOK_IMPORT_DATA = [
     ISBN: "978-602-06-3318-3",
     JumlahEksemplar: 5,
     KlasifikasiDDC: "158.1",
+    NomorRak: "Rak Psikologi 02",
     Kategori: "Pengembangan Diri",
     Deskripsi: "Strategi praktis membangun kebiasaan baik dan menghilangkan kebiasaan buruk setiap hari.",
   },
@@ -49,6 +52,7 @@ export const SAMPLE_BOOK_IMPORT_DATA = [
     ISBN: "978-602-424-695-2",
     JumlahEksemplar: 2,
     KlasifikasiDDC: "520",
+    NomorRak: "Rak Sains 03",
     Kategori: "Sains & Astronomi",
     Deskripsi: "Eksplorasi ilmu falak dan evolusi pemikiran manusia tentang alam semesta yang maha luas.",
   },
@@ -61,6 +65,7 @@ export const SAMPLE_BOOK_IMPORT_DATA = [
     ISBN: "978-602-244-883-9",
     JumlahEksemplar: 30,
     KlasifikasiDDC: "510",
+    NomorRak: "Rak Pelajaran 01",
     Kategori: "Buku Paket Pelajaran",
     Deskripsi: "Buku teks utama mata pelajaran Matematika Kurikulum Merdeka untuk jenjang SMP Kelas 7.",
   },
@@ -176,6 +181,14 @@ export function parseBookCSV(content) {
       rawCols[7] ||
       "";
 
+    const shelf =
+      row["nomorrak"] ||
+      row["norak"] ||
+      row["rak"] ||
+      row["lokasirak"] ||
+      row["shelf"] ||
+      "";
+
     let category =
       row["kategoriopsional"] ||
       row["kategori"] ||
@@ -192,7 +205,8 @@ export function parseBookCSV(content) {
       row["sinopsis"] ||
       "";
 
-    const callNumber = generateCallNumber(ddc, author, title);
+    const baseCallNumber = generateCallNumber(ddc, author, title);
+    const callNumber = shelf ? `${baseCallNumber} [${shelf}]` : baseCallNumber;
 
     let fullPublisher = publisher;
     if (city && publisher && !publisher.includes(city)) {
@@ -211,6 +225,7 @@ export function parseBookCSV(content) {
         category,
         call_number: callNumber,
         ddc: ddc || "000",
+        shelf_location: shelf || "Rak A-01",
         city: city || "",
         copies_count: isNaN(copies) || copies <= 0 ? 1 : copies,
         description: desc,
@@ -258,6 +273,7 @@ export function downloadBookImportTemplate(includeSample = true) {
       `"${item.ISBN || ""}"`,
       item.JumlahEksemplar || 1,
       `"${item.KlasifikasiDDC || ""}"`,
+      `"${(item.NomorRak || "").replace(/"/g, '""')}"`,
       `"${(item.Kategori || "").replace(/"/g, '""')}"`,
       `"${(item.Deskripsi || "").replace(/"/g, '""')}"`,
     ];

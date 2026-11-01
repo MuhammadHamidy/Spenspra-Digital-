@@ -4,16 +4,16 @@ export const berandaApi = {
   /**
    * Mengambil data sesi pengguna login SSO yang valid
    */
-  getSession: async () => {
-    const res = await httpClient.get('/session');
+  getSession: async (options = {}) => {
+    const res = await httpClient.get('/session', { noRedirect: true, ...options });
     return res?.data || null;
   },
 
   /**
    * Mengambil ringkasan beranda pribadi (pinjaman aktif, tenggat, buku terakhir)
    */
-  getBeranda: async () => {
-    const res = await httpClient.get('/beranda');
+  getBeranda: async (options = {}) => {
+    const res = await httpClient.get('/beranda', { noRedirect: true, ...options });
     return res?.data || null;
   },
 

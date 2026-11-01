@@ -21,12 +21,10 @@ export async function httpRequest(endpoint, options = {}) {
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      if (response.status === 401) {
+      if (response.status === 401 && !options?.noRedirect && !endpoint.includes('/session')) {
         if (typeof window !== 'undefined') {
           const pathname = window.location.pathname;
           const isProtectedAdminPath =
-            pathname.startsWith('/pustakawan') ||
-            pathname.startsWith('/pustakwan') ||
             pathname.startsWith('/circulation') ||
             pathname.startsWith('/members') ||
             pathname.startsWith('/faces') ||
@@ -35,7 +33,7 @@ export async function httpRequest(endpoint, options = {}) {
             pathname.startsWith('/loans') ||
             pathname.startsWith('/reading-insights');
 
-          if (isProtectedAdminPath || options?.requireAuth) {
+          if ((isProtectedAdminPath && !tokenStorage.getToken()) || options?.requireAuth) {
             tokenStorage.clear();
             const isSpenspra = window.location.hostname.includes('spenspra.com');
             const isSch = window.location.hostname.includes('spenspra.sch.id');

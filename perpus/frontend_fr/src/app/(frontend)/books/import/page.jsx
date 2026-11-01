@@ -373,7 +373,7 @@ export default function BooksImportPage() {
           </div>
           <h4 className="text-xs font-bold text-slate-900">Format Kolom Baku</h4>
           <p className="text-[11px] text-slate-500 leading-relaxed">
-            Kolom: <strong>Judul Buku, Pengarang, Penerbit, Kota Terbit, Tahun Terbit, ISBN, Jumlah Eksemplar, Klasifikasi DDC</strong>. Kolom Kategori dan Deskripsi bersifat opsional (kategori dan nomor panggil otomatis terisi dari DDC jika dikosongkan).
+            Kolom: <strong>Judul Buku, Pengarang, Penerbit, Kota Terbit, Tahun Terbit, ISBN, Jumlah Eksemplar, Klasifikasi DDC, Nomor Rak</strong>. Kolom Kategori dan Deskripsi bersifat opsional (kategori dan nomor panggil otomatis terisi dari DDC jika dikosongkan).
           </p>
         </div>
 

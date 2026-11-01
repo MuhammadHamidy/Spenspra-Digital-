@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { booksApi } from '@/lib/features/library/api/booksApi';
 import { Barcode } from '@/lib/common/barcodeGenerator';
+import { getCategoryFromDDC, generateCallNumber } from '@/lib/common/excelHelper';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -19,6 +20,7 @@ export default function BooksInventoryPage() {
   const [selectedBook, setSelectedBook] = useState(null);
   const [openDetailModal, setOpenDetailModal] = useState(false);
   const [openAddModal, setOpenAddModal] = useState(false);
+  const [openEditModal, setOpenEditModal] = useState(false);
   const [openBatchBarcodeModal, setOpenBatchBarcodeModal] = useState(false);
   const [addingCopies, setAddingCopies] = useState(false);
   const [copiesToAdd, setCopiesToAdd] = useState(1);
@@ -39,30 +41,55 @@ export default function BooksInventoryPage() {
   const [editBarcodeValue, setEditBarcodeValue] = useState('');
   const [savingSingleBarcode, setSavingSingleBarcode] = useState(false);
 
-  // Form State for Add Book
+  // Form State for Add Book (Synchronized with Excel Import Standard)
   const [formData, setFormData] = useState({
     title: '',
     author: '',
     isbn: '',
     publisher: '',
+    city: 'Jakarta',
     publish_year: 2024,
-    category: 'Teknologi & Komputer',
-    call_number: 'Rak A-01',
+    category: 'Teknologi & Terapan',
+    ddc: '004',
+    shelf_location: 'Rak A-01',
     description: '',
-    cover_url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400',
+    cover_url: '',
     total_copies: 2,
     customPrefix: 'PERPUS-',
     useCustomBarcode: false,
   });
 
+  // Form State for Edit Book
+  const [editFormData, setEditFormData] = useState({
+    id: '',
+    title: '',
+    author: '',
+    isbn: '',
+    publisher: '',
+    city: '',
+    publish_year: 2024,
+    category: 'Umum',
+    ddc: '000',
+    shelf_location: 'Rak A-01',
+    description: '',
+    cover_url: '',
+  });
+
   const CATEGORIES = [
     'ALL',
-    'Teknologi & Komputer',
+    'Karya Umum & Komputer',
+    'Filsafat & Psikologi',
+    'Agama',
+    'Ilmu Sosial & Pendidikan',
+    'Bahasa & Linguistik',
     'Sains & Matematika',
-    'Sastra & Fiksi',
-    'Sejarah & Sosial',
-    'Filsafat & Agama',
-    'Bisnis & Manajemen',
+    'Teknologi & Terapan',
+    'Kesenian & Olahraga',
+    'Kesusastraan & Novel',
+    'Sejarah & Geografi',
+    'Buku Paket Pelajaran',
+    'Pengembangan Diri',
+    'Teknologi & Komputer',
     'Umum',
   ];
 
@@ -315,31 +342,141 @@ export default function BooksInventoryPage() {
     }
   };
 
+  // Handle upload cover image from local computer/device
+  const handleCoverUpload = (e, isEdit = false) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 3 * 1024 * 1024) {
+      alert('Ukuran file foto cover maksimal 3 MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      if (isEdit) {
+        setEditFormData((prev) => ({ ...prev, cover_url: dataUrl }));
+      } else {
+        setFormData((prev) => ({ ...prev, cover_url: dataUrl }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleCreateBook = async (e) => {
     e.preventDefault();
     try {
+      const fullPublisher = formData.city
+        ? `${formData.city} : ${formData.publisher}`
+        : formData.publisher;
+      const baseCallNumber = generateCallNumber(formData.ddc, formData.author, formData.title);
+      const callNumber = formData.shelf_location
+        ? `${baseCallNumber} [${formData.shelf_location}]`
+        : baseCallNumber;
+
       await booksApi.createBook({
-        ...formData,
-        publish_year: parseInt(formData.publish_year, 10),
-        total_copies: parseInt(formData.total_copies, 10),
+        title: formData.title,
+        author: formData.author,
+        isbn: formData.isbn,
+        publisher: fullPublisher,
+        publish_year: parseInt(formData.publish_year, 10) || new Date().getFullYear(),
+        category: formData.category,
+        call_number: callNumber,
+        description: formData.description,
+        cover_url: formData.cover_url || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400',
+        total_copies: parseInt(formData.total_copies, 10) || 1,
       });
+
       setOpenAddModal(false);
       setFormData({
         title: '',
         author: '',
         isbn: '',
         publisher: '',
+        city: 'Jakarta',
         publish_year: 2024,
-        category: 'Teknologi & Komputer',
-        call_number: 'Rak A-01',
+        category: 'Karya Umum & Komputer',
+        ddc: '004',
+        shelf_location: 'Rak A-01',
         description: '',
-        cover_url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400',
+        cover_url: '',
         total_copies: 2,
       });
       loadBooks();
-      alert('Buku dan eksemplar barcode berhasil ditambahkan ke katalog!');
+      alert('Buku dan eksemplar barcode berhasil didaftarkan ke katalog!');
     } catch (err) {
       alert(err.message || 'Gagal menambahkan buku');
+    }
+  };
+
+  const handleOpenEdit = (b) => {
+    let publisher = b.publisher || '';
+    let city = '';
+    if (publisher.includes(' : ')) {
+      const parts = publisher.split(' : ');
+      city = parts[0]?.trim() || '';
+      publisher = parts.slice(1).join(' : ')?.trim() || '';
+    }
+
+    let ddc = '000';
+    let shelf = 'Rak A-01';
+    if (b.call_number) {
+      const ddcMatch = b.call_number.match(/^([0-9]{3}(\.[0-9]+)?)/);
+      if (ddcMatch) ddc = ddcMatch[1];
+      const shelfMatch = b.call_number.match(/\[(.*?)\]/);
+      if (shelfMatch) {
+        shelf = shelfMatch[1];
+      } else if (b.call_number.toLowerCase().includes('rak')) {
+        shelf = b.call_number;
+      }
+    }
+
+    setEditFormData({
+      id: b.id,
+      title: b.title || '',
+      author: b.author || '',
+      isbn: b.isbn || '',
+      publisher,
+      city,
+      publish_year: b.publish_year || 2024,
+      category: b.category || 'Umum',
+      ddc,
+      shelf_location: shelf,
+      description: b.description || '',
+      cover_url: b.cover_url || '',
+    });
+    setOpenEditModal(true);
+  };
+
+  const handleUpdateBook = async (e) => {
+    e.preventDefault();
+    try {
+      const fullPublisher = editFormData.city
+        ? `${editFormData.city} : ${editFormData.publisher}`
+        : editFormData.publisher;
+      const baseCallNumber = generateCallNumber(editFormData.ddc, editFormData.author, editFormData.title);
+      const callNumber = editFormData.shelf_location
+        ? `${baseCallNumber} [${editFormData.shelf_location}]`
+        : baseCallNumber;
+
+      await booksApi.updateBook(editFormData.id, {
+        title: editFormData.title,
+        author: editFormData.author,
+        isbn: editFormData.isbn,
+        publisher: fullPublisher,
+        publish_year: parseInt(editFormData.publish_year, 10) || new Date().getFullYear(),
+        category: editFormData.category,
+        call_number: callNumber,
+        description: editFormData.description,
+        cover_url: editFormData.cover_url,
+      });
+
+      setOpenEditModal(false);
+      loadBooks();
+      alert('Perubahan data buku dan foto cover berhasil disimpan!');
+    } catch (err) {
+      alert(err.message || 'Gagal memperbarui data buku');
     }
   };
 
@@ -679,6 +816,15 @@ export default function BooksInventoryPage() {
                             </svg>
                           </button>
                           <button
+                            onClick={() => handleOpenEdit(b)}
+                            title="Edit Informasi & Foto Buku"
+                            className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
                             onClick={() => handleDeleteBook(b.id, b.title)}
                             title="Hapus Buku"
                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
@@ -862,28 +1008,86 @@ export default function BooksInventoryPage() {
       <Dialog
         open={openAddModal}
         onClose={() => setOpenAddModal(false)}
-        maxWidth="sm"
+        maxWidth="md"
         fullWidth
-        slotProps={{ paper: { sx: { borderRadius: '20px', p: 1 } } }}
+        slotProps={{ paper: { sx: { borderRadius: '24px', p: 1 } } }}
       >
         <form onSubmit={handleCreateBook}>
-          <DialogTitle sx={{ fontWeight: 800, color: '#0F172A' }}>
-            Tambah Koleksi Buku Baru
-          </DialogTitle>
-          <DialogContent dividers sx={{ py: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <DialogTitle sx={{ fontWeight: 900, color: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'between', pb: 1 }}>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Judul Buku *</label>
-              <input
-                type="text"
-                required
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                placeholder="Contoh: Pemrograman Python Modern"
-                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
-              />
+              <div className="text-base font-black text-slate-900">Tambah Koleksi Buku Baru</div>
+              <p className="text-xs text-slate-500 font-normal mt-0.5">
+                Formulir pendaftaran judul dan eksemplar buku baru (sinkron dengan kolom standar impor Excel).
+              </p>
+            </div>
+          </DialogTitle>
+          <DialogContent dividers sx={{ py: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            {/* Foto / Cover Buku Upload & Preview Section */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/90 flex flex-col sm:flex-row gap-4 items-center">
+              <div className="w-20 h-28 rounded-xl bg-slate-200 border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden shrink-0 shadow-xs relative group">
+                {formData.cover_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={formData.cover_url} alt="Cover Buku" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="text-center p-2 text-slate-400">
+                    <svg className="w-6 h-6 mx-auto mb-1 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span className="text-[9px] font-bold block leading-tight">Foto Sampul</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1 space-y-2 w-full">
+                <label className="block text-xs font-bold text-slate-800">
+                  Foto Sampul / Cover Buku
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    <span>Pilih Foto dari Komputer / HP</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleCoverUpload(e, false)}
+                      className="hidden"
+                    />
+                  </label>
+                  {formData.cover_url && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, cover_url: '' })}
+                      className="text-xs text-rose-600 hover:underline font-semibold"
+                    >
+                      Hapus Foto
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="url"
+                  placeholder="Atau tempel URL gambar sampul di sini (opsional)..."
+                  value={formData.cover_url}
+                  onChange={(e) => setFormData({ ...formData, cover_url: e.target.value })}
+                  className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            {/* Judul & Pengarang */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Judul Buku *</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  placeholder="Contoh: Bumi Manusia"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Pengarang / Penulis *</label>
                 <input
@@ -895,10 +1099,51 @@ export default function BooksInventoryPage() {
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
+            </div>
+
+            {/* Penerbit & Kota Terbit */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">ISBN</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Penerbit *</label>
                 <input
                   type="text"
+                  required
+                  value={formData.publisher}
+                  onChange={(e) => setFormData({ ...formData, publisher: e.target.value })}
+                  placeholder="Contoh: Gramedia / Lentera Dipantara"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Kota Terbit *</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.city}
+                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                  placeholder="Contoh: Jakarta / Surabaya"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+            </div>
+
+            {/* Tahun Terbit & ISBN */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Tahun Terbit *</label>
+                <input
+                  type="number"
+                  required
+                  value={formData.publish_year}
+                  onChange={(e) => setFormData({ ...formData, publish_year: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">ISBN *</label>
+                <input
+                  type="text"
+                  required
                   value={formData.isbn}
                   onChange={(e) => setFormData({ ...formData, isbn: e.target.value })}
                   placeholder="978-602-xxxx-xx"
@@ -907,31 +1152,50 @@ export default function BooksInventoryPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            {/* Klasifikasi DDC & Nomor Rak */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Penerbit</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Klasifikasi DDC *
+                </label>
                 <input
                   type="text"
-                  value={formData.publisher}
-                  onChange={(e) => setFormData({ ...formData, publisher: e.target.value })}
-                  placeholder="Gramedia / Andi"
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  required
+                  value={formData.ddc}
+                  onChange={(e) => {
+                    const newDDC = e.target.value;
+                    const autoCat = getCategoryFromDDC(newDDC);
+                    setFormData({ ...formData, ddc: newDDC, category: autoCat });
+                  }}
+                  placeholder="Contoh: 813 / 510 / 004"
+                  className="w-full px-3 py-2 text-xs font-mono font-bold rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Otomatis memetakan kategori perpustakaan dan nomor panggil buku.
+                </p>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Tahun Terbit</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nomor Rak / Lokasi Rak *
+                </label>
                 <input
-                  type="number"
-                  value={formData.publish_year}
-                  onChange={(e) => setFormData({ ...formData, publish_year: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  type="text"
+                  required
+                  value={formData.shelf_location}
+                  onChange={(e) => setFormData({ ...formData, shelf_location: e.target.value })}
+                  placeholder="Contoh: Rak Sastra 01, Rak A-02"
+                  className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Posisi rak fisik agar siswa mudah menemukan buku di ruangan.
+                </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            {/* Kategori & Eksemplar */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Kategori</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Kategori Buku</label>
                 <select
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
@@ -943,30 +1207,32 @@ export default function BooksInventoryPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Lokasi Rak / Call No.</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Jumlah Eksemplar Fisik Awal *</label>
                 <input
-                  type="text"
-                  value={formData.call_number}
-                  onChange={(e) => setFormData({ ...formData, call_number: e.target.value })}
-                  placeholder="Rak A-01"
+                  type="number"
+                  min="1"
+                  max="100"
+                  required
+                  value={formData.total_copies}
+                  onChange={(e) => setFormData({ ...formData, total_copies: e.target.value })}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Sistem otomatis mencetak barcode / QR Code unik untuk setiap eksemplar.
+                </p>
               </div>
             </div>
 
+            {/* Deskripsi */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Jumlah Eksemplar Fisik Awal</label>
-              <input
-                type="number"
-                min="1"
-                max="20"
-                value={formData.total_copies}
-                onChange={(e) => setFormData({ ...formData, total_copies: e.target.value })}
+              <label className="block text-xs font-bold text-slate-700 mb-1">Deskripsi / Sinopsis (Opsional)</label>
+              <textarea
+                rows={2}
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Tuliskan ringkasan singkat atau sinopsis buku..."
                 className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
-              <p className="text-[10px] text-slate-400 mt-1">
-                Sistem akan otomatis mencetak kode barcode unik untuk setiap eksemplar.
-              </p>
             </div>
           </DialogContent>
           <DialogActions sx={{ p: 2 }}>
@@ -981,7 +1247,222 @@ export default function BooksInventoryPage() {
               type="submit"
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer"
             >
-              Simpan & Cetak Barcode
+              Simpan &amp; Generate Barcode
+            </button>
+          </DialogActions>
+        </form>
+      </Dialog>
+
+      {/* =========================================================================
+          MODAL: EDIT KOLEKSI BUKU & FOTO COVER
+          ========================================================================= */}
+      <Dialog
+        open={openEditModal}
+        onClose={() => setOpenEditModal(false)}
+        maxWidth="md"
+        fullWidth
+        slotProps={{ paper: { sx: { borderRadius: '24px', p: 1 } } }}
+      >
+        <form onSubmit={handleUpdateBook}>
+          <DialogTitle sx={{ fontWeight: 900, color: '#0F172A', pb: 1 }}>
+            <div className="text-base font-black text-slate-900">Edit Informasi &amp; Foto Buku</div>
+            <p className="text-xs text-slate-500 font-normal mt-0.5">
+              Perbarui judul, pengarang, nomor rak, nomor DDC, sinopsis, atau ganti foto sampul buku.
+            </p>
+          </DialogTitle>
+          <DialogContent dividers sx={{ py: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            {/* Foto / Cover Buku Upload & Preview Section */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/90 flex flex-col sm:flex-row gap-4 items-center">
+              <div className="w-20 h-28 rounded-xl bg-slate-200 border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden shrink-0 shadow-xs relative group">
+                {editFormData.cover_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={editFormData.cover_url} alt="Cover Buku" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="text-center p-2 text-slate-400">
+                    <svg className="w-6 h-6 mx-auto mb-1 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span className="text-[9px] font-bold block leading-tight">Foto Sampul</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1 space-y-2 w-full">
+                <label className="block text-xs font-bold text-slate-800">
+                  Ganti Foto Sampul / Cover Buku
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    <span>Pilih Foto Baru dari Komputer / HP</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleCoverUpload(e, true)}
+                      className="hidden"
+                    />
+                  </label>
+                  {editFormData.cover_url && (
+                    <button
+                      type="button"
+                      onClick={() => setEditFormData({ ...editFormData, cover_url: '' })}
+                      className="text-xs text-rose-600 hover:underline font-semibold"
+                    >
+                      Hapus Foto
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="url"
+                  placeholder="Atau tempel URL gambar sampul di sini (opsional)..."
+                  value={editFormData.cover_url}
+                  onChange={(e) => setEditFormData({ ...editFormData, cover_url: e.target.value })}
+                  className="w-full text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-amber-600"
+                />
+              </div>
+            </div>
+
+            {/* Judul & Pengarang */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Judul Buku *</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.title}
+                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600 font-semibold text-slate-900"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Pengarang / Penulis *</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.author}
+                  onChange={(e) => setEditFormData({ ...editFormData, author: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+            </div>
+
+            {/* Penerbit & Kota Terbit */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Penerbit *</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.publisher}
+                  onChange={(e) => setEditFormData({ ...editFormData, publisher: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Kota Terbit</label>
+                <input
+                  type="text"
+                  value={editFormData.city}
+                  onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
+                  placeholder="Contoh: Jakarta"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+            </div>
+
+            {/* Tahun Terbit & ISBN */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Tahun Terbit</label>
+                <input
+                  type="number"
+                  value={editFormData.publish_year}
+                  onChange={(e) => setEditFormData({ ...editFormData, publish_year: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">ISBN</label>
+                <input
+                  type="text"
+                  value={editFormData.isbn}
+                  onChange={(e) => setEditFormData({ ...editFormData, isbn: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600 font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Klasifikasi DDC & Nomor Rak */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Klasifikasi DDC
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.ddc}
+                  onChange={(e) => {
+                    const newDDC = e.target.value;
+                    const autoCat = getCategoryFromDDC(newDDC);
+                    setEditFormData({ ...editFormData, ddc: newDDC, category: autoCat });
+                  }}
+                  className="w-full px-3 py-2 text-xs font-mono font-bold rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nomor Rak / Lokasi Rak
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.shelf_location}
+                  onChange={(e) => setEditFormData({ ...editFormData, shelf_location: e.target.value })}
+                  className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+            </div>
+
+            {/* Kategori */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Kategori Buku</label>
+              <select
+                value={editFormData.category}
+                onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+              >
+                {CATEGORIES.filter((c) => c !== 'ALL').map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Deskripsi */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Deskripsi / Sinopsis</label>
+              <textarea
+                rows={3}
+                value={editFormData.description}
+                onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                placeholder="Tuliskan ringkasan singkat atau sinopsis buku..."
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600"
+              />
+            </div>
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <button
+              type="button"
+              onClick={() => setOpenEditModal(false)}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer"
+            >
+              Simpan Perubahan
             </button>
           </DialogActions>
         </form>
