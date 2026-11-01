@@ -12,11 +12,13 @@ const ZXING_CDN_URLS = [
 export function useBarcodeScanner({ onScan, isScanning = true, disabled = false }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const [stream, setStream] = useState(null);
+  const streamRef = useRef(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [error, setError] = useState(null);
-  const [facingMode, setFacingMode] = useState('user'); // Default to front/user camera for laptop webcams
-  const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
+  const [facingMode, setFacingMode] = useState('user');
+  const [cameras, setCameras] = useState([]);
+  const [activeCameraIndex, setActiveCameraIndex] = useState(0);
+  const [activeCameraLabel, setActiveCameraLabel] = useState('');
   const [isSwitchingCamera, setIsSwitchingCamera] = useState(false);
   const [lastScannedCode, setLastScannedCode] = useState('');
   const [justScanned, setJustScanned] = useState(false);
@@ -26,120 +28,169 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
   const zxingReaderRef = useRef(null);
 
   const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach((t) => t.stop());
-      setStream(null);
+    if (streamRef.current) {
+      try {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      } catch {}
+      streamRef.current = null;
     }
     if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    if (zxingReaderRef.current) {
       try {
-        zxingReaderRef.current.reset();
-      } catch {
-        // silent
-      }
+        videoRef.current.srcObject = null;
+      } catch {}
     }
     setCameraActive(false);
-  }, [stream]);
+  }, []);
+
+  // Update list of camera devices
+  const refreshCameraDevices = useCallback(async () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.enumerateDevices) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+        setCameras(videoInputs);
+        return videoInputs;
+      }
+    } catch {}
+    return [];
+  }, []);
 
   const startCamera = useCallback(
-    async (targetMode) => {
+    async (targetCameraIndexOrMode) => {
       setError(null);
-      try {
-        if (stream) {
-          stream.getTracks().forEach((t) => t.stop());
-        }
+      setIsSwitchingCamera(true);
 
-        // Deteksi apakah user menggunakan perangkat mobile (HP/Tablet) vs PC/Laptop
-        const isMobile = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-        // 1. Deteksi apakah perangkat memiliki beberapa kamera
-        let videoDevices = [];
+      // Stop existing stream first
+      if (streamRef.current) {
         try {
-          if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            videoDevices = devices.filter((d) => d.kind === 'videoinput');
-          }
+          streamRef.current.getTracks().forEach((t) => t.stop());
         } catch {}
+        streamRef.current = null;
+      }
 
-        const multi = videoDevices.length > 1;
-        setHasMultipleCameras(multi);
+      try {
+        let constraints = { audio: false };
+        let chosenMode = facingMode;
 
-        // Pada Laptop/PC: Selalu utamakan 'user' (webcam). Pada HP: utamakan 'environment' (kamera belakang)
-        const chosenFacing = targetMode || (isMobile && multi ? 'environment' : 'user');
+        // Determine deviceId or facingMode
+        if (typeof targetCameraIndexOrMode === 'number') {
+          const targetDev = cameras[targetCameraIndexOrMode];
+          if (targetDev?.deviceId) {
+            constraints.video = {
+              deviceId: { exact: targetDev.deviceId },
+              width: { ideal: 1280, min: 640 },
+              height: { ideal: 720, min: 480 },
+            };
+            setActiveCameraIndex(targetCameraIndexOrMode);
+            setActiveCameraLabel(targetDev.label || `Kamera ${targetCameraIndexOrMode + 1}`);
+          }
+        } else if (typeof targetCameraIndexOrMode === 'string') {
+          chosenMode = targetCameraIndexOrMode;
+          setFacingMode(chosenMode);
+          constraints.video = {
+            facingMode: { ideal: chosenMode },
+            width: { ideal: 1280, min: 640 },
+            height: { ideal: 720, min: 480 },
+          };
+        } else {
+          // Default start
+          const isMobile =
+            typeof navigator !== 'undefined' &&
+            /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+          chosenMode = isMobile ? 'environment' : 'user';
+          setFacingMode(chosenMode);
+          constraints.video = {
+            facingMode: { ideal: chosenMode },
+            width: { ideal: 1280, min: 640 },
+            height: { ideal: 720, min: 480 },
+          };
+        }
 
         let mediaStream = null;
         try {
-          mediaStream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              facingMode: { ideal: chosenFacing },
-              width: { ideal: 1280, min: 640 },
-              height: { ideal: 720, min: 480 },
-            },
-            audio: false,
-          });
-        } catch {
-          // Fallback tanpa constraint resolusi
+          mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (initialErr) {
+          console.warn('Initial camera constraints failed, attempting fallback:', initialErr);
           try {
+            // Fallback without resolution constraints
             mediaStream = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: chosenFacing },
+              video: constraints.video?.deviceId ? { deviceId: constraints.video.deviceId } : true,
               audio: false,
             });
-          } catch {
-            mediaStream = await navigator.mediaDevices.getUserMedia({
-              video: true,
-              audio: false,
-            });
+          } catch (fallbackErr) {
+            // Generic video true
+            mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
           }
         }
 
-        setStream(mediaStream);
-        setCameraActive(true);
-        setFacingMode(chosenFacing);
+        streamRef.current = mediaStream;
 
+        // Connect stream to video element
         if (videoRef.current) {
           const video = videoRef.current;
           video.srcObject = mediaStream;
           video.setAttribute('playsinline', 'true');
+          video.setAttribute('webkit-playsinline', 'true');
           video.setAttribute('autoplay', 'true');
           video.muted = true;
-          video.play().catch(() => {});
+
+          try {
+            await video.play();
+          } catch (playErr) {
+            console.warn('Video play error:', playErr);
+          }
+        }
+
+        setCameraActive(true);
+
+        // Track label
+        const videoTrack = mediaStream.getVideoTracks()?.[0];
+        if (videoTrack?.label) {
+          setActiveCameraLabel(videoTrack.label);
+        }
+
+        // Enumerate devices now that permission is granted
+        const updatedDevices = await refreshCameraDevices();
+        if (videoTrack && updatedDevices.length > 0) {
+          const foundIdx = updatedDevices.findIndex(
+            (d) => d.deviceId === videoTrack.getSettings()?.deviceId || d.label === videoTrack.label
+          );
+          if (foundIdx >= 0) {
+            setActiveCameraIndex(foundIdx);
+            setActiveCameraLabel(updatedDevices[foundIdx].label || `Kamera ${foundIdx + 1}`);
+          }
         }
       } catch (err) {
-        console.warn('Barcode camera access error:', err);
-        setError('Kamera tidak dapat diakses: ' + (err.message || 'Periksa izin kamera browser.'));
+        console.error('Barcode camera access error:', err);
+        setError(
+          err.name === 'NotAllowedError'
+            ? 'Izin akses kamera ditolak. Silakan izinkan kamera di browser Anda.'
+            : err.name === 'NotFoundError'
+            ? 'Tidak ada perangkat kamera yang terdeteksi di perangkat Anda.'
+            : `Kamera tidak dapat diakses (${err.message || 'Error'}). Silakan periksa izin atau gunakan input manual.`
+        );
         setCameraActive(false);
       } finally {
         setIsSwitchingCamera(false);
       }
     },
-    [stream]
+    [cameras, facingMode, refreshCameraDevices]
   );
 
+  // Switch to next available camera (or toggle front/back)
   const switchCamera = useCallback(async () => {
     if (isSwitchingCamera) return;
-    setIsSwitchingCamera(true);
-    const newMode = facingMode === 'environment' ? 'user' : 'environment';
-    await startCamera(newMode);
-  }, [facingMode, isSwitchingCamera, startCamera]);
 
-  useEffect(() => {
-    startCamera();
-    return () => {
-      stopCamera();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (cameraActive && stream && videoRef.current) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.play().catch((e) => console.log('Video play error:', e));
+    if (cameras.length > 1) {
+      const nextIndex = (activeCameraIndex + 1) % cameras.length;
+      await startCamera(nextIndex);
+    } else {
+      const newMode = facingMode === 'environment' ? 'user' : 'environment';
+      await startCamera(newMode);
     }
-  }, [cameraActive, stream]);
+  }, [activeCameraIndex, cameras, facingMode, isSwitchingCamera, startCamera]);
 
-  // Load ZXing library with multiple resilient CDNs
+  // Load ZXing library from CDN as robust fallback
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (window.ZXing) {
@@ -150,7 +201,7 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
     let cdnIndex = 0;
     const loadNextCdn = () => {
       if (cdnIndex >= ZXING_CDN_URLS.length) {
-        console.warn('[BarcodeScanner] Semua CDN ZXing gagal dimuat, menggunakan BarcodeDetector murni.');
+        console.warn('[BarcodeScanner] ZXing CDN offline, using BarcodeDetector.');
         return;
       }
       const url = ZXING_CDN_URLS[cdnIndex];
@@ -170,14 +221,32 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
           loadNextCdn();
         }
       };
-      script.onerror = () => {
-        loadNextCdn();
-      };
+      script.onerror = () => loadNextCdn();
       document.head.appendChild(script);
     };
 
     loadNextCdn();
   }, []);
+
+  // Initialize camera once mounted
+  useEffect(() => {
+    startCamera();
+    return () => {
+      stopCamera();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Re-attach stream if videoRef remounts
+  useEffect(() => {
+    if (cameraActive && streamRef.current && videoRef.current) {
+      const video = videoRef.current;
+      if (video.srcObject !== streamRef.current) {
+        video.srcObject = streamRef.current;
+        video.play().catch(() => {});
+      }
+    }
+  }, [cameraActive]);
 
   // Handle successful detection
   const handleDetectedBarcode = useCallback(
@@ -211,7 +280,7 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
       if (!file) return;
       setError(null);
 
-      // 1. Coba Native BarcodeDetector
+      // 1. Native BarcodeDetector
       if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
         try {
           const detector = new window.BarcodeDetector({
@@ -226,7 +295,7 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
         } catch {}
       }
 
-      // 2. Coba ZXing
+      // 2. ZXing
       if (window.ZXing) {
         try {
           if (!zxingReaderRef.current) {
@@ -246,15 +315,15 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
             handleDetectedBarcode(result.getText());
             return result.getText();
           }
-        } catch (err) {
-          setError('Barcode tidak dapat terbaca dari gambar tersebut. Pastikan gambar jelas dan tidak buram.');
+        } catch {
+          setError('Barcode tidak dapat terbaca dari foto tersebut. Pastikan foto terang dan fokus pada barcode/QR.');
         }
       }
     },
     [handleDetectedBarcode]
   );
 
-  // Scanning interval loop with dual-engine (native BarcodeDetector + ZXing dual-pass canvas)
+  // Scanning loop: Read frames non-destructively without pausing video
   useEffect(() => {
     if (!cameraActive || disabled || !isScanning) return;
 
@@ -273,83 +342,62 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
     const interval = setInterval(async () => {
       if (isProcessing || disabled || !videoRef.current) return;
       const video = videoRef.current;
-      if (video.readyState < 2) return;
+      if (video.readyState < 2 || video.paused) return;
 
       isProcessing = true;
       let detectedText = null;
 
-      // 1. Coba Native BarcodeDetector
+      // 1. Native BarcodeDetector directly on video frame
       if (detector) {
         try {
           const barcodes = await detector.detect(video);
           if (Array.isArray(barcodes) && barcodes.length > 0 && barcodes[0].rawValue) {
             detectedText = barcodes[0].rawValue;
           }
-        } catch {
-          // Native detector error -> fallback to ZXing
-        }
+        } catch {}
       }
 
-      // 2. Fallback to ZXing decoding (Direct video + Dual-pass canvas)
-      if (!detectedText && window.ZXing) {
-        if (!zxingReaderRef.current) {
-          try {
-            zxingReaderRef.current = new window.ZXing.BrowserMultiFormatReader();
-          } catch {}
-        }
+      // 2. ZXing decoding via hidden canvas (NEVER calls decodeFromVideoElement which interrupts playback)
+      if (!detectedText && window.ZXing && canvasRef.current) {
+        try {
+          const canvas = canvasRef.current;
+          const w = video.videoWidth || 640;
+          const h = video.videoHeight || 480;
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-        // Pass A: Direct from playing HTMLVideoElement
-        if (zxingReaderRef.current) {
-          try {
-            const res = await zxingReaderRef.current.decodeFromVideoElement(video);
-            if (res && res.getText()) {
-              detectedText = res.getText();
-            }
-          } catch {
-            // Frame not found or scanning next frame
-          }
-        }
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, w, h);
 
-        // Pass B: Canvas fallback (with luminance source & mirroring support)
-        if (!detectedText && canvasRef.current) {
-          try {
-            const canvas = canvasRef.current;
-            const w = video.videoWidth || 640;
-            const h = video.videoHeight || 480;
-            canvas.width = w;
-            canvas.height = h;
-            const ctx = canvas.getContext('2d');
-
-            if (ctx) {
-              const decodeCanvasWithZXing = (cvs) => {
-                try {
-                  if (window.ZXing.HTMLCanvasElementLuminanceSource) {
-                    const lum = new window.ZXing.HTMLCanvasElementLuminanceSource(cvs);
-                    const bitmap = new window.ZXing.BinaryBitmap(new window.ZXing.HybridBinarizer(lum));
-                    const reader = new window.ZXing.MultiFormatReader();
-                    const r = reader.decode(bitmap);
-                    return r ? r.getText() : null;
-                  }
-                } catch {}
-                return null;
-              };
-
-              ctx.drawImage(video, 0, 0, w, h);
-              detectedText = decodeCanvasWithZXing(canvas);
-
-              // Pass C: Invert/Mirror if user facing or initial pass failed
-              if (!detectedText && facingMode === 'user') {
-                ctx.save();
-                ctx.translate(w, 0);
-                ctx.scale(-1, 1);
-                ctx.drawImage(video, 0, 0, w, h);
-                ctx.restore();
-
-                detectedText = decodeCanvasWithZXing(canvas);
+            if (window.ZXing.HTMLCanvasElementLuminanceSource) {
+              const lum = new window.ZXing.HTMLCanvasElementLuminanceSource(canvas);
+              const bitmap = new window.ZXing.BinaryBitmap(new window.ZXing.HybridBinarizer(lum));
+              const reader = new window.ZXing.MultiFormatReader();
+              const r = reader.decode(bitmap);
+              if (r) {
+                detectedText = r.getText();
               }
             }
-          } catch {}
-        }
+
+            // Invert/Mirror pass if user facing camera
+            if (!detectedText && facingMode === 'user' && window.ZXing.HTMLCanvasElementLuminanceSource) {
+              ctx.save();
+              ctx.translate(w, 0);
+              ctx.scale(-1, 1);
+              ctx.drawImage(video, 0, 0, w, h);
+              ctx.restore();
+
+              const lum = new window.ZXing.HTMLCanvasElementLuminanceSource(canvas);
+              const bitmap = new window.ZXing.BinaryBitmap(new window.ZXing.HybridBinarizer(lum));
+              const reader = new window.ZXing.MultiFormatReader();
+              const r = reader.decode(bitmap);
+              if (r) {
+                detectedText = r.getText();
+              }
+            }
+          }
+        } catch {}
       }
 
       if (detectedText) {
@@ -368,7 +416,9 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
     cameraActive,
     error,
     facingMode,
-    hasMultipleCameras,
+    cameras,
+    hasMultipleCameras: cameras.length > 1,
+    activeCameraLabel,
     isSwitchingCamera,
     lastScannedCode,
     justScanned,
