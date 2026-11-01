@@ -99,7 +99,7 @@ export default function RingkasanPribadi({ user }) {
           <p className="text-xs text-slate-500">Selamat datang kembali, {user.nama} ({user.kelas_atau_jabatan || user.peran})</p>
         </div>
         <Link href="/pinjam" className="text-xs text-[#4B3B78] font-bold hover:underline">
-          Lihat Riwayat &rarr;
+          Lihat Riwayat Peminjaman &rarr;
         </Link>
       </div>
 

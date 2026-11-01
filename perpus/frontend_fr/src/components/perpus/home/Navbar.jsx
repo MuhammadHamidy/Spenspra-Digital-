@@ -28,7 +28,7 @@ export default function Navbar({ user }) {
       isActive: (path) => path.startsWith('/bookmark'),
     },
     {
-      name: 'Absensi',
+      name: 'Presensi Kunjungan',
       href: '/absensi',
       isActive: (path) => path.startsWith('/absensi') || path.startsWith('/riwayat-kunjungan'),
     },
