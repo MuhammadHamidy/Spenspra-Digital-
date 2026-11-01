@@ -15,7 +15,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="id">
-      <body className="antialiased bg-[#F6FAFD] text-[#0A1931] min-h-screen font-sans">
+      <body className="antialiased bg-[#F8F9FC] text-[#172033] min-h-screen font-sans">
         <AppRouterCacheProvider>
           <ThemeRegistry>
             <AppLayoutWrapper>{children}</AppLayoutWrapper>
