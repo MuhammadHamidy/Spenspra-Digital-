@@ -38,6 +38,11 @@ export default function Navbar({ user }) {
       isActive: (path) => path.startsWith('/peminjaman') || path.startsWith('/pinjam'),
     },
     {
+      name: 'Tugas Literasi',
+      href: '/tugas-literasi',
+      isActive: (path) => path.startsWith('/tugas-literasi'),
+    },
+    {
       name: 'Koreksi Literasi & Kuis',
       href: '/reading-insights',
       isActive: (path) => path.startsWith('/reading-insights'),

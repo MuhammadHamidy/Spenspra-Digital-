@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { readingApi } from '@/lib/features/library/api/readingApi';
 import { membersApi } from '@/lib/features/library/api/membersApi';
 import { booksApi } from '@/lib/features/library/api/booksApi';
+import { literacyAssignmentApi } from '@/lib/features/library/api/literacyAssignmentApi';
 import AppIcon from '@/components/AppIcon';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -13,10 +14,26 @@ import DialogActions from '@mui/material/DialogActions';
 import CircularProgress from '@mui/material/CircularProgress';
 import Rating from '@mui/material/Rating';
 
+const CLASSES_LIST = [
+  'ALL',
+  'Kelas 7A', 'Kelas 7B', 'Kelas 7C', 'Kelas 7D', 'Kelas 7E', 'Kelas 7F',
+  'Kelas 8A', 'Kelas 8B', 'Kelas 8C', 'Kelas 8D', 'Kelas 8E', 'Kelas 8F',
+  'Kelas 9A', 'Kelas 9B', 'Kelas 9C', 'Kelas 9D', 'Kelas 9E', 'Kelas 9F',
+];
+
+const AVAILABLE_CLASSES = [
+  'Kelas 7A', 'Kelas 7B', 'Kelas 7C', 'Kelas 7D', 'Kelas 7E', 'Kelas 7F',
+  'Kelas 8A', 'Kelas 8B', 'Kelas 8C', 'Kelas 8D', 'Kelas 8E', 'Kelas 8F',
+  'Kelas 9A', 'Kelas 9B', 'Kelas 9C', 'Kelas 9D', 'Kelas 9E', 'Kelas 9F',
+];
+
 export default function ReadingInsightsPage() {
-  const [activeTab, setActiveTab] = useState('resumes'); // 'resumes' | 'quizzes'
+  const [activeTab, setActiveTab] = useState('resumes'); // 'resumes' | 'quizzes' | 'assignments'
   const [resumes, setResumes] = useState([]);
   const [quizzes, setQuizzes] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [assignmentSubmissions, setAssignmentSubmissions] = useState([]);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState('');
   const [insights, setInsights] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -27,6 +44,26 @@ export default function ReadingInsightsPage() {
   // Dropdown options
   const [members, setMembers] = useState([]);
   const [books, setBooks] = useState([]);
+
+  // Modal State for New Assignment (Admin Perpus / Guru)
+  const [openCreateAssignmentModal, setOpenCreateAssignmentModal] = useState(false);
+  const [createAssignmentForm, setCreateAssignmentForm] = useState({
+    title: '',
+    description: '',
+    target_type: 'ALL', // 'ALL' | 'GRADE' | 'SPECIFIC'
+    selected_grade: '7',
+    target_classes: ['Semua Kelas'],
+    due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16),
+  });
+
+  // Modal State for Grading Assignment Submission
+  const [openGradeAssignmentModal, setOpenGradeAssignmentModal] = useState(false);
+  const [selectedAssignmentSub, setSelectedAssignmentSub] = useState(null);
+  const [gradeAssignmentForm, setGradeAssignmentForm] = useState({
+    score: 85,
+    grader_name: 'Ibu Conie, S.Pd. (Wali Kelas)',
+    teacher_notes: 'Rangkuman pemahaman buku baik dan refleksi budi pekerti sangat aplikatif.',
+  });
 
   // Modal State for New Resume
   const [openAddModal, setOpenAddModal] = useState(false);
@@ -289,6 +326,122 @@ export default function ReadingInsightsPage() {
       alert(err.message || 'Gagal menyimpan resume bacaan');
     }
   };
+
+  const loadAssignmentsData = () => {
+    try {
+      const taskList = literacyAssignmentApi.getAssignments();
+      const subList = literacyAssignmentApi.getSubmissions();
+      setAssignments(taskList);
+      setAssignmentSubmissions(subList);
+    } catch (e) {
+      console.warn('Gagal memuat tugas literasi:', e);
+    }
+  };
+
+  // Panggil loadAssignmentsData saat inisialisasi
+  useEffect(() => {
+    loadAssignmentsData();
+  }, []);
+
+  // Handler Pembuatan Tugas Literasi Baru oleh Admin / Guru
+  const handleCreateAssignmentSubmit = (e) => {
+    e.preventDefault();
+    let finalTargetClasses = [];
+    if (createAssignmentForm.target_type === 'ALL') {
+      finalTargetClasses = ['Semua Kelas'];
+    } else if (createAssignmentForm.target_type === 'GRADE') {
+      finalTargetClasses = AVAILABLE_CLASSES.filter((cls) =>
+        cls.includes(`Kelas ${createAssignmentForm.selected_grade}`)
+      );
+    } else {
+      finalTargetClasses = createAssignmentForm.target_classes.length > 0
+        ? createAssignmentForm.target_classes
+        : ['Semua Kelas'];
+    }
+
+    const created = literacyAssignmentApi.createAssignment({
+      title: createAssignmentForm.title,
+      description: createAssignmentForm.description,
+      target_type: createAssignmentForm.target_type,
+      target_classes: finalTargetClasses,
+      due_date: new Date(createAssignmentForm.due_date).toISOString(),
+      created_by: currentUser?.nama
+        ? `${currentUser.nama} (${currentUser.peran || 'Wali Kelas / Petugas'})`
+        : 'Admin Perpustakaan SMPN 1 Prambon',
+    });
+
+    if (created) {
+      loadAssignmentsData();
+      setOpenCreateAssignmentModal(false);
+      setCreateAssignmentForm({
+        title: '',
+        description: '',
+        target_type: 'ALL',
+        selected_grade: '7',
+        target_classes: ['Semua Kelas'],
+        due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16),
+      });
+      alert('Tugas kegiatan literasi berhasil dibuat dan disiarkan ke kelas sasaran!');
+    }
+  };
+
+  const handleDeleteAssignment = (id) => {
+    if (confirm('Apakah Anda yakin ingin menghapus kegiatan literasi ini?')) {
+      literacyAssignmentApi.deleteAssignment(id);
+      loadAssignmentsData();
+    }
+  };
+
+  // Handler Nilai Tugas Literasi Siswa
+  const handleOpenGradeAssignment = (sub) => {
+    setSelectedAssignmentSub(sub);
+    setGradeAssignmentForm({
+      score: sub.score !== null && sub.score !== undefined ? sub.score : 88,
+      grader_name: sub.grader_name || (currentUser?.nama ? `${currentUser.nama} (${currentUser.kelas_atau_jabatan || 'Wali Kelas'})` : 'Ibu Conie, S.Pd. (Wali Kelas)'),
+      teacher_notes: sub.teacher_notes || 'Intisari bacaan sangat baik dan pesan moral dipahami secara mendalam.',
+    });
+    setOpenGradeAssignmentModal(true);
+  };
+
+  const handleSaveGradeAssignment = (e) => {
+    e.preventDefault();
+    if (!selectedAssignmentSub) return;
+
+    literacyAssignmentApi.gradeSubmission(selectedAssignmentSub.id, {
+      score: gradeAssignmentForm.score,
+      grader_name: gradeAssignmentForm.grader_name,
+      teacher_notes: gradeAssignmentForm.teacher_notes,
+    });
+
+    loadAssignmentsData();
+    setOpenGradeAssignmentModal(false);
+    alert('Nilai dan masukan tugas literasi siswa berhasil disimpan!');
+  };
+
+  // Filter Computation
+  const filteredResumes = (resumes || []).filter((r) => {
+    if (selectedClass === 'ALL') return true;
+    const targetNorm = selectedClass.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const memberClass = (r.member_class || r.student_class || r.class_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!memberClass) return true;
+    return memberClass.includes(targetNorm) || targetNorm.includes(memberClass);
+  });
+
+  const filteredQuizzes = (quizzes || []).filter((q) => {
+    if (selectedClass === 'ALL') return true;
+    const targetNorm = selectedClass.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const studentClass = (q.class_name || q.student_class || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!studentClass) return true;
+    return studentClass.includes(targetNorm) || targetNorm.includes(studentClass);
+  });
+
+  const filteredAssignmentSubmissions = (assignmentSubmissions || []).filter((s) => {
+    if (selectedAssignmentId && s.assignment_id !== selectedAssignmentId) return false;
+    if (selectedClass === 'ALL') return true;
+    const targetNorm = selectedClass.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const studentClass = (s.student_class || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    return studentClass.includes(targetNorm) || targetNorm.includes(studentClass);
+  });
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
@@ -658,6 +811,19 @@ export default function ReadingInsightsPage() {
                 {filteredQuizzes.length}
               </span>
             </button>
+            <button
+              onClick={() => setActiveTab('assignments')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                activeTab === 'assignments'
+                  ? 'bg-white text-purple-900 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <span>📚 Tugas Kegiatan Literasi (SSO)</span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] bg-purple-100 text-purple-900">
+                {assignments.length}
+              </span>
+            </button>
           </div>
 
           {/* Filter Per Kelas / Wali Kelas & Search Bar */}
@@ -948,6 +1114,230 @@ export default function ReadingInsightsPage() {
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: TUGAS KEGIATAN LITERASI SISWA (TERSAMBUNG SSO) */}
+        {activeTab === 'assignments' && (
+          <div className="space-y-6">
+            {/* Header Tindakan Tab Tugas Literasi */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-purple-50 via-slate-50 to-indigo-50 border border-purple-100">
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">
+                  Daftar Tugas Kegiatan Literasi Sekolah
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Admin Perpus dan Guru dapat membuat penugasan membaca buku untuk seluruh siswa atau per kelas tertentu.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpenCreateAssignmentModal(true)}
+                className="px-4 py-2.5 bg-[#4B3B78] hover:bg-[#3D2E66] text-white text-xs font-bold rounded-xl shadow-xs hover:shadow-md transition-all flex items-center gap-2 cursor-pointer w-fit"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                <span>+ Buat Tugas Literasi Baru</span>
+              </button>
+            </div>
+
+            {/* List Tugas yang Sedang Aktif */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {assignments.length === 0 ? (
+                <div className="col-span-2 py-10 text-center text-xs text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                  Belum ada kegiatan penugasan literasi yang dibuat. Klik tombol di atas untuk membuat tugas baru!
+                </div>
+              ) : (
+                assignments.map((task) => {
+                  const taskSubs = assignmentSubmissions.filter((s) => s.assignment_id === task.id);
+                  const isFiltered = selectedAssignmentId === task.id;
+
+                  return (
+                    <div
+                      key={task.id}
+                      className={`p-5 rounded-2xl border transition-all ${
+                        isFiltered
+                          ? 'border-purple-500 bg-purple-50/40 shadow-xs'
+                          : 'border-slate-200/80 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-purple-100 text-purple-800">
+                          {task.target_type === 'ALL'
+                            ? 'Semua Siswa'
+                            : task.target_classes?.join(', ')}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-bold text-slate-500">
+                            {taskSubs.length} Siswa Mengumpulkan
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAssignment(task.id)}
+                            className="text-slate-400 hover:text-red-600 p-1 rounded-md transition-colors"
+                            title="Hapus Tugas"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+
+                      <h4 className="text-sm font-bold text-slate-900 leading-snug">
+                        {task.title}
+                      </h4>
+                      <p className="text-xs text-slate-600 mt-1 line-clamp-2 leading-relaxed">
+                        {task.description}
+                      </p>
+
+                      <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500">
+                          Deadline:{' '}
+                          <strong className="text-slate-700">
+                            {new Date(task.due_date).toLocaleDateString('id-ID', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                            })}
+                          </strong>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedAssignmentId(isFiltered ? '' : task.id)
+                          }
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                            isFiltered
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          {isFiltered ? '✓ Memfilter Tugas Ini' : 'Lihat Pengumpulan'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Tabel Pengumpulan Tugas Siswa (Tersambung Profil SSO) */}
+            <div className="mt-8">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-bold text-slate-800">
+                  Hasil Pengumpulan Tugas Siswa (Tersambung SSO)
+                </h4>
+                {selectedAssignmentId && (
+                  <button
+                    onClick={() => setSelectedAssignmentId('')}
+                    className="text-xs text-purple-700 font-bold hover:underline"
+                  >
+                    Reset Filter Tugas
+                  </button>
+                )}
+              </div>
+
+              {filteredAssignmentSubmissions.length === 0 ? (
+                <div className="p-12 text-center text-xs text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">
+                  Belum ada siswa dari {selectedClass === 'ALL' ? 'kelas manapun' : selectedClass} yang mengumpulkan tugas untuk kriteria ini.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-xs">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-[#1A3D63] text-white text-[11px] font-bold uppercase tracking-wider">
+                        <th className="py-3 px-4">SISWA (SSO)</th>
+                        <th className="py-3 px-4 text-center">KELAS</th>
+                        <th className="py-3 px-4">BUKU YANG DIBACA</th>
+                        <th className="py-3 px-4">RANGKUMAN &amp; NILAI MORAL</th>
+                        <th className="py-3 px-4 text-center">STATUS / NILAI</th>
+                        <th className="py-3 px-4 text-center">AKSI</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {filteredAssignmentSubmissions.map((sub) => {
+                        const isGraded = sub.status === 'DINILAI' && sub.score !== null;
+                        const relatedTask = assignments.find((a) => a.id === sub.assignment_id);
+
+                        return (
+                          <tr key={sub.id} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="py-3 px-4">
+                              <div className="font-bold text-slate-900">{sub.student_name}</div>
+                              <div className="text-[10px] text-slate-400 font-mono">
+                                NISN: {sub.student_nisn}
+                              </div>
+                              {relatedTask && (
+                                <div className="text-[10px] text-purple-700 font-semibold mt-0.5">
+                                  📌 {relatedTask.title}
+                                </div>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-4 text-center">
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                                {sub.student_class}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <div className="font-bold text-slate-800">{sub.book_title}</div>
+                              <div className="text-slate-500 italic text-[11px]">{sub.book_author}</div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                Dibaca: {sub.pages_read} halaman
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-4 max-w-xs">
+                              <p className="text-slate-700 line-clamp-2 leading-relaxed mb-1">
+                                <strong>Intisari:</strong> {sub.summary}
+                              </p>
+                              {sub.moral_value && (
+                                <p className="text-emerald-800 text-[11px] line-clamp-1 italic">
+                                  <strong>Refleksi:</strong> &quot;{sub.moral_value}&quot;
+                                </p>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-4 text-center whitespace-nowrap">
+                              {isGraded ? (
+                                <div className="inline-flex flex-col items-center">
+                                  <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                    {sub.score} / 100
+                                  </span>
+                                  <span className="text-[9px] text-slate-400 mt-0.5">
+                                    Oleh: {sub.grader_name?.split(' ')?.[0] || 'Guru'}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                  Menunggu Koreksi
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-4 text-center whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenGradeAssignment(sub)}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                  isGraded
+                                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                                    : 'bg-[#1A3D63] hover:bg-[#0F172A] text-white shadow-xs'
+                                }`}
+                              >
+                                {isGraded ? 'Edit Nilai' : 'Beri Nilai'}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1261,6 +1651,344 @@ export default function ReadingInsightsPage() {
               className="px-4 py-2 bg-[#1A3D63] hover:bg-[#0A1931] text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer"
             >
               Simpan Resume
+            </button>
+          </DialogActions>
+        </form>
+      </Dialog>
+
+      {/* =========================================================================
+          MODAL: FORM BUAT TUGAS KEGIATAN LITERASI BARU (ADMIN / GURU)
+          ========================================================================= */}
+      <Dialog
+        open={openCreateAssignmentModal}
+        onClose={() => setOpenCreateAssignmentModal(false)}
+        maxWidth="md"
+        fullWidth
+        slotProps={{ paper: { sx: { borderRadius: '24px', p: 1 } } }}
+      >
+        <form onSubmit={handleCreateAssignmentSubmit}>
+          <DialogTitle sx={{ fontWeight: 900, color: '#0F172A', pb: 1 }}>
+            <div className="text-base font-black text-slate-900">
+              Buat Tugas Kegiatan Literasi Siswa
+            </div>
+            <p className="text-xs text-slate-500 font-normal mt-0.5">
+              Tentukan judul kegiatan membaca, sasaran kelas yang ditugaskan, dan batas waktu pengumpulan.
+            </p>
+          </DialogTitle>
+          <DialogContent dividers sx={{ py: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Judul Kegiatan Literasi *
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Misal: Literasi Bersama: Mengulas Tokoh Inspiratif & Sejarah Bangsa"
+                value={createAssignmentForm.title}
+                onChange={(e) =>
+                  setCreateAssignmentForm({ ...createAssignmentForm, title: e.target.value })
+                }
+                className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-600"
+              />
+            </div>
+
+            {/* Pilihan Target Sasaran Kelas */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Target Sasaran Siswa (Kelas) *
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs">
+                <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800">
+                  <input
+                    type="radio"
+                    name="target_type"
+                    value="ALL"
+                    checked={createAssignmentForm.target_type === 'ALL'}
+                    onChange={() =>
+                      setCreateAssignmentForm({
+                        ...createAssignmentForm,
+                        target_type: 'ALL',
+                        target_classes: ['Semua Kelas'],
+                      })
+                    }
+                  />
+                  <span>Semua Siswa (Seluruh Kelas)</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800">
+                  <input
+                    type="radio"
+                    name="target_type"
+                    value="GRADE"
+                    checked={createAssignmentForm.target_type === 'GRADE'}
+                    onChange={() =>
+                      setCreateAssignmentForm({
+                        ...createAssignmentForm,
+                        target_type: 'GRADE',
+                      })
+                    }
+                  />
+                  <span>Per Tingkat (7 / 8 / 9)</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800">
+                  <input
+                    type="radio"
+                    name="target_type"
+                    value="SPECIFIC"
+                    checked={createAssignmentForm.target_type === 'SPECIFIC'}
+                    onChange={() =>
+                      setCreateAssignmentForm({
+                        ...createAssignmentForm,
+                        target_type: 'SPECIFIC',
+                        target_classes: ['Kelas 7A'],
+                      })
+                    }
+                  />
+                  <span>Pilih Kelas Tertentu</span>
+                </label>
+              </div>
+
+              {/* Sub-Pilihan: Jika Tingkat Tertentu */}
+              {createAssignmentForm.target_type === 'GRADE' && (
+                <div className="mt-2.5 p-3 bg-purple-50 rounded-xl border border-purple-100 flex items-center gap-3 text-xs">
+                  <span className="font-bold text-purple-900">Pilih Tingkat Angkatan:</span>
+                  {['7', '8', '9'].map((grade) => (
+                    <label key={grade} className="flex items-center gap-1.5 cursor-pointer font-semibold text-purple-900">
+                      <input
+                        type="radio"
+                        name="selected_grade"
+                        value={grade}
+                        checked={createAssignmentForm.selected_grade === grade}
+                        onChange={(e) =>
+                          setCreateAssignmentForm({
+                            ...createAssignmentForm,
+                            selected_grade: e.target.value,
+                          })
+                        }
+                      />
+                      <span>Kelas {grade} (7A - 7F)</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {/* Sub-Pilihan: Jika Kelas Spesifik */}
+              {createAssignmentForm.target_type === 'SPECIFIC' && (
+                <div className="mt-2.5 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[11px] font-bold text-slate-600 block mb-2">
+                    Centang kelas yang ditugaskan:
+                  </span>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs">
+                    {AVAILABLE_CLASSES.map((cls) => {
+                      const isChecked = createAssignmentForm.target_classes.includes(cls);
+                      return (
+                        <label
+                          key={cls}
+                          className={`p-2 rounded-lg border flex items-center gap-1.5 cursor-pointer transition-all ${
+                            isChecked
+                              ? 'bg-purple-100 border-purple-400 font-bold text-purple-900'
+                              : 'bg-white border-slate-200 text-slate-700'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setCreateAssignmentForm({
+                                  ...createAssignmentForm,
+                                  target_classes: [...createAssignmentForm.target_classes, cls],
+                                });
+                              } else {
+                                setCreateAssignmentForm({
+                                  ...createAssignmentForm,
+                                  target_classes: createAssignmentForm.target_classes.filter(
+                                    (c) => c !== cls
+                                  ),
+                                });
+                              }
+                            }}
+                          />
+                          <span>{cls.replace('Kelas ', '')}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Batas Waktu Pengumpulan */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Batas Waktu Pengumpulan (Deadline) *
+              </label>
+              <input
+                type="datetime-local"
+                required
+                value={createAssignmentForm.due_date}
+                onChange={(e) =>
+                  setCreateAssignmentForm({ ...createAssignmentForm, due_date: e.target.value })
+                }
+                className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-600"
+              />
+            </div>
+
+            {/* Instruksi & Petunjuk Tugas */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Instruksi &amp; Petunjuk Bacaan Siswa *
+              </label>
+              <textarea
+                rows={3}
+                required
+                placeholder="Tuliskan panduan kegiatan, misalnya jenis buku yang perlu dibaca, jumlah halaman minimal, dan poin refleksi yang diharapkan..."
+                value={createAssignmentForm.description}
+                onChange={(e) =>
+                  setCreateAssignmentForm({ ...createAssignmentForm, description: e.target.value })
+                }
+                className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-600"
+              />
+            </div>
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <button
+              type="button"
+              onClick={() => setOpenCreateAssignmentModal(false)}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 bg-[#4B3B78] hover:bg-[#3D2E66] text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer"
+            >
+              Simpan &amp; Siarkan Tugas Literasi
+            </button>
+          </DialogActions>
+        </form>
+      </Dialog>
+
+      {/* =========================================================================
+          MODAL: FORM PENILAIAN TUGAS LITERASI SISWA (GURU / WALAS / PUSTAKAWAN)
+          ========================================================================= */}
+      <Dialog
+        open={openGradeAssignmentModal}
+        onClose={() => setOpenGradeAssignmentModal(false)}
+        maxWidth="sm"
+        fullWidth
+        slotProps={{ paper: { sx: { borderRadius: '24px', p: 1 } } }}
+      >
+        <form onSubmit={handleSaveGradeAssignment}>
+          <DialogTitle sx={{ fontWeight: 900, color: '#0F172A', pb: 1 }}>
+            <div className="text-base font-black text-slate-900">
+              Penilaian Tugas Literasi Siswa
+            </div>
+            <p className="text-xs text-slate-500 font-normal mt-0.5">
+              Beri nilai hasil bacaan siswa dan tuliskan catatan evaluasi untuk siswa.
+            </p>
+          </DialogTitle>
+          <DialogContent dividers sx={{ py: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {/* Info Siswa SSO */}
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-900">{selectedAssignmentSub?.student_name}</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
+                  {selectedAssignmentSub?.student_class}
+                </span>
+              </div>
+              <div className="text-slate-500 font-mono text-[10px]">
+                NISN: {selectedAssignmentSub?.student_nisn}
+              </div>
+              <div className="text-slate-600 pt-1">
+                <strong>Buku:</strong> {selectedAssignmentSub?.book_title} ({selectedAssignmentSub?.book_author}) -{' '}
+                <span className="text-purple-700 font-semibold">{selectedAssignmentSub?.pages_read} Halaman</span>
+              </div>
+            </div>
+
+            {/* Jawaban Ringkasan & Refleksi Siswa */}
+            <div className="p-3 bg-purple-50/50 rounded-xl border border-purple-100 text-xs space-y-2">
+              <div>
+                <span className="font-bold text-purple-950 block">Intisari Bacaan Siswa:</span>
+                <p className="text-slate-700 mt-0.5 leading-relaxed bg-white p-2.5 rounded-lg border border-purple-100/60">
+                  {selectedAssignmentSub?.summary}
+                </p>
+              </div>
+              {selectedAssignmentSub?.moral_value && (
+                <div>
+                  <span className="font-bold text-purple-950 block">Refleksi Nilai Keteladanan:</span>
+                  <p className="text-emerald-900 italic mt-0.5 leading-relaxed bg-white p-2.5 rounded-lg border border-emerald-100/60">
+                    &quot;{selectedAssignmentSub?.moral_value}&quot;
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Input Nilai Skor */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Skor Nilai Literasi (0 - 100) *
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                required
+                value={gradeAssignmentForm.score}
+                onChange={(e) =>
+                  setGradeAssignmentForm({ ...gradeAssignmentForm, score: e.target.value })
+                }
+                className="w-full px-3.5 py-2.5 text-sm font-bold text-slate-800 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1A3D63]"
+              />
+            </div>
+
+            {/* Input Catatan Evaluasi Guru */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Catatan Masukan / Apresiasi Guru *
+              </label>
+              <textarea
+                rows={3}
+                required
+                value={gradeAssignmentForm.teacher_notes}
+                onChange={(e) =>
+                  setGradeAssignmentForm({ ...gradeAssignmentForm, teacher_notes: e.target.value })
+                }
+                placeholder="Berikan masukan konstruktif untuk memotivasi minat baca siswa..."
+                className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1A3D63]"
+              />
+            </div>
+
+            {/* Nama Guru / Petugas Penilai */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Nama Guru / Petugas Penilai *
+              </label>
+              <input
+                type="text"
+                required
+                value={gradeAssignmentForm.grader_name}
+                onChange={(e) =>
+                  setGradeAssignmentForm({ ...gradeAssignmentForm, grader_name: e.target.value })
+                }
+                className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1A3D63]"
+              />
+            </div>
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <button
+              type="button"
+              onClick={() => setOpenGradeAssignmentModal(false)}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 bg-[#1A3D63] hover:bg-[#0F172A] text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer"
+            >
+              Simpan Nilai Tugas
             </button>
           </DialogActions>
         </form>
