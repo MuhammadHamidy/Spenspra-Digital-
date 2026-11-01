@@ -36,7 +36,16 @@ type BookItem struct {
 	ItemCondition string    `json:"item_condition" gorm:"column:item_condition"` // GOOD, FAIR, DAMAGED
 	BookTitle     string    `json:"book_title,omitempty" gorm:"->"`
 	BookAuthor    string    `json:"book_author,omitempty" gorm:"->"`
+	Title         string    `json:"title,omitempty" gorm:"->"`
+	Author        string    `json:"author,omitempty" gorm:"->"`
+	ISBN          string    `json:"isbn,omitempty" gorm:"->"`
+	Publisher     string    `json:"publisher,omitempty" gorm:"->"`
+	PublishYear   int       `json:"publish_year,omitempty" gorm:"->"`
+	Category      string    `json:"category,omitempty" gorm:"->"`
+	CoverURL      string    `json:"cover_url,omitempty" gorm:"->"`
+	Description   string    `json:"description,omitempty" gorm:"->"`
 	CallNumber    string    `json:"call_number,omitempty" gorm:"->"`
+	Book          *Book     `json:"book,omitempty" gorm:"foreignKey:BookID"`
 	CreatedAt     time.Time `json:"created_at" gorm:"column:created_at"`
 	UpdatedAt     time.Time `json:"updated_at" gorm:"column:updated_at"`
 }

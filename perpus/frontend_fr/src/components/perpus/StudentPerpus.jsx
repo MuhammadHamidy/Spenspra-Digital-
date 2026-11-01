@@ -558,14 +558,32 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
 
     try {
       const res = await booksApi.getItemByBarcode(barcode);
-      const item = res?.data || res;
+      let item = res?.data || res;
 
       if (!item || !item.barcode) {
         throw new Error('Data buku tidak ditemukan di sistem perpustakaan.');
       }
 
       playScannerBeep();
-      const book = item.book || {};
+      let book = item.book || {};
+
+      // Jika data judul, pengarang, atau isbn masih belum lengkap dari item eksemplar, fetch detail buku induk
+      const bookId = item.book_id || item.bookId || book.id;
+      if (
+        bookId &&
+        ((!book.title && !item.book_title && !item.title) ||
+          (!book.author && !item.book_author && !item.author) ||
+          (!book.isbn && !item.isbn))
+      ) {
+        try {
+          const fullBook = await booksApi.getBook(bookId);
+          if (fullBook) {
+            book = { ...book, ...fullBook };
+          }
+        } catch (e) {
+          console.warn('Could not fetch book detail by ID:', e);
+        }
+      }
 
       const dateNow = new Date();
       const months = [
@@ -576,17 +594,37 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
       const dueDateObj = new Date(dateNow.getTime() + 7 * 864e5);
       const dueDateFormatted = `${dueDateObj.getDate()} ${months[dueDateObj.getMonth()]} ${dueDateObj.getFullYear()}`;
 
+      const resolvedTitle =
+        book.title || item.book_title || item.bookTitle || item.title || 'Buku Perpustakaan';
+      const resolvedAuthor =
+        book.author || item.book_author || item.bookAuthor || item.author || 'Penulis Tidak Tercatat';
+      const resolvedCategory =
+        book.category || item.category || item.book_category || 'Umum';
+      const resolvedIsbn =
+        book.isbn || item.isbn || item.book_isbn || '-';
+      const resolvedPublisher =
+        book.publisher || item.publisher || item.book_publisher || '-';
+      const resolvedPublishYear =
+        book.publish_year || book.publishYear || item.publish_year || item.publishYear || '-';
+      const resolvedCallNumber =
+        item.call_number || item.callNumber || book.call_number || book.callNumber || '-';
+      const resolvedCoverUrl =
+        book.cover_url || book.coverUrl || item.cover_url || item.coverUrl || '';
+      const resolvedDescription =
+        book.description || item.description || 'Koleksi resmi Perpustakaan SMP Negeri 1 Prambon.';
+
       const pendingData = {
         id: item.id,
         barcode: item.barcode,
-        title: book.title || item.title || 'Buku Perpustakaan',
-        author: book.author || item.author || 'Penulis Tidak Tercatat',
-        category: book.category || item.category || 'Umum',
-        isbn: book.isbn || item.isbn || '-',
-        publisher: book.publisher || '-',
-        publishYear: book.publish_year || '-',
-        callNumber: item.call_number || book.call_number || '-',
-        description: book.description || 'Koleksi resmi Perpustakaan Digital Cerdas.',
+        title: resolvedTitle,
+        author: resolvedAuthor,
+        category: resolvedCategory,
+        isbn: resolvedIsbn,
+        publisher: resolvedPublisher,
+        publishYear: resolvedPublishYear,
+        callNumber: resolvedCallNumber,
+        coverUrl: resolvedCoverUrl,
+        description: resolvedDescription,
         status: item.status || 'AVAILABLE',
         borrowDate: borrowDateFormatted,
         dueDate: dueDateFormatted,

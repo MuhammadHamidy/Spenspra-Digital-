@@ -117,9 +117,18 @@ func (r *bookRepository) FindItemByBarcode(ctx context.Context, barcode string) 
 	}
 
 	var book domain.Book
-	if err := r.db.WithContext(ctx).Select("title, author, call_number").Where("id = ?", item.BookID).First(&book).Error; err == nil {
+	if err := r.db.WithContext(ctx).Where("id = ?", item.BookID).First(&book).Error; err == nil {
+		item.Book = &book
 		item.BookTitle = book.Title
 		item.BookAuthor = book.Author
+		item.Title = book.Title
+		item.Author = book.Author
+		item.ISBN = book.ISBN
+		item.Publisher = book.Publisher
+		item.PublishYear = book.PublishYear
+		item.Category = book.Category
+		item.CoverURL = book.CoverURL
+		item.Description = book.Description
 		item.CallNumber = book.CallNumber
 	}
 
@@ -132,7 +141,27 @@ func (r *bookRepository) FindItemByID(ctx context.Context, id string) (*domain.B
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
-	return &item, err
+	if err != nil {
+		return nil, err
+	}
+
+	var book domain.Book
+	if err := r.db.WithContext(ctx).Where("id = ?", item.BookID).First(&book).Error; err == nil {
+		item.Book = &book
+		item.BookTitle = book.Title
+		item.BookAuthor = book.Author
+		item.Title = book.Title
+		item.Author = book.Author
+		item.ISBN = book.ISBN
+		item.Publisher = book.Publisher
+		item.PublishYear = book.PublishYear
+		item.Category = book.Category
+		item.CoverURL = book.CoverURL
+		item.Description = book.Description
+		item.CallNumber = book.CallNumber
+	}
+
+	return &item, nil
 }
 
 func (r *bookRepository) StoreItem(ctx context.Context, item *domain.BookItem) error {
@@ -158,9 +187,18 @@ func (r *bookRepository) FindItemsByBarcodes(ctx context.Context, barcodes []str
 	}
 	for _, it := range items {
 		var book domain.Book
-		if err := r.db.WithContext(ctx).Select("title, author, call_number").Where("id = ?", it.BookID).First(&book).Error; err == nil {
+		if err := r.db.WithContext(ctx).Where("id = ?", it.BookID).First(&book).Error; err == nil {
+			it.Book = &book
 			it.BookTitle = book.Title
 			it.BookAuthor = book.Author
+			it.Title = book.Title
+			it.Author = book.Author
+			it.ISBN = book.ISBN
+			it.Publisher = book.Publisher
+			it.PublishYear = book.PublishYear
+			it.Category = book.Category
+			it.CoverURL = book.CoverURL
+			it.Description = book.Description
 			it.CallNumber = book.CallNumber
 		}
 	}
