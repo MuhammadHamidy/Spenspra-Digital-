@@ -26,6 +26,11 @@ export default function RootPerpusPage() {
       setUser(resolvedUser);
     }
 
+    const token = tokenStorage.getToken();
+    if (!token) {
+      return resolvedUser;
+    }
+
     try {
       const session = await berandaApi.getSession();
       if (session) {
@@ -43,6 +48,11 @@ export default function RootPerpusPage() {
     let isMounted = true;
 
     async function init() {
+      const token = tokenStorage.getToken();
+      if (!token) {
+        return;
+      }
+
       const local = tokenStorage.getUser();
       if (local && isMounted) {
         setUser({

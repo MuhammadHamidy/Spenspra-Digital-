@@ -140,12 +140,12 @@ export const tokenStorage = {
 
     let token = null;
     try {
-      token = sessionStorage.getItem(TOKEN_KEY);
+      token = sessionStorage.getItem(TOKEN_KEY) || sessionStorage.getItem('access_token');
     } catch (e) {}
 
     if (!token) {
       try {
-        token = localStorage.getItem(TOKEN_KEY);
+        token = localStorage.getItem(TOKEN_KEY) || localStorage.getItem('access_token');
         if (token) {
           sessionStorage.setItem(TOKEN_KEY, token);
         }
@@ -153,7 +153,7 @@ export const tokenStorage = {
     }
 
     if (!token) {
-      token = getCookie(TOKEN_KEY);
+      token = getCookie(TOKEN_KEY) || getCookie('access_token');
       if (token) {
         try {
           sessionStorage.setItem(TOKEN_KEY, token);

@@ -2,10 +2,13 @@ package middleware
 
 import (
 	"crypto/rsa"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/facerec/facerec-be/libraries/idp"
 	"github.com/gofiber/fiber/v2"
@@ -26,6 +29,35 @@ type AuthorizationMiddleware struct {
 	cache     redis.UniversalClient
 	rsaPublic *rsa.PublicKey
 	jwtSecret string
+}
+
+func (a *AuthorizationMiddleware) fetchPublicKeyFromSSO() *rsa.PublicKey {
+	ssoUrl := os.Getenv("SSO_API_URL")
+	if ssoUrl == "" {
+		ssoUrl = "http://sso-api:8080"
+	}
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(strings.TrimRight(ssoUrl, "/") + "/api/auth/public-key")
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Data struct {
+			PublicKey string `json:"public_key"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil || result.Data.PublicKey == "" {
+		return nil
+	}
+
+	pub, err := jwt.ParseRSAPublicKeyFromPEM([]byte(result.Data.PublicKey))
+	if err != nil {
+		return nil
+	}
+	a.rsaPublic = pub
+	return pub
 }
 
 func NewAuthorizationMiddleware(idp idp.IDPProvider, db *pgxpool.Pool, cache redis.UniversalClient) *AuthorizationMiddleware {
@@ -89,6 +121,9 @@ func (a *AuthorizationMiddleware) Authenticate(scopes ...string) fiber.Handler {
 				if a.rsaPublic != nil {
 					return a.rsaPublic, nil
 				}
+				if pub := a.fetchPublicKeyFromSSO(); pub != nil {
+					return pub, nil
+				}
 				return nil, errors.New("kunci publik RSA belum terkonfigurasi")
 			}
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); ok {
@@ -96,6 +131,21 @@ func (a *AuthorizationMiddleware) Authenticate(scopes ...string) fiber.Handler {
 			}
 			return nil, fmt.Errorf("algoritma signing tidak didukung: %v", t.Header["alg"])
 		})
+
+		// Retry dengan public key baru dari SSO jika verifikasi awal gagal
+		if err != nil {
+			if pub := a.fetchPublicKeyFromSSO(); pub != nil {
+				parsedToken, err = jwt.Parse(token, func(t *jwt.Token) (interface{}, error) {
+					if _, ok := t.Method.(*jwt.SigningMethodRSA); ok {
+						return pub, nil
+					}
+					if _, ok := t.Method.(*jwt.SigningMethodHMAC); ok {
+						return []byte(a.jwtSecret), nil
+					}
+					return nil, fmt.Errorf("algoritma signing tidak didukung: %v", t.Header["alg"])
+				})
+			}
+		}
 
 		if err == nil && parsedToken.Valid {
 			if claims, ok := parsedToken.Claims.(jwt.MapClaims); ok {

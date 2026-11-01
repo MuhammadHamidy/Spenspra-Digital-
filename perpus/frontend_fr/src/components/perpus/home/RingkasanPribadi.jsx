@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { berandaApi } from '@/lib/features/beranda/berandaApi';
+import { tokenStorage } from '@/lib/common/tokenStorage';
 import { redirectToSsoLogin } from '@/lib/features/beranda/ssoHelper';
 
 export default function RingkasanPribadi({ user }) {
@@ -12,6 +13,9 @@ export default function RingkasanPribadi({ user }) {
 
   useEffect(() => {
     if (!user) return;
+    const token = tokenStorage.getToken();
+    if (!token) return;
+
     let isMounted = true;
 
     async function loadData() {
