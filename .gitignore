@@ -27,9 +27,8 @@ out/
 build/
 dist/
 *.exe
-scripts/.gocache/
-.cache/
-**/rapor/.cache/
+**/.gocache/
+**/.cache/
 
 # Logs & temp files
 *.log
