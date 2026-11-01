@@ -5,6 +5,7 @@ import { readingApi } from '@/lib/features/library/api/readingApi';
 import { membersApi } from '@/lib/features/library/api/membersApi';
 import { booksApi } from '@/lib/features/library/api/booksApi';
 import { literacyAssignmentApi } from '@/lib/features/library/api/literacyAssignmentApi';
+import Navbar from '@/components/perpus/home/Navbar';
 import AppIcon from '@/components/AppIcon';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -445,8 +446,10 @@ export default function ReadingInsightsPage() {
 
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      {/* Header */}
+    <div className="min-h-screen bg-[#F8F9FC] text-slate-800 flex flex-col font-sans">
+      <Navbar user={currentUser} />
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-[#1A3D63] uppercase tracking-wider mb-1">
@@ -1806,6 +1809,7 @@ export default function ReadingInsightsPage() {
           </DialogActions>
         </form>
       </Dialog>
+      </main>
     </div>
   );
 }

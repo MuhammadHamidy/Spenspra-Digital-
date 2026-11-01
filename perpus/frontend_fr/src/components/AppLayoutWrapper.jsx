@@ -28,6 +28,8 @@ export default function AppLayoutWrapper({ children }) {
     pathname === '/pembelajaran' ||
     pathname.startsWith('/sso') ||
     pathname.startsWith('/docs') ||
+    pathname.startsWith('/tugas-literasi') ||
+    pathname.startsWith('/reading-insights') ||
     pathname === '/riwayat-kunjungan';
 
   const [isAuthChecked, setIsAuthChecked] = useState(false);

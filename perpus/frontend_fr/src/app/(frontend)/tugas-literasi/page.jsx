@@ -156,12 +156,19 @@ export default function TugasLiterasiPage() {
 
               {user && (
                 <div className="mt-5 flex flex-wrap items-center gap-3 text-xs bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl w-fit border border-white/10">
-                  <span className="font-semibold text-purple-200">Siswa SSO Terverifikasi:</span>
+                  <span className="font-semibold text-purple-200">
+                    {user.peran === 'GURU' || user.kelas_atau_jabatan === 'Pendidik'
+                      ? 'Pendidik / Guru Terverifikasi:'
+                      : 'Siswa SSO Terverifikasi:'}
+                  </span>
                   <span className="font-bold text-white">{user.nama}</span>
                   <span className="bg-purple-500/40 text-purple-100 px-2.5 py-0.5 rounded-full font-bold">
                     {user.kelas_atau_jabatan}
                   </span>
-                  <span className="text-slate-300">NISN: {user.nisn_atau_nip}</span>
+                  <span className="text-slate-300">
+                    {user.peran === 'GURU' || user.kelas_atau_jabatan === 'Pendidik' ? 'NIP/NUPTK' : 'NISN'}:{' '}
+                    {user.nisn_atau_nip}
+                  </span>
                 </div>
               )}
             </div>
