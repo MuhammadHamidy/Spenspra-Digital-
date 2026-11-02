@@ -368,17 +368,37 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
     if (cleanCode.startsWith('{') && cleanCode.endsWith('}')) {
       try {
         const parsed = JSON.parse(cleanCode);
-        cleanCode = parsed.barcode_token || parsed.token || parsed.nisn || parsed.nip || parsed.code || parsed.id || cleanCode;
+        cleanCode =
+          parsed.barcode_token ||
+          parsed.qr_code_token ||
+          parsed.token ||
+          parsed.value ||
+          parsed.code ||
+          parsed.nisn ||
+          parsed.nip ||
+          parsed.id ||
+          cleanCode;
       } catch {}
     }
     if (cleanCode.includes('://')) {
       try {
         const url = new URL(cleanCode);
-        const p = url.searchParams.get('token') || url.searchParams.get('barcode_token') || url.searchParams.get('code') || url.searchParams.get('nisn');
+        const p =
+          url.searchParams.get('barcode_token') ||
+          url.searchParams.get('qr_code_token') ||
+          url.searchParams.get('token') ||
+          url.searchParams.get('value') ||
+          url.searchParams.get('code') ||
+          url.searchParams.get('nisn') ||
+          url.searchParams.get('nip');
         if (p) cleanCode = p;
       } catch {}
     }
-    cleanCode = String(cleanCode).trim();
+    try {
+      cleanCode = decodeURIComponent(String(cleanCode).trim());
+    } catch {
+      cleanCode = String(cleanCode).trim();
+    }
     if (!cleanCode) return;
 
     const now = Date.now();
