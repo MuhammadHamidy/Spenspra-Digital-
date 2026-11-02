@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/features/auth/presentation/useAuth';
 import { getRole } from '@/lib/access/portalAccess';
 import Pagination from '@/components/Pagination';
 import AppIcon from '@/components/AppIcon';
+import { QRCodeSVG } from '@/lib/common/qrCodeGenerator';
 
 const TYPE_CONFIG = {
   SISWA: {
@@ -50,6 +51,13 @@ export default function BarcodeMultifungsiPage() {
   const [search, setSearch] = useState('');
   const [selectedCardForModal, setSelectedCardForModal] = useState(null);
 
+  // Print & Export Configuration State
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printScope, setPrintScope] = useState('ALL_STUDENTS'); // 'ALL_STUDENTS' | 'BY_CLASS' | 'FILTERED' | 'CURRENT_PAGE'
+  const [selectedPrintClass, setSelectedPrintClass] = useState('ALL');
+  const [separatePagePerClass, setSeparatePagePerClass] = useState(true);
+  const [isPreparingPrint, setIsPreparingPrint] = useState(false);
+
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
@@ -89,8 +97,42 @@ export default function BarcodeMultifungsiPage() {
     people.forEach((p) => {
       if (p.class_name && p.class_name.trim()) set.add(p.class_name.trim());
     });
-    return ['ALL', ...Array.from(set).sort()];
+    return ['ALL', ...Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))];
   }, [people]);
+
+  // Daftar rombel khusus siswa
+  const studentClasses = useMemo(() => {
+    const set = new Set();
+    people.forEach((p) => {
+      if (p.person_type === 'SISWA' && p.class_name && p.class_name.trim()) {
+        set.add(p.class_name.trim());
+      }
+    });
+    return Array.from(set).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+    );
+  }, [people]);
+
+  // Seluruh siswa terurut rapi: Rombel Kelas ASC lalu Nama Siswa ASC
+  const sortedStudents = useMemo(() => {
+    const list = people.filter((p) => p.person_type === 'SISWA');
+    return [...list].sort((a, b) => {
+      const classA = a.class_name || '';
+      const classB = b.class_name || '';
+      const classComp = classA.localeCompare(classB, undefined, { numeric: true, sensitivity: 'base' });
+      if (classComp !== 0) return classComp;
+      return (a.full_name || '').localeCompare(b.full_name || '', 'id', { sensitivity: 'base' });
+    });
+  }, [people]);
+
+  // Sinkronisasi kelas pilihan cetak
+  useEffect(() => {
+    if (classFilter !== 'ALL' && studentClasses.includes(classFilter)) {
+      setSelectedPrintClass(classFilter);
+    } else if (studentClasses.length > 0 && (!selectedPrintClass || selectedPrintClass === 'ALL')) {
+      setSelectedPrintClass(studentClasses[0]);
+    }
+  }, [classFilter, studentClasses, selectedPrintClass]);
 
   const { user } = useAuth();
   const role = getRole(user);
@@ -133,11 +175,108 @@ export default function BarcodeMultifungsiPage() {
     setCurrentPage(1);
   }, [roleFilter, classFilter, search]);
 
-  // Data terpaginasi untuk tampilan halaman aktif
+  // Data terpaginasi untuk tampilan halaman aktif di layar
   const paginatedPeople = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredPeople.slice(start, start + pageSize);
   }, [filteredPeople, currentPage, pageSize]);
+
+  // Helper pemotong lembar A4 (3x4 = 12 kartu per lembar)
+  const chunkIntoSheets = (items, chunkSize = 12) => {
+    const sheets = [];
+    for (let i = 0; i < items.length; i += chunkSize) {
+      sheets.push(items.slice(i, i + chunkSize));
+    }
+    return sheets;
+  };
+
+  // Kalkulasi lembar cetak aktif untuk PDF / Printer (Bebas Terpotong)
+  const activePrintSheets = useMemo(() => {
+    if (isSiswa) {
+      return chunkIntoSheets(filteredPeople.length > 0 ? [filteredPeople[0]] : []);
+    }
+
+    if (printScope === 'ALL_STUDENTS') {
+      if (separatePagePerClass) {
+        // Kelompokkan per rombel kelas, setiap kelas mulai halaman baru
+        const sheets = [];
+        const classMap = new Map();
+        sortedStudents.forEach((student) => {
+          const cls = student.class_name?.trim() || 'Lainnya';
+          if (!classMap.has(cls)) classMap.set(cls, []);
+          classMap.get(cls).push(student);
+        });
+
+        classMap.forEach((studentsInClass) => {
+          const classSheets = chunkIntoSheets(studentsInClass, 12);
+          sheets.push(...classSheets);
+        });
+        return sheets.length > 0 ? sheets : [[]];
+      } else {
+        // Mode hemat kertas: bersambung 12 per halaman
+        const sheets = chunkIntoSheets(sortedStudents, 12);
+        return sheets.length > 0 ? sheets : [[]];
+      }
+    }
+
+    if (printScope === 'BY_CLASS') {
+      const target = selectedPrintClass || studentClasses[0] || '';
+      const classStudents = sortedStudents.filter(
+        (s) => (s.class_name || '').trim() === (target || '').trim()
+      );
+      const sheets = chunkIntoSheets(classStudents, 12);
+      return sheets.length > 0 ? sheets : [[]];
+    }
+
+    if (printScope === 'FILTERED') {
+      const sheets = chunkIntoSheets(filteredPeople, 12);
+      return sheets.length > 0 ? sheets : [[]];
+    }
+
+    if (printScope === 'CURRENT_PAGE') {
+      const sheets = chunkIntoSheets(paginatedPeople, 12);
+      return sheets.length > 0 ? sheets : [[]];
+    }
+
+    return chunkIntoSheets(paginatedPeople, 12);
+  }, [
+    isSiswa,
+    filteredPeople,
+    printScope,
+    separatePagePerClass,
+    sortedStudents,
+    selectedPrintClass,
+    studentClasses,
+    paginatedPeople,
+  ]);
+
+  // Ringkasan preview cetak
+  const printSummary = useMemo(() => {
+    let count = 0;
+    if (printScope === 'ALL_STUDENTS') {
+      count = sortedStudents.length;
+    } else if (printScope === 'BY_CLASS') {
+      count = sortedStudents.filter(
+        (s) => (s.class_name || '').trim() === (selectedPrintClass || studentClasses[0] || '').trim()
+      ).length;
+    } else if (printScope === 'FILTERED') {
+      count = filteredPeople.length;
+    } else {
+      count = paginatedPeople.length;
+    }
+    const totalSheets = activePrintSheets.length;
+    return { count, totalSheets };
+  }, [printScope, sortedStudents, selectedPrintClass, studentClasses, filteredPeople, paginatedPeople, activePrintSheets]);
+
+  // Eksekusi Cetak / Simpan PDF
+  const handleExecutePrint = () => {
+    setIsPreparingPrint(true);
+    setIsPrintModalOpen(false);
+    setTimeout(() => {
+      setIsPreparingPrint(false);
+      window.print();
+    }, 150);
+  };
 
   // Handle Verify / Resolve Barcode Real-time via API
   const handleResolveBarcode = async (e) => {
@@ -158,10 +297,6 @@ export default function BarcodeMultifungsiPage() {
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   // Statistik
   const stats = useMemo(() => {
     const total = people.length;
@@ -173,86 +308,101 @@ export default function BarcodeMultifungsiPage() {
   }, [people]);
 
   return (
-    <div className="students-print-page max-w-7xl mx-auto space-y-4 sm:space-y-6 px-2 sm:px-0">
-      {/* Header Utama */}
-      <div className="border-b border-slate-200 pb-3 sm:pb-4 flex flex-wrap items-center justify-between gap-3 sm:gap-4 print:hidden">
-        <div>
-          {isSiswa && (
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 px-3 py-1.5 rounded-lg mb-2 shadow-2xs cursor-pointer"
-            >
-              ← Kembali ke Menu
-            </Link>
-          )}
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
-              {isSiswa ? 'Kartu Barcode Saya' : 'Kartu Barcode Multifungsi Civitas'}
-            </h1>
-            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-              {isSiswa ? 'Peserta Didik' : 'Siswa • Guru • Tendik'}
-            </span>
+    <div className="students-print-page max-w-7xl mx-auto px-2 sm:px-0">
+      {/* Tampilan Layar Interaktif (Disembunyikan saat Mencetak/Print) */}
+      <div className="print-screen-view space-y-4 sm:space-y-6">
+        {/* Header Utama */}
+        <div className="border-b border-slate-200 pb-3 sm:pb-4 flex flex-wrap items-center justify-between gap-3 sm:gap-4 print:hidden">
+          <div>
+            {isSiswa && (
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 px-3 py-1.5 rounded-lg mb-2 shadow-2xs cursor-pointer"
+              >
+                ← Kembali ke Menu
+              </Link>
+            )}
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+                {isSiswa ? 'Kartu Barcode Saya' : 'Kartu Barcode Multifungsi Civitas'}
+              </h1>
+              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                {isSiswa ? 'Peserta Didik' : 'Siswa • Guru • Tendik'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              {isSiswa
+                ? 'Tunjukkan barcode ini kepada petugas sekolah atau pustakawan.'
+                : 'Master token barcode resmi SMP Negeri 1 Prambon untuk Presensi Digital, Perpustakaan, dan Akses Layanan SSO.'}
+            </p>
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            {isSiswa
-              ? 'Tunjukkan barcode ini kepada petugas sekolah atau pustakawan.'
-              : 'Master token barcode resmi SMP Negeri 1 Prambon untuk Presensi Digital, Perpustakaan, dan Akses Layanan SSO.'}
-          </p>
-        </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Tombol Scanner Verifikasi (Hanya Admin / Guru) */}
-          {!isSiswa && (
-            <button
-              type="button"
-              onClick={() => {
-                setIsScannerOpen(true);
-                setScanResult(null);
-                setScanError('');
-                setScanInputToken('');
-              }}
-              className="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
-            >
-              <AppIcon name="search" color="blue" size={14} />
-              <span>Uji / Validasi Token Barcode</span>
-            </button>
-          )}
-
-          {/* Tombol Print Lembar Kartu */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handlePrint}
-              title={isSiswa ? 'Cetak kartu barcode saya' : `Cetak kartu pada halaman aktif (${paginatedPeople.length} kartu)`}
-              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-              </svg>
-              <span>{isSiswa ? 'Cetak Kartu Saya' : `Cetak Halaman Ini (${paginatedPeople.length})`}</span>
-            </button>
-            {!isSiswa && filteredPeople.length > pageSize && (
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Tombol Scanner Verifikasi (Hanya Admin / Guru) */}
+            {!isSiswa && (
               <button
                 type="button"
                 onClick={() => {
-                  const prevSize = pageSize;
-                  setPageSize(filteredPeople.length);
-                  const onAfter = () => {
-                    setPageSize(prevSize);
-                    window.removeEventListener('afterprint', onAfter);
-                  };
-                  window.addEventListener('afterprint', onAfter);
-                  setTimeout(() => window.print(), 300);
+                  setIsScannerOpen(true);
+                  setScanResult(null);
+                  setScanError('');
+                  setScanInputToken('');
                 }}
-                title={`Tampilkan semua ${filteredPeople.length} kartu civitas sekaligus untuk dicetak`}
-                className="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
               >
-                <span>Cetak Semua ({filteredPeople.length})</span>
+                <AppIcon name="search" color="blue" size={14} />
+                <span>Uji / Validasi Token Barcode</span>
               </button>
             )}
+
+            {/* Tombol Print & Ekspor Lembar Kartu */}
+            <div className="flex items-center gap-2">
+              {isSiswa ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrintScope('CURRENT_PAGE');
+                    handleExecutePrint();
+                  }}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  <span>Cetak Kartu Saya</span>
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPrintScope('ALL_STUDENTS');
+                      setIsPrintModalOpen(true);
+                    }}
+                    title="Cetak barcode siswa semua rombel atau rombel pilihan ke dalam 1 file PDF"
+                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    <span>Cetak / Ekspor Barcode (PDF)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPrintScope('CURRENT_PAGE');
+                      handleExecutePrint();
+                    }}
+                    title={`Cetak kartu pada halaman aktif saja (${paginatedPeople.length} kartu)`}
+                    className="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>Halaman Ini ({paginatedPeople.length})</span>
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
       {/* Ringkasan Statistik (Hanya untuk Admin / Guru) */}
       {!isSiswa && (
@@ -434,16 +584,9 @@ export default function BarcodeMultifungsiPage() {
 
                   {/* Area Barcode / QR Code Resmi dari Backend SSO */}
                   <div className="qr-image-wrapper flex flex-col items-center justify-center p-3 bg-slate-50/80 border border-slate-200/80 rounded-xl">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={`${apiBase}/master/people/${person.id}/barcode?size=180`}
-                      alt={`Barcode ${person.full_name}`}
-                      className="w-32 h-32 object-contain rounded-md"
-                      onError={(e) => {
-                        // Fallback generator jika server local offline
-                        e.target.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(person.barcode_token)}`;
-                      }}
-                    />
+                    <div className="w-32 h-32 flex items-center justify-center bg-white p-1 rounded-md shadow-2xs">
+                      <QRCodeSVG value={person.barcode_token} size={120} className="w-full h-full" />
+                    </div>
                     <div className="mt-2 text-center w-full print:hidden">
                       <span className="block text-[10px] text-slate-500 font-mono truncate select-all">
                         {person.barcode_token}
@@ -665,6 +808,258 @@ export default function BarcodeMultifungsiPage() {
           </div>
         </div>
       )}
+
+      {/* ===================== MODAL CETAK & EKSPOR BARCODE SUPERADMIN ===================== */}
+      {isPrintModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm print:hidden">
+          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
+            {/* Header Modal */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg font-bold border border-blue-100 shadow-2xs">
+                  🖨️
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 leading-tight">
+                    Cetak & Ekspor Barcode Siswa (PDF)
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Format Presisi A4 Portrait • 12 Kartu/Halaman • Bebas Terpotong
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPrintModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-sm p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Konten Pilihan Cetak */}
+            <div className="py-4 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Pilih Data yang Akan Dicetak:
+                </label>
+                <div className="space-y-2">
+                  {/* Opsi 1: Seluruh Siswa di Semua Kelas */}
+                  <div
+                    onClick={() => setPrintScope('ALL_STUDENTS')}
+                    className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                      printScope === 'ALL_STUDENTS'
+                        ? 'border-blue-500 bg-blue-50/50 shadow-xs ring-1 ring-blue-500'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="print_scope"
+                      checked={printScope === 'ALL_STUDENTS'}
+                      onChange={() => setPrintScope('ALL_STUDENTS')}
+                      className="mt-0.5 text-blue-600 cursor-pointer"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-900">
+                          Seluruh Siswa (Semua Kelas dalam 1 File)
+                        </span>
+                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-100 text-blue-800">
+                          {sortedStudents.length} Siswa
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Mencetak barcode seluruh peserta didik dari kelas 7, 8, dan 9 ke dalam satu dokumen PDF siap cetak.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Opsi 2: Per Rombel / Kelas Tertentu */}
+                  <div
+                    onClick={() => setPrintScope('BY_CLASS')}
+                    className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                      printScope === 'BY_CLASS'
+                        ? 'border-blue-500 bg-blue-50/50 shadow-xs ring-1 ring-blue-500'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="print_scope"
+                      checked={printScope === 'BY_CLASS'}
+                      onChange={() => setPrintScope('BY_CLASS')}
+                      className="mt-0.5 text-blue-600 cursor-pointer"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-900">
+                          Berdasarkan Rombel / Kelas Tertentu
+                        </span>
+                        {studentClasses.length > 0 && (
+                          <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-100 text-slate-700">
+                            {sortedStudents.filter(s => (s.class_name || '').trim() === selectedPrintClass).length} Siswa
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Hanya mencetak barcode siswa pada rombel kelas tertentu.
+                      </p>
+
+                      {printScope === 'BY_CLASS' && (
+                        <div className="mt-2.5 pt-2 border-t border-blue-200/60 flex items-center gap-2">
+                          <span className="text-[11px] font-semibold text-slate-600">Pilih Kelas:</span>
+                          <select
+                            value={selectedPrintClass}
+                            onChange={(e) => setSelectedPrintClass(e.target.value)}
+                            className="px-3 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            {studentClasses.map((cls) => (
+                              <option key={cls} value={cls}>
+                                Kelas {cls} ({sortedStudents.filter(s => (s.class_name || '').trim() === cls).length} Siswa)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Opsi 3: Sesuai Filter / Pencarian Aktif */}
+                  <div
+                    onClick={() => setPrintScope('FILTERED')}
+                    className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                      printScope === 'FILTERED'
+                        ? 'border-blue-500 bg-blue-50/50 shadow-xs ring-1 ring-blue-500'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="print_scope"
+                      checked={printScope === 'FILTERED'}
+                      onChange={() => setPrintScope('FILTERED')}
+                      className="mt-0.5 text-blue-600 cursor-pointer"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-900">
+                          Sesuai Filter & Pencarian Aktif di Layar
+                        </span>
+                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-100 text-slate-700">
+                          {filteredPeople.length} Civitas
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Mencetak data yang sedang aktif terfilter (Kategori: {roleFilter}, Rombel: {classFilter}{search ? `, Kata kunci: "${search}"` : ''}).
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Opsi Tata Letak & Pemisahan Lembar */}
+              {printScope === 'ALL_STUDENTS' && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={separatePagePerClass}
+                      onChange={(e) => setSeparatePagePerClass(e.target.checked)}
+                      className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-slate-800">
+                        Pisahkan Halaman Baru untuk Setiap Kelas
+                      </span>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {separatePagePerClass
+                          ? 'Aktif: Setiap rombel kelas selalu mulai di lembar baru sehingga sangat mudah dibagikan per wali kelas.'
+                          : 'Non-aktif (Hemat Kertas): Kartu dicetak bersambung 12 kartu per lembar tanpa jeda halaman kosong per kelas.'}
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              )}
+
+              {/* Ringkasan & Spesifikasi Lembar Cetak */}
+              <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-3.5 space-y-2 text-xs">
+                <div className="flex items-center justify-between font-semibold text-blue-900">
+                  <span>Total Data Akan Dicetak:</span>
+                  <span className="font-bold text-sm tabular-nums">{printSummary.count} Kartu Barcode</span>
+                </div>
+                <div className="flex items-center justify-between text-blue-800">
+                  <span>Estimasi Lembar Kertas A4:</span>
+                  <span className="font-bold text-sm tabular-nums">{printSummary.totalSheets} Halaman</span>
+                </div>
+                <div className="pt-2 border-t border-blue-200/60 flex items-center justify-between text-[11px] text-blue-700">
+                  <span>Layout: A4 Portrait • 3 Kolom × 4 Baris (12 Kartu/Halaman)</span>
+                  <span className="font-bold text-emerald-700 flex items-center gap-1">
+                    ✓ 100% Anti-Terpotong
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Modal */}
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsPrintModalOpen(false)}
+                className="px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleExecutePrint}
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                <span>Cetak Sekarang / Simpan PDF</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      </div>
+
+      {/* ===================== DEDICATED PRINT CONTAINER (ANTI-TERPOTONG & 1 FILE MULTI-KELAS) ===================== */}
+      <div className="barcode-print-document">
+        {activePrintSheets.map((sheetItems, sheetIdx) => (
+          <div key={sheetIdx} className="barcode-print-sheet">
+            <div className="barcode-print-grid">
+              {sheetItems.map((person) => {
+                const identifier = person.nisn ? `NISN: ${person.nisn}` : person.nip ? `NIP: ${person.nip}` : '';
+                const metaLabel = person.class_name
+                  ? `KELAS ${person.class_name.toUpperCase()}`
+                  : person.person_type === 'GURU'
+                  ? 'GURU PENGAMPU'
+                  : person.person_type === 'TENAGA_KEPENDIDIKAN'
+                  ? 'TENDIK / TU'
+                  : 'SMPN 1 PRAMBON';
+
+                return (
+                  <div key={person.id} className="barcode-print-card">
+                    <div className="print-card-name" title={person.full_name}>
+                      {person.full_name}
+                    </div>
+                    <div className="print-card-meta">
+                      {metaLabel}
+                      {identifier ? ` • ${identifier}` : ''}
+                    </div>
+                    <div className="print-card-qr">
+                      <QRCodeSVG value={person.barcode_token} size={140} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

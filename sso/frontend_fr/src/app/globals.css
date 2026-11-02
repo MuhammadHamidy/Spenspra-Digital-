@@ -410,10 +410,32 @@ body {
   background-color: var(--bg-surface-hover);
 }
 
+.barcode-print-document {
+  display: none;
+}
+
 @media print {
   @page {
     size: A4 portrait;
     margin: 8mm 6mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Reset all potential overflow/flex wrappers that break pagination */
+  #__next,
+  main,
+  .students-print-page,
+  div {
+    overflow: visible !important;
   }
 
   /* Sembunyikan SEMUA layout luar (Navbar, Sidebar, Header, Footer) dan elemen non-cetak */
@@ -424,16 +446,10 @@ body {
   [role="navigation"],
   .sidebar,
   .navbar,
-  .print\:hidden {
+  .print\:hidden,
+  .print-screen-view {
     display: none !important;
     visibility: hidden !important;
-  }
-
-  body {
-    background: #ffffff !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    min-height: auto !important;
   }
 
   main,
@@ -444,30 +460,149 @@ body {
     max-width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
   }
 
-  /* Grid 3 Kolom Presisi Tinggi untuk A4 */
-  .barcode-cards-grid {
-    display: grid !important;
-    grid-template-columns: repeat(3, 1fr) !important;
-    column-gap: 4mm !important;
-    row-gap: 4mm !important;
+  /* Container Cetak Khusus Lembar Barcode */
+  .barcode-print-document {
+    display: block !important;
     width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
   }
 
-  /* Kartu Siswa: Tinggi 58mm x 4 baris = 244mm, pas sekali dalam 1 halaman A4 (281mm area cetak) */
+  /* Lembar Cetak Per Halaman A4 Presisi Anti-Terpotong */
+  .barcode-print-sheet {
+    display: block !important;
+    width: 100% !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .barcode-print-sheet:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  /* Grid 3 Kolom Presisi Tinggi untuk A4 */
+  .barcode-print-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    column-gap: 3.5mm !important;
+    row-gap: 3.5mm !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Kartu Cetak: Tinggi 56mm x 4 baris = 224mm (+ gaps = 234.5mm), pas sekali dalam 1 halaman A4 */
+  .barcode-print-card {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    width: 100% !important;
+    height: 56mm !important;
+    max-height: 56mm !important;
+    margin: 0 !important;
+    padding: 2.5mm 2mm 2mm 2mm !important;
+    box-sizing: border-box !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    -webkit-column-break-inside: avoid !important;
+    border: 1.5px solid #0f172a !important;
+    border-radius: 3.5mm !important;
+    background: #ffffff !important;
+    text-align: center !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+  }
+
+  .barcode-print-card .print-card-name {
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+    width: 100% !important;
+    max-height: 8.5mm !important;
+    text-align: center !important;
+    font-size: 8pt !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+    color: #000000 !important;
+    line-height: 1.15 !important;
+    margin-bottom: 0 !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow: hidden !important;
+  }
+
+  .barcode-print-card .print-card-meta {
+    display: block !important;
+    width: 100% !important;
+    height: 3.5mm !important;
+    max-height: 3.5mm !important;
+    text-align: center !important;
+    font-size: 6.5pt !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    color: #334155 !important;
+    line-height: 1.1 !important;
+    margin-top: 1mm !important;
+    margin-bottom: 1.5mm !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .barcode-print-card .print-card-qr {
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    height: 36mm !important;
+    width: 100% !important;
+    overflow: hidden !important;
+  }
+
+  .barcode-print-card .print-card-qr svg,
+  .barcode-print-card .print-card-qr img {
+    width: 36mm !important;
+    height: 36mm !important;
+    max-width: 36mm !important;
+    max-height: 36mm !important;
+    object-fit: contain !important;
+  }
+
+  /* Kompatibilitas kartu screen jika dipanggil langsung */
+  .barcode-cards-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    column-gap: 3.5mm !important;
+    row-gap: 3.5mm !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
   .student-qr-card {
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
     justify-content: flex-start !important;
     width: 100% !important;
-    height: 58mm !important;
-    max-height: 58mm !important;
+    height: 56mm !important;
+    max-height: 56mm !important;
     margin: 0 !important;
-    padding: 3mm 2.5mm !important;
+    padding: 2.5mm 2mm 2mm 2mm !important;
     box-sizing: border-box !important;
     break-inside: avoid !important;
     page-break-inside: avoid !important;
@@ -483,15 +618,15 @@ body {
   .student-qr-card .print-only-name {
     display: block !important;
     width: 100% !important;
-    height: 10mm !important;
-    max-height: 10mm !important;
+    height: 8.5mm !important;
+    max-height: 8.5mm !important;
     text-align: center !important;
-    font-size: 8.5pt !important;
+    font-size: 8pt !important;
     font-weight: 800 !important;
     text-transform: uppercase !important;
     color: #000000 !important;
-    line-height: 1.2 !important;
-    margin-bottom: 2mm !important;
+    line-height: 1.15 !important;
+    margin-bottom: 1.5mm !important;
     white-space: normal !important;
     word-break: break-word !important;
     overflow: hidden !important;
@@ -504,15 +639,16 @@ body {
     display: flex !important;
     justify-content: center !important;
     align-items: center !important;
-    height: 40mm !important;
+    height: 36mm !important;
     width: 100% !important;
   }
 
-  .student-qr-card .qr-image-wrapper img {
-    width: 40mm !important;
-    height: 40mm !important;
-    max-width: 40mm !important;
-    max-height: 40mm !important;
+  .student-qr-card .qr-image-wrapper img,
+  .student-qr-card .qr-image-wrapper svg {
+    width: 36mm !important;
+    height: 36mm !important;
+    max-width: 36mm !important;
+    max-height: 36mm !important;
     object-fit: contain !important;
   }
 }
