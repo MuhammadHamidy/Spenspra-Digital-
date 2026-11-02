@@ -289,6 +289,9 @@ const QRUtil = {
     }
     let totalDataCount = 0;
     for (let i = 0; i < rsBlocks.length; i++) totalDataCount += rsBlocks[i].dataCount;
+    if (buffer.length + 4 > totalDataCount * 8) {
+      throw new Error(`QR data overflow for version ${typeNumber}`);
+    }
     if (buffer.length + 4 <= totalDataCount * 8) buffer.put(0, 4);
     while (buffer.length % 8 !== 0) buffer.putBit(false);
     while (true) {
@@ -515,6 +518,10 @@ export function generateQRCodeSVG(text, size = 120, margin = 2) {
         throw new Error(`Token barcode terlalu panjang untuk QR code: ${error.message}`);
       }
     }
+  }
+
+  if (!qr) {
+    throw new Error('QR code gagal dibuat.');
   }
 
   const count = qr.getModuleCount();
