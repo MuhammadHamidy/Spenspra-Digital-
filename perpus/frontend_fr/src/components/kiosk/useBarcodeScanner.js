@@ -339,6 +339,27 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
     }
 
     let isProcessing = false;
+    const decodeCanvas = (canvas) => {
+      if (!window.ZXing || !canvas) return null;
+      try {
+        if (window.ZXing.BrowserMultiFormatReader) {
+          const reader = new window.ZXing.BrowserMultiFormatReader();
+          const result = reader.decodeFromCanvas(canvas);
+          if (result?.getText()) return result.getText();
+        }
+      } catch {}
+      if (!window.ZXing.HTMLCanvasElementLuminanceSource) return null;
+      try {
+        const lum = new window.ZXing.HTMLCanvasElementLuminanceSource(canvas);
+        const bitmap = new window.ZXing.BinaryBitmap(new window.ZXing.HybridBinarizer(lum));
+        const reader = new window.ZXing.MultiFormatReader();
+        const result = reader.decode(bitmap);
+        return result?.getText() || null;
+      } catch {
+        return null;
+      }
+    };
+
     const interval = setInterval(async () => {
       if (isProcessing || disabled || !videoRef.current) return;
       const video = videoRef.current;
@@ -369,32 +390,28 @@ export function useBarcodeScanner({ onScan, isScanning = true, disabled = false 
 
           if (ctx) {
             ctx.drawImage(video, 0, 0, w, h);
+            detectedText = decodeCanvas(canvas);
 
-            if (window.ZXing.HTMLCanvasElementLuminanceSource) {
-              const lum = new window.ZXing.HTMLCanvasElementLuminanceSource(canvas);
-              const bitmap = new window.ZXing.BinaryBitmap(new window.ZXing.HybridBinarizer(lum));
-              const reader = new window.ZXing.MultiFormatReader();
-              const r = reader.decode(bitmap);
-              if (r) {
-                detectedText = r.getText();
-              }
-            }
-
-            // Invert/Mirror pass if user facing camera
-            if (!detectedText && facingMode === 'user' && window.ZXing.HTMLCanvasElementLuminanceSource) {
-              ctx.save();
-              ctx.translate(w, 0);
-              ctx.scale(-1, 1);
-              ctx.drawImage(video, 0, 0, w, h);
-              ctx.restore();
-
-              const lum = new window.ZXing.HTMLCanvasElementLuminanceSource(canvas);
-              const bitmap = new window.ZXing.BinaryBitmap(new window.ZXing.HybridBinarizer(lum));
-              const reader = new window.ZXing.MultiFormatReader();
-              const r = reader.decode(bitmap);
-              if (r) {
-                detectedText = r.getText();
-              }
+            if (!detectedText) {
+              const cropSize = Math.floor(Math.min(w, h) * 0.72);
+              const cropX = Math.floor((w - cropSize) / 2);
+              const cropY = Math.floor((h - cropSize) / 2);
+              const cropCanvas = document.createElement('canvas');
+              cropCanvas.width = cropSize * 2;
+              cropCanvas.height = cropSize * 2;
+              const cropContext = cropCanvas.getContext('2d', { willReadFrequently: true });
+              cropContext?.drawImage(
+                video,
+                cropX,
+                cropY,
+                cropSize,
+                cropSize,
+                0,
+                0,
+                cropCanvas.width,
+                cropCanvas.height
+              );
+              detectedText = decodeCanvas(cropCanvas);
             }
           }
         } catch {}
