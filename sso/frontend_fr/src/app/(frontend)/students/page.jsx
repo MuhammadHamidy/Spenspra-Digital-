@@ -9,7 +9,6 @@ import { useAuth } from '@/lib/features/auth/presentation/useAuth';
 import { getRole } from '@/lib/access/portalAccess';
 import Pagination from '@/components/Pagination';
 import AppIcon from '@/components/AppIcon';
-import { QRCodeSVG } from '@/lib/common/qrCodeGenerator';
 
 const TYPE_CONFIG = {
   SISWA: {
@@ -70,6 +69,9 @@ export default function BarcodeMultifungsiPage() {
   const [scanError, setScanError] = useState('');
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+
+  const getBarcodeImageUrl = (personId, size = 256) =>
+    `${apiBase}/master/people/${encodeURIComponent(personId)}/barcode?size=${size}`;
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -585,7 +587,13 @@ export default function BarcodeMultifungsiPage() {
                   {/* Area Barcode / QR Code Resmi dari Backend SSO */}
                   <div className="qr-image-wrapper flex flex-col items-center justify-center p-3 bg-slate-50/80 border border-slate-200/80 rounded-xl">
                     <div className="w-32 h-32 flex items-center justify-center bg-white p-1 rounded-md shadow-2xs">
-                      <QRCodeSVG value={person.barcode_token} size={120} className="w-full h-full" />
+                      <img
+                        src={getBarcodeImageUrl(person.id, 256)}
+                        alt={`QR barcode ${person.full_name}`}
+                        width={256}
+                        height={256}
+                        className="w-full h-full object-contain"
+                      />
                     </div>
                     <div className="mt-2 text-center w-full print:hidden">
                       <span className="block text-[10px] text-slate-500 font-mono truncate select-all">
@@ -1051,7 +1059,13 @@ export default function BarcodeMultifungsiPage() {
                       {identifier ? ` • ${identifier}` : ''}
                     </div>
                     <div className="print-card-qr">
-                      <QRCodeSVG value={person.barcode_token} size={140} />
+                      <img
+                        src={getBarcodeImageUrl(person.id, 512)}
+                        alt={`QR barcode ${person.full_name}`}
+                        width={512}
+                        height={512}
+                        className="w-full h-full object-contain"
+                      />
                     </div>
                   </div>
                 );
