@@ -2,6 +2,8 @@
  * Utility untuk membaca Tahun Ajaran, Semester aktif, dan Standar KKM Sekolah dari pengaturan Super Admin.
  * Tersinkronisasi lintas domain (SSO <-> e-Rapor) melalui cookie dan localStorage.
  */
+import { httpClient } from '@/lib/common/httpClient';
+
 export function getSchoolAcademicPeriod() {
   let year = null;
   let semester = null;
@@ -52,4 +54,37 @@ export function getSchoolAcademicPeriod() {
 
 export function getSchoolKKM() {
   return getSchoolAcademicPeriod().kkm;
+}
+
+export async function syncSchoolAcademicPeriod() {
+  const fallback = getSchoolAcademicPeriod();
+
+  try {
+    const response = await httpClient.get('/academic-period');
+    const serverPeriod = response?.data;
+    if (!serverPeriod?.year || !serverPeriod?.semester) {
+      return fallback;
+    }
+
+    const period = {
+      ...fallback,
+      ...serverPeriod,
+      semester: String(serverPeriod.semester).toUpperCase(),
+      kkm: Number(serverPeriod.kkm) > 0 ? Number(serverPeriod.kkm) : fallback.kkm,
+    };
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('spenspra_academic_period', JSON.stringify(period));
+      localStorage.setItem('spenspra_school_kkm', String(period.kkm));
+
+      document.cookie = `spenspra_academic_year=${encodeURIComponent(period.year)}; path=/; max-age=31536000; SameSite=Lax`;
+      document.cookie = `spenspra_academic_semester=${encodeURIComponent(period.semester)}; path=/; max-age=31536000; SameSite=Lax`;
+      document.cookie = `spenspra_school_kkm=${encodeURIComponent(period.kkm)}; path=/; max-age=31536000; SameSite=Lax`;
+    }
+
+    return period;
+  } catch (error) {
+    console.warn('Gagal menyinkronkan periode akademik:', error);
+    return fallback;
+  }
 }
