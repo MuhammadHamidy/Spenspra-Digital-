@@ -500,14 +500,22 @@ QRCodeModel.prototype = {
 export function generateQRCodeSVG(text, size = 120, margin = 2) {
   if (!text) text = 'SPENSPRA';
 
-  // Determine type number based on length
-  let typeNumber = 2; // fits up to ~32 alphanumeric
-  if (text.length > 25) typeNumber = 3; // fits up to ~55 chars
-  if (text.length > 45) typeNumber = 4; // fits up to ~80 chars
-
-  const qr = new QRCodeModel(typeNumber, QRErrorCorrectLevel.M);
-  qr.addData(text);
-  qr.make();
+  // Select the smallest supported QR version that can hold the complete token.
+  // Tokens can vary in length, so a fixed version can produce an incomplete matrix.
+  let qr = null;
+  for (let typeNumber = 1; typeNumber <= 6; typeNumber++) {
+    try {
+      const candidate = new QRCodeModel(typeNumber, QRErrorCorrectLevel.M);
+      candidate.addData(text);
+      candidate.make();
+      qr = candidate;
+      break;
+    } catch (error) {
+      if (typeNumber === 6) {
+        throw new Error(`Token barcode terlalu panjang untuk QR code: ${error.message}`);
+      }
+    }
+  }
 
   const count = qr.getModuleCount();
   const totalCount = count + margin * 2;

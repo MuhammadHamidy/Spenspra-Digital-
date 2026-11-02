@@ -430,11 +430,13 @@ body {
     overflow: visible !important;
   }
 
-  /* Reset all potential overflow/flex wrappers that break pagination */
+  /* Reset only the layout wrappers that can clip a print sheet. Do not
+     override card overflow: that can create an on-page scrollbar in print. */
   #__next,
   main,
   .students-print-page,
-  div {
+  .barcode-print-document,
+  .barcode-print-sheet {
     overflow: visible !important;
   }
 
@@ -462,6 +464,23 @@ body {
     padding: 0 !important;
     border: none !important;
     box-shadow: none !important;
+  }
+
+  html,
+  body,
+  .barcode-print-document {
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar,
+  .barcode-print-document::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
   }
 
   /* Container Cetak Khusus Lembar Barcode */
@@ -676,5 +695,4 @@ select:disabled {
   cursor: not-allowed;
   opacity: 0.6;
 }
-
 
