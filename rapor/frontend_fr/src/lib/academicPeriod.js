@@ -2,8 +2,6 @@
  * Utility untuk membaca Tahun Ajaran, Semester aktif, dan Standar KKM Sekolah dari pengaturan Super Admin.
  * Tersinkronisasi lintas domain (SSO <-> e-Rapor) melalui cookie dan localStorage.
  */
-import { httpClient } from '@/lib/common/httpClient';
-
 export function getSchoolAcademicPeriod() {
   let year = null;
   let semester = null;
@@ -58,13 +56,20 @@ export function getSchoolKKM() {
 
 export async function syncSchoolAcademicPeriod() {
   const fallback = getSchoolAcademicPeriod();
+  const ssoApiBase = process.env.NEXT_PUBLIC_SSO_API_URL;
+
+  if (!ssoApiBase) return fallback;
 
   try {
-    const response = await httpClient.get('/academic-period');
-    const serverPeriod = response?.data;
-    if (!serverPeriod?.year || !serverPeriod?.semester) {
-      return fallback;
-    }
+    const response = await fetch(`${ssoApiBase.replace(/\/$/, '')}/academic-period`, {
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    });
+    if (!response.ok) return fallback;
+
+    const payload = await response.json();
+    const serverPeriod = payload?.data || payload;
+    if (!serverPeriod?.year || !serverPeriod?.semester) return fallback;
 
     const period = {
       ...fallback,
