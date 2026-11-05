@@ -272,17 +272,20 @@ export const tokenStorage = {
     if (typeof window !== 'undefined') {
       try {
         sessionStorage.removeItem(TOKEN_KEY);
+        sessionStorage.removeItem('access_token');
         sessionStorage.removeItem(USER_KEY);
         sessionStorage.removeItem(INSTITUTION_KEY);
         sessionStorage.removeItem(SESSION_ACTIVE_KEY);
         sessionStorage.removeItem(LAST_ACTIVITY_KEY);
         localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem('access_token');
         localStorage.removeItem(USER_KEY);
         localStorage.removeItem(INSTITUTION_KEY);
         localStorage.removeItem(SESSION_ACTIVE_KEY);
         localStorage.removeItem(LAST_ACTIVITY_KEY);
       } catch (e) {}
       removeCookie(TOKEN_KEY);
+      removeCookie('access_token');
       removeCookie(USER_KEY);
       removeCookie(INSTITUTION_KEY);
       removeCookie('perpusdig_auth_token');
