@@ -379,9 +379,14 @@ export default function PustakawanAbsensiPage() {
                 </tr>
               ) : (
                 paginatedLogs.map((log, index) => {
-                  const visitorName = log.visitor_name || log.name || log.full_name || 'Pengunjung Perpustakaan';
+                  const rawVisitorName = log.visitor_name || log.name || log.full_name || 'Pengunjung Perpustakaan';
+                  const guestMatch = log.visitor_type === 'GUEST' ? rawVisitorName.match(/^(.*?)\s*\(([^)]+)\)$/) : null;
+                  const visitorName = guestMatch ? guestMatch[1].trim() : rawVisitorName;
                   const idNum = log.identity_number || log.studentId || log.nisn || log.nip || '-';
-                  const className = log.class_name || log.className || (log.visitor_type === 'GUEST' ? 'Tamu Luar' : 'Siswa');
+                  const className =
+                    log.class_name ||
+                    log.className ||
+                    (guestMatch ? guestMatch[2].trim() : log.visitor_type === 'GUEST' ? 'Tamu Luar' : 'Siswa');
                   const method = (log.method || 'SCAN').toUpperCase();
                   const rowNumber = (currentPage - 1) * pageSize + index + 1;
 
@@ -398,7 +403,7 @@ export default function PustakawanAbsensiPage() {
                           <div>
                             <p className="font-semibold text-slate-900 leading-tight">{visitorName}</p>
                             <span className="text-[10px] text-slate-400 font-medium">
-                              ID: {idNum}
+                              {log.visitor_type === 'GUEST' ? `Jabatan: ${className}` : `ID: ${idNum}`}
                             </span>
                           </div>
                         </div>
@@ -419,6 +424,13 @@ export default function PustakawanAbsensiPage() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
                               Face Scan
+                            </>
+                          ) : method.includes('MANUAL') || log.visitor_type === 'GUEST' ? (
+                            <>
+                              <svg className="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                              Buku Tamu (Tanpa Scan)
                             </>
                           ) : (
                             <>

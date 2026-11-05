@@ -179,9 +179,21 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
   };
 
   // Complete attendance without book scan (for Pembelajaran or Tamu)
-  const handleCompleteAttendanceOnly = () => {
-    if (!detectedStudent) {
-      alert('Kartu barcode siswa belum dipindai.');
+  const handleCompleteAttendanceOnly = async (guestData = null) => {
+    const isGuestInput = guestData && typeof guestData === 'object' && guestData.name;
+    const targetVisitor = isGuestInput
+      ? {
+          name: guestData.name.trim(),
+          id: '',
+          className: (guestData.jabatan || 'Tamu Umum').trim(),
+          jabatan: (guestData.jabatan || 'Tamu Umum').trim(),
+          photo: null,
+          hasActiveSessionToday: false,
+        }
+      : detectedStudent;
+
+    if (!targetVisitor) {
+      alert(selectedPurpose === 'TAMU' ? 'Silakan isi nama dan jabatan terlebih dahulu.' : 'Kartu barcode siswa belum dipindai.');
       return;
     }
 
@@ -209,25 +221,41 @@ export default function StudentPerpus({ initialScreen = 'purpose' }) {
         ? 'Pengembalian Buku'
         : 'Peminjaman Buku';
 
-    const wasAlreadyAttended = Boolean(detectedStudent?.hasActiveSessionToday);
+    const wasAlreadyAttended = Boolean(targetVisitor?.hasActiveSessionToday);
 
     const record = {
       id: `ATT-${Date.now().toString().slice(-6)}`,
-      name: detectedStudent.name,
-      studentId: detectedStudent.id,
-      className: detectedStudent.className || (selectedPurpose === 'TAMU' ? 'Tamu Umum' : 'Siswa'),
-      photo: detectedStudent.photo || null,
+      name: targetVisitor.name,
+      studentId: selectedPurpose === 'TAMU' ? '' : targetVisitor.id,
+      className: targetVisitor.className || (selectedPurpose === 'TAMU' ? 'Tamu Umum' : 'Siswa'),
+      jabatan: targetVisitor.jabatan || targetVisitor.className || '',
+      photo: targetVisitor.photo || null,
       purpose: selectedPurpose || 'PEMBELAJARAN',
       purposeLabel,
       date: dateStr,
-      time: detectedStudent.activeSessionTime || timeStr,
+      time: targetVisitor.activeSessionTime || timeStr,
       timestamp: now.toISOString(),
       isReusedDailySession: wasAlreadyAttended,
+      visitorType: selectedPurpose === 'TAMU' ? 'GUEST' : 'MEMBER',
+      method: selectedPurpose === 'TAMU' ? 'MANUAL' : 'BARCODE_SCAN',
     };
 
-    // Tandai sesi harian aktif untuk siswa ini (batas 1 hari)
-    markStudentAttendedToday(detectedStudent.id, {
-      name: detectedStudent.name,
+    if (selectedPurpose === 'TAMU') {
+      try {
+        await attendanceApi.recordManualVisit({
+          visitor_name: `${targetVisitor.name} (${record.className})`,
+          visitor_type: 'GUEST',
+          method: 'MANUAL',
+          purpose: 'TAMU',
+        });
+      } catch (e) {
+        console.warn('Backend guest attendance record notice (saved locally):', e);
+      }
+    }
+
+    // Tandai sesi harian aktif untuk pengunjung ini (batas 1 hari)
+    markStudentAttendedToday(targetVisitor.id || targetVisitor.name, {
+      name: targetVisitor.name,
       className: record.className,
       time: record.time,
     });

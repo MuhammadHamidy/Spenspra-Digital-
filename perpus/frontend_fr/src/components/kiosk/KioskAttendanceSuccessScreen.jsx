@@ -47,7 +47,9 @@ export default function PerpusAttendanceSuccessScreen({
                 {attendanceRecord.name}
               </h4>
               <p className="text-xs text-slate-500 font-mono mt-0.5">
-                NISN: {attendanceRecord.studentId} • Kelas: {attendanceRecord.className}
+                {attendanceRecord.purpose === 'TAMU'
+                  ? `Jabatan: ${attendanceRecord.jabatan || attendanceRecord.className || 'Tamu Umum'}`
+                  : `NISN: ${attendanceRecord.studentId} • Kelas: ${attendanceRecord.className}`}
               </p>
             </div>
           </div>
@@ -67,8 +69,8 @@ export default function PerpusAttendanceSuccessScreen({
             </div>
           </div>
 
-          {/* Barcode of student */}
-          {attendanceRecord.studentId && (
+          {/* Barcode of student (only for non-guest) */}
+          {attendanceRecord.studentId && attendanceRecord.purpose !== 'TAMU' && (
             <div className="bg-white p-2.5 rounded-xl border border-slate-200/70 flex flex-col items-center justify-center">
               <Barcode
                 value={attendanceRecord.studentId}
