@@ -1,6 +1,6 @@
 module github.com/facerec/facerec-be/facerec
 
-go 1.25.5
+go 1.25.6
 
 replace github.com/facerec/facerec-be/framework v1.0.0 => ../framework
 
