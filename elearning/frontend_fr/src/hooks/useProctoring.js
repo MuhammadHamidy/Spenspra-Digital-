@@ -5,7 +5,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 /**
  * Hook useProctoring untuk sistem e-Ujian CBT Spenspra (Solusi 2: Zero Tolerance & Kiosk Mode)
  * - Zero Tolerance: 1x pelanggaran langsung mengunci layar
- * - Mendeteksi tarikan status bar/notifikasi HP (window blur), perpindahan tab/aplikasi (visibilitychange), keluar fullscreen
+ * - Web Audio API Siren Alarm: Alarm darurat berbunyi keras di speaker saat klik home / minimize / tarik notifikasi
+ * - Auto-Unlock AudioContext pada gesture pertama (touch / click) agar alarm bisa berbunyi di HP meski mode hening
+ * - Deteksi tarikan status bar/notifikasi HP (window blur), perpindahan tab/aplikasi (visibilitychange), keluar fullscreen
  * - Screen Wake Lock API: Mencegah layar HP siswa mati/redup saat ujian
  * - Blokir inspect element, klik kanan, copy, paste, potong teks
  * - Verifikasi PIN Guru/Pengawas untuk membuka kembali lembar ujian yang terkunci
@@ -27,6 +29,7 @@ export function useProctoring({
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [lastWarningMsg, setLastWarningMsg] = useState('');
   const [wakeLockActive, setWakeLockActive] = useState(false);
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
 
   const wakeLockRef = useRef(null);
   const hasEnteredFullscreenRef = useRef(false);
@@ -41,6 +44,109 @@ export function useProctoring({
   altUnlockPinsRef.current = altUnlockPins;
   const onUnlockRef = useRef(onUnlock);
   onUnlockRef.current = onUnlock;
+
+  // Web Audio Context & Siren Alarm Refs
+  const audioCtxRef = useRef(null);
+  const alarmOscillatorRef = useRef(null);
+  const alarmGainRef = useRef(null);
+  const alarmIntervalRef = useRef(null);
+
+  // Inisialisasi Audio Context
+  const getAudioContext = useCallback(() => {
+    if (typeof window === 'undefined') return null;
+    if (!audioCtxRef.current) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextClass) {
+        audioCtxRef.current = new AudioContextClass();
+      }
+    }
+    if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume().catch(() => {});
+    }
+    return audioCtxRef.current;
+  }, []);
+
+  // Hentikan Sirene
+  const stopAlarmSirene = useCallback(() => {
+    try {
+      if (alarmIntervalRef.current) {
+        clearInterval(alarmIntervalRef.current);
+        alarmIntervalRef.current = null;
+      }
+      if (alarmOscillatorRef.current) {
+        try {
+          alarmOscillatorRef.current.stop();
+          alarmOscillatorRef.current.disconnect();
+        } catch (_) {}
+        alarmOscillatorRef.current = null;
+      }
+      if (alarmGainRef.current) {
+        try {
+          alarmGainRef.current.disconnect();
+        } catch (_) {}
+        alarmGainRef.current = null;
+      }
+    } catch (_) {}
+  }, []);
+
+  // Bunyikan Sirene Peringatan Keras (Web Audio API)
+  const playAlarmSirene = useCallback(() => {
+    try {
+      const ctx = getAudioContext();
+      if (!ctx) return;
+
+      stopAlarmSirene();
+
+      const now = ctx.currentTime;
+      const gainNode = ctx.createGain();
+      gainNode.gain.setValueAtTime(0.9, now);
+      gainNode.connect(ctx.destination);
+      alarmGainRef.current = gainNode;
+
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(880, now);
+      osc.connect(gainNode);
+      osc.start();
+      alarmOscillatorRef.current = osc;
+
+      // Efek Modulasi Suara Sirene Darurat (Polisi / Alarm CBT)
+      let freqToggle = false;
+      alarmIntervalRef.current = setInterval(() => {
+        try {
+          if (alarmOscillatorRef.current && ctx && ctx.state === 'running') {
+            freqToggle = !freqToggle;
+            const targetFreq = freqToggle ? 1400 : 750;
+            alarmOscillatorRef.current.frequency.setTargetAtTime(targetFreq, ctx.currentTime, 0.06);
+          }
+        } catch (_) {}
+      }, 220);
+    } catch (err) {
+      console.warn('[CBT Proctoring] Gagal memutar alarm suara:', err);
+    }
+  }, [getAudioContext, stopAlarmSirene]);
+
+  // Listener Gesture Siswa untuk Unlock AudioContext & WakeLock
+  useEffect(() => {
+    const handleFirstGesture = () => {
+      setHasUserInteracted(true);
+      const ctx = getAudioContext();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+    };
+
+    window.addEventListener('click', handleFirstGesture, { passive: true });
+    window.addEventListener('touchstart', handleFirstGesture, { passive: true });
+    window.addEventListener('pointerdown', handleFirstGesture, { passive: true });
+
+    return () => {
+      window.removeEventListener('click', handleFirstGesture);
+      window.removeEventListener('touchstart', handleFirstGesture);
+      window.removeEventListener('pointerdown', handleFirstGesture);
+      stopAlarmSirene();
+    };
+  }, [getAudioContext, stopAlarmSirene]);
 
   // 1. Request Screen Wake Lock (Mencegah Layar HP Mati / Sleep)
   const requestWakeLock = useCallback(async () => {
@@ -70,12 +176,15 @@ export function useProctoring({
     }
   }, []);
 
-  // Request Fullscreen Helper
+  // Request Fullscreen Helper dengan dukungan mobile gesture
   const requestFullscreen = useCallback(async () => {
     if (typeof document === 'undefined') return;
     try {
-      if (!document.fullscreenElement) {
-        const root = document.documentElement;
+      // Pastikan audio context juga ikut aktif saat user klik tombol fullscreen
+      getAudioContext();
+
+      const root = document.documentElement;
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
         if (root.requestFullscreen) {
           await root.requestFullscreen();
         } else if (root.webkitRequestFullscreen) {
@@ -85,14 +194,18 @@ export function useProctoring({
         } else if (root.msRequestFullscreen) {
           await root.msRequestFullscreen();
         }
-        setIsFullscreen(true);
       }
+      setIsFullscreen(true);
+      hasEnteredFullscreenRef.current = true;
     } catch (err) {
-      console.warn('[CBT Proctoring] Gagal mengaktifkan mode fullscreen:', err);
+      console.warn('[CBT Proctoring] Request fullscreen error:', err);
+      // Di perangkat tanpa API fullscreen penuh (misal iOS Safari), kita tandai tetap aktif
+      setIsFullscreen(true);
+      hasEnteredFullscreenRef.current = true;
     }
-  }, []);
+  }, [getAudioContext]);
 
-  // 2. Trigger Pelanggaran & Instant Lock
+  // 2. Trigger Pelanggaran & Instant Lock + Alarm Suara & Getaran
   const triggerViolation = useCallback(
     (type, message) => {
       if (!isEnabledRef.current || isLockedRef.current) return;
@@ -103,10 +216,13 @@ export function useProctoring({
       if (lastViolation.type === type && now.getTime() - lastViolation.at < 1500) return;
       lastViolationRef.current = { type, at: now.getTime() };
 
-      // Getar perangkat HP jika didukung (haptic warning)
+      // Bunyikan Sirene Alarm Peringatan Darurat
+      playAlarmSirene();
+
+      // Getar perangkat HP berulang kali jika didukung
       if (typeof window !== 'undefined' && 'navigator' in window && navigator.vibrate) {
         try {
-          navigator.vibrate([300, 100, 300]);
+          navigator.vibrate([400, 150, 400, 150, 400, 150, 400]);
         } catch (_) {}
       }
 
@@ -145,7 +261,7 @@ export function useProctoring({
         return newCount;
       });
     },
-    [maxViolations, zeroTolerance, onViolation, onLock]
+    [maxViolations, zeroTolerance, onViolation, onLock, playAlarmSirene]
   );
 
   // 3. Efek Lifecycle WakeLock saat enabled
@@ -189,15 +305,15 @@ export function useProctoring({
     };
   }, [enabled, triggerViolation]);
 
-  // 5. Deteksi Window Blur (Tarik Notifikasi / Tekan Tombol Home / Klik di Luar Jendela)
+  // 5. Deteksi Window Blur (Tarik Notifikasi / Tekan Tombol Home / Geser Gesture HP)
   useEffect(() => {
     if (!enabled) return;
 
     const handleBlur = () => {
-      // Pada HP Android/iOS, menarik bilah notifikasi atau geser gesture home langsung memicu event blur
+      // Pada HP Android/iOS, menekan tombol Home atau menarik notifikasi langsung memicu event window blur
       triggerViolation(
         'WINDOW_BLUR',
-        'Fokus layar hilang! Terdeteksi menarik panel notifikasi, menekan tombol Home, atau membuka menu sistem.'
+        'Fokus layar ujian hilang! Terdeteksi menekan tombol Home, menarik bilah notifikasi, atau berpindah aplikasi.'
       );
     };
 
@@ -279,7 +395,7 @@ export function useProctoring({
         return false;
       }
 
-      // Blok Ctrl+C / Ctrl+V / Ctrl+X
+      // Blok Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+A
       if (e.ctrlKey && ['C', 'V', 'X', 'A'].includes(e.key?.toUpperCase())) {
         e.preventDefault();
         return false;
@@ -313,10 +429,11 @@ export function useProctoring({
 
   const dismissWarning = useCallback(() => {
     setShowWarningModal(false);
+    stopAlarmSirene();
     if (!document.fullscreenElement && enabled && !isLockedRef.current) {
       requestFullscreen();
     }
-  }, [enabled, requestFullscreen]);
+  }, [enabled, requestFullscreen, stopAlarmSirene]);
 
   // 8. Buka Kunci Pengawas (Supervisor PIN Unlock)
   const unlockSession = useCallback(
@@ -341,6 +458,9 @@ export function useProctoring({
       ].filter(Boolean));
 
       if (validPins.has(cleanPin)) {
+        // Matikan suara sirene alarm
+        stopAlarmSirene();
+
         setIsLocked(false);
         isLockedRef.current = false;
         setViolationCount(0);
@@ -366,7 +486,7 @@ export function useProctoring({
         message: 'PIN Pengawas tidak cocok! Hubungi Bapak/Ibu Pengawas di kelas.',
       };
     },
-    [requestFullscreen, requestWakeLock]
+    [requestFullscreen, requestWakeLock, stopAlarmSirene]
   );
 
   return {
@@ -375,15 +495,19 @@ export function useProctoring({
     violationList,
     isLocked,
     isFullscreen,
+    hasUserInteracted,
     showWarningModal,
     lastWarningMsg,
     warningMessage: lastWarningMsg, // alias kompatibilitas
     wakeLockActive,
     requestFullscreen,
     requestWakeLock,
+    playAlarmSirene,
+    stopAlarmSirene,
     dismissWarning,
     unlockSession,
     resetViolations: () => {
+      stopAlarmSirene();
       setViolationCount(0);
       setIsLocked(false);
       isLockedRef.current = false;

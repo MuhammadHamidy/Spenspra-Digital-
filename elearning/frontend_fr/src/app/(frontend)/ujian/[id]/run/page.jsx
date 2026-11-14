@@ -19,6 +19,7 @@ export default function CBTExamRunnerPage({ params }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [hasStartedExam, setHasStartedExam] = useState(false);
 
   // Answers & Doubtful states
   const [answers, setAnswers] = useState({});
@@ -115,12 +116,15 @@ export default function CBTExamRunnerPage({ params }) {
   const {
     violationsCount,
     isLocked,
+    isFullscreen,
     showWarningModal,
     warningMessage,
     dismissWarning,
     requestFullscreen,
     unlockSession,
     wakeLockActive,
+    playAlarmSirene,
+    stopAlarmSirene,
   } = useProctoring({
     examId,
     maxViolations: 1, // Solusi 2: Zero-Tolerance (1x pelanggaran langsung terkunci)
@@ -449,6 +453,54 @@ export default function CBTExamRunnerPage({ params }) {
 
   return (
     <div className="min-h-screen bg-neutral-100 flex flex-col select-none relative font-sans">
+
+      {/* GERBANG MASUK MODE UJIAN (USER GESTURE UNTUK FULLSCREEN & AUDIO ALARM DI HP) */}
+      {!hasStartedExam && !finishResult && (
+        <div className="fixed inset-0 z-50 bg-neutral-950/90 backdrop-blur-md flex items-center justify-center p-4 select-none">
+          <div className="max-w-md w-full bg-white rounded-2xl p-6 sm:p-8 text-center space-y-5 shadow-2xl border border-neutral-200 animate-in zoom-in-95">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#F2C94C] to-[#E8A020] text-neutral-950 mx-auto flex items-center justify-center text-3xl font-black shadow-md">
+              CBT
+            </div>
+
+            <div className="space-y-1.5">
+              <h2 className="text-xl font-black text-neutral-900 tracking-tight">
+                Ruang Ujian Online CBT Spenspra
+              </h2>
+              <p className="text-xs text-neutral-600 leading-relaxed">
+                {exam?.title} ({exam?.subject || 'Mata Pelajaran'})
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-left text-xs space-y-2 text-amber-950">
+              <p className="font-bold flex items-center gap-1.5 text-amber-900">
+                <span>🛡️</span>
+                <span>Protokol Pengawasan Anti-Cheat Aktif:</span>
+              </p>
+              <ul className="list-disc pl-4 space-y-1 text-[11px] text-amber-800 leading-relaxed">
+                <li>Layar perangkat Anda akan dikunci ke <strong>Mode Layar Penuh (Fullscreen)</strong>.</li>
+                <li><strong>Sirene alarm darurat</strong> akan berbunyi otomatis dan lembar ujian terkunci jika menekan tombol <strong>Home</strong>, menarik status bar notifikasi, atau berpindah aplikasi.</li>
+                <li>Jika terkunci, hanya <strong>Pengawas Ruangan</strong> yang dapat membukanya kembali dengan PIN Pengawas.</li>
+              </ul>
+            </div>
+
+            <Button
+              variant="accent"
+              size="lg"
+              className="w-full font-bold shadow-md min-h-[48px] text-sm bg-gradient-to-r from-[#F2C94C] to-[#E8A020] hover:brightness-105 text-neutral-950"
+              onClick={() => {
+                requestFullscreen();
+                setHasStartedExam(true);
+              }}
+            >
+              🔒 Kunci Layar Penuh & Mulai Ujian
+            </Button>
+
+            <p className="text-[11px] text-neutral-400">
+              Durasi pengerjaan: {exam?.durationMinutes || 90} menit • Total {totalQuestions} soal
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* 1. ACCENT HEADER (Referensi: Yellow Gradient + Exam Info) */}
       <header className="bg-gradient-to-r from-[#F2C94C] to-[#E8A020] px-4 sm:px-6 py-4 relative overflow-hidden sticky top-0 z-30 shadow-md">
@@ -809,22 +861,22 @@ export default function CBTExamRunnerPage({ params }) {
       {isLocked && (
         <div className="fixed inset-0 z-50 bg-neutral-950/95 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 select-none overflow-y-auto">
           <div className="max-w-md w-full max-h-[92dvh] flex flex-col my-auto bg-white rounded-xl sm:rounded-2xl p-4 sm:p-7 text-center space-y-4 sm:space-y-5 shadow-2xl border-2 border-danger-500 animate-in zoom-in-95 overflow-y-auto">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-danger-100 text-danger-600 mx-auto flex items-center justify-center shadow-inner shrink-0">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-danger-100 text-danger-600 mx-auto flex items-center justify-center shadow-inner shrink-0 animate-bounce">
               <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
             </div>
 
-            <div className="space-y-1.5">
-              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-danger-100 text-danger-800 text-[11px] font-bold uppercase tracking-wider">
-                <span className="w-2 h-2 rounded-full bg-danger-600 animate-ping"></span>
-                <span>Anti-Cheat Terkunci</span>
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-100 text-red-800 text-[11px] font-bold uppercase tracking-wider border border-red-300 animate-pulse">
+                <span className="w-2 h-2 rounded-full bg-red-600 animate-ping"></span>
+                <span>🔊 ALARM & SIRENE AKTIF!</span>
               </div>
               <h3 className="text-xl font-black text-neutral-900 tracking-tight">
                 Lembar Ujian Terkunci!
               </h3>
               <p className="text-xs text-neutral-600 leading-relaxed">
-                {warningMessage || 'Terdeteksi menarik panel notifikasi HP, menekan tombol Home, berpindah tab, atau keluar dari peramban ujian.'}
+                {warningMessage || 'Terdeteksi menekan tombol Home, menarik panel notifikasi HP, berpindah tab, atau keluar dari peramban ujian.'}
               </p>
             </div>
 
@@ -836,7 +888,7 @@ export default function CBTExamRunnerPage({ params }) {
                   <span>Petunjuk Pengawas Ruangan:</span>
                 </p>
                 <p className="text-amber-800 leading-relaxed">
-                  Masukkan PIN Pengawas atau Token Ujian di bawah ini untuk memverifikasi dan membuka kembali lembar ujian siswa.
+                  Sirene darurat sedang berbunyi. Masukkan <strong>PIN Pengawas</strong> atau <strong>Token Ujian</strong> di bawah ini untuk menghentikan sirene dan membuka kembali lembar ujian siswa.
                 </p>
               </div>
 
@@ -867,7 +919,7 @@ export default function CBTExamRunnerPage({ params }) {
                 loading={isUnlocking}
                 className="w-full font-bold shadow-xs min-h-[44px]"
               >
-                🔓 Buka Kunci Lembar Ujian
+                🔓 Matikan Alarm & Buka Kunci Ujian
               </Button>
             </form>
           </div>
