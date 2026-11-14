@@ -1,0 +1,100 @@
+services:
+  sso-local-admin-seeder:
+    image: postgres:15-alpine
+    container_name: spenspra-sso-local-admin-seeder
+    profiles: ["seed"]
+    volumes:
+      - ./sso/backend_fr/sso/seeders/seed_local_admins.sql:/seeders/seed_local_admins.sql:ro
+    command:
+      - "sh"
+      - "-c"
+      - "psql -h postgres -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -v ON_ERROR_STOP=1 -f /seeders/seed_local_admins.sql"
+    environment:
+      POSTGRES_USER: ${DB_USER:-user}
+      POSTGRES_DB: ${SSO_DB_NAME:-presdig_sso}
+      PGPASSWORD: ${DB_PASSWORD:-change-me}
+    depends_on:
+      sso-migrate:
+        condition: service_completed_successfully
+    networks: [spenspra]
+
+  sso-api:
+    ports:
+      - "${SSO_API_PORT:-8080}:8080"
+
+  sso-frontend:
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: ${SSO_PUBLIC_API_URL:-http://localhost:8080/api}
+        NEXT_PUBLIC_RAPOR_API_URL: ${RAPOR_PUBLIC_API_URL:-http://localhost:8082/api}
+        NEXT_PUBLIC_PERPUS_API_URL: ${PERPUS_PUBLIC_API_URL:-http://localhost:8083/api}
+        NEXT_PUBLIC_ELEARNING_API_URL: ${ELEARNING_PUBLIC_API_URL:-http://localhost:8084/api}
+        NEXT_PUBLIC_RAPOR_URL: ${RAPOR_PUBLIC_URL:-http://localhost:3001}
+        NEXT_PUBLIC_PERPUS_URL: ${PERPUS_PUBLIC_URL:-http://localhost:3002}
+        NEXT_PUBLIC_ELEARNING_URL: ${ELEARNING_PUBLIC_URL:-http://localhost:3004}
+    environment:
+      NEXT_PUBLIC_API_URL: ${SSO_PUBLIC_API_URL:-http://localhost:8080/api}
+      NEXT_PUBLIC_RAPOR_API_URL: ${RAPOR_PUBLIC_API_URL:-http://localhost:8082/api}
+      NEXT_PUBLIC_PERPUS_API_URL: ${PERPUS_PUBLIC_API_URL:-http://localhost:8083/api}
+      NEXT_PUBLIC_ELEARNING_API_URL: ${ELEARNING_PUBLIC_API_URL:-http://localhost:8084/api}
+      NEXT_PUBLIC_RAPOR_URL: ${RAPOR_PUBLIC_URL:-http://localhost:3001}
+      NEXT_PUBLIC_PERPUS_URL: ${PERPUS_PUBLIC_URL:-http://localhost:3002}
+      NEXT_PUBLIC_ELEARNING_URL: ${ELEARNING_PUBLIC_URL:-http://localhost:3004}
+      APP_PORTAL_URL: ${APP_PORTAL_URL:-http://localhost:3000/login}
+    ports:
+      - "${SSO_PORT:-3000}:3000"
+
+  rapor-api:
+    ports:
+      - "${RAPOR_API_PORT:-8082}:8080"
+
+  rapor-frontend:
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: ${RAPOR_PUBLIC_API_URL:-http://localhost:8082/api}
+        NEXT_PUBLIC_SSO_LOGIN_URL: ${SSO_LOGIN_URL:-http://localhost:3000/login}
+        NEXT_PUBLIC_RAPOR_URL: ${RAPOR_PUBLIC_URL:-http://localhost:3001}
+    environment:
+      NEXT_PUBLIC_API_URL: ${RAPOR_PUBLIC_API_URL:-http://localhost:8082/api}
+      NEXT_PUBLIC_SSO_LOGIN_URL: ${SSO_LOGIN_URL:-http://localhost:3000/login}
+      NEXT_PUBLIC_RAPOR_URL: ${RAPOR_PUBLIC_URL:-http://localhost:3001}
+    ports:
+      - "${RAPOR_PORT:-3001}:3000"
+
+  perpus-api:
+    ports:
+      - "${PERPUS_API_PORT:-8083}:8080"
+
+  perpus-frontend:
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: ${PERPUS_PUBLIC_API_URL:-http://localhost:8083/api}
+        NEXT_PUBLIC_SSO_LOGIN_URL: ${SSO_LOGIN_URL:-http://localhost:3000/login}
+        NEXT_PUBLIC_PERPUS_URL: ${PERPUS_PUBLIC_URL:-http://localhost:3002}
+    environment:
+      NEXT_PUBLIC_API_URL: ${PERPUS_PUBLIC_API_URL:-http://localhost:8083/api}
+      NEXT_PUBLIC_SSO_LOGIN_URL: ${SSO_LOGIN_URL:-http://localhost:3000/login}
+      NEXT_PUBLIC_PERPUS_URL: ${PERPUS_PUBLIC_URL:-http://localhost:3002}
+    ports:
+      - "${PERPUS_PORT:-3002}:3000"
+
+  elearning-api:
+    ports:
+      - "${ELEARNING_API_PORT:-8084}:8080"
+
+  elearning-frontend:
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: ${ELEARNING_PUBLIC_API_URL:-http://localhost:8084/api}
+        NEXT_PUBLIC_SSO_LOGIN_URL: ${SSO_LOGIN_URL:-http://localhost:3000/login}
+        NEXT_PUBLIC_ELEARNING_URL: ${ELEARNING_PUBLIC_URL:-http://localhost:3004}
+    environment:
+      NEXT_PUBLIC_API_URL: ${ELEARNING_PUBLIC_API_URL:-http://localhost:8084/api}
+      NEXT_PUBLIC_SSO_LOGIN_URL: ${SSO_LOGIN_URL:-http://localhost:3000/login}
+      NEXT_PUBLIC_ELEARNING_URL: ${ELEARNING_PUBLIC_URL:-http://localhost:3004}
+    ports:
+      - "${ELEARNING_PORT:-3004}:3000"
+
+  nginx:
+    profiles:
+      - gateway

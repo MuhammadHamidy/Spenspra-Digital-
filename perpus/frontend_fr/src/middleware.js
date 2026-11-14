@@ -84,7 +84,6 @@ export function middleware(request) {
   // Lindungi halaman administrasi pustakawan agar siswa diarahkan ke beranda siswa
   const isLibrarianAdminPath =
     pathname.startsWith('/pustakawan') ||
-    pathname.startsWith('/pustakwan') ||
     pathname.startsWith('/circulation') ||
     pathname.startsWith('/members') ||
     pathname.startsWith('/faces') ||
@@ -96,6 +95,13 @@ export function middleware(request) {
 
   // Siswa tidak boleh masuk ke panel admin pustakawan
   if (userRole === 'SISWA' && (isLibrarianAdminPath || isReadingInsights)) {
+    return NextResponse.redirect(new URL('/', request.url));
+  }
+
+  if (
+    isReadingInsights &&
+    !['GURU', 'WALI_KELAS', 'PUSTAKAWAN', 'ADMIN', 'ADMIN_PERPUS', 'SUPER_ADMIN'].includes(userRole)
+  ) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 

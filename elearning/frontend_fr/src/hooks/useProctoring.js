@@ -29,6 +29,8 @@ export function useProctoring({
   const [wakeLockActive, setWakeLockActive] = useState(false);
 
   const wakeLockRef = useRef(null);
+  const hasEnteredFullscreenRef = useRef(false);
+  const lastViolationRef = useRef({ type: '', at: 0 });
   const isEnabledRef = useRef(enabled);
   isEnabledRef.current = enabled;
   const isLockedRef = useRef(isLocked);
@@ -97,6 +99,9 @@ export function useProctoring({
 
       const now = new Date();
       const timeStr = now.toLocaleTimeString('id-ID');
+      const lastViolation = lastViolationRef.current;
+      if (lastViolation.type === type && now.getTime() - lastViolation.at < 1500) return;
+      lastViolationRef.current = { type, at: now.getTime() };
 
       // Getar perangkat HP jika didukung (haptic warning)
       if (typeof window !== 'undefined' && 'navigator' in window && navigator.vibrate) {
@@ -110,6 +115,12 @@ export function useProctoring({
         const entry = {
           type,
           message,
+          details: JSON.stringify({
+            visibilityState: typeof document !== 'undefined' ? document.visibilityState : 'unknown',
+            userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+            platform: typeof navigator !== 'undefined' ? navigator.platform : 'unknown',
+            screen: typeof window !== 'undefined' ? `${window.innerWidth}x${window.innerHeight}` : 'unknown',
+          }),
           time: timeStr,
           timestamp: now.toISOString(),
           count: newCount,
@@ -208,7 +219,9 @@ export function useProctoring({
         document.msFullscreenElement
       );
       setIsFullscreen(active);
-      if (!active && isEnabledRef.current && !isLockedRef.current) {
+      if (active) {
+        hasEnteredFullscreenRef.current = true;
+      } else if (hasEnteredFullscreenRef.current && isEnabledRef.current && !isLockedRef.current) {
         triggerViolation(
           'FULLSCREEN_EXIT',
           'Terdeteksi keluar dari mode Layar Penuh (Fullscreen).'
@@ -273,11 +286,20 @@ export function useProctoring({
       }
     };
 
+    const handlePageHide = () => {
+      if (!document.hidden) return;
+      triggerViolation(
+        'PAGE_HIDE',
+        'Halaman ujian ditinggalkan atau aplikasi dipindahkan ke latar belakang.'
+      );
+    };
+
     document.addEventListener('contextmenu', handleContextMenu);
     document.addEventListener('copy', handleCopyPaste);
     document.addEventListener('cut', handleCopyPaste);
     document.addEventListener('paste', handleCopyPaste);
     document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('pagehide', handlePageHide);
 
     return () => {
       document.removeEventListener('contextmenu', handleContextMenu);
@@ -285,6 +307,7 @@ export function useProctoring({
       document.removeEventListener('cut', handleCopyPaste);
       document.removeEventListener('paste', handleCopyPaste);
       document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('pagehide', handlePageHide);
     };
   }, [enabled, triggerViolation]);
 

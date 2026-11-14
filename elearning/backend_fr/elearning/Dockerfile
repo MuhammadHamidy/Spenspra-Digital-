@@ -2,6 +2,7 @@
 FROM golang:1.25-alpine AS builder
 
 WORKDIR /build
+ENV GOPROXY=https://proxy.golang.org,direct
 
 RUN apk add --no-cache git
 
@@ -12,7 +13,7 @@ COPY elearning/ ./elearning/
 WORKDIR /build/elearning
 
 RUN [ -f config/config.json ] || cp config/config.example.json config/config.json
-RUN go mod download
+RUN for attempt in 1 2 3 4 5; do go mod download && exit 0; echo "Go dependency download failed (attempt $attempt/5); retrying..." >&2; sleep 5; done; exit 1
 
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags "-X github.com/rapor/rapor-be/elearning/version.Version=docker" \

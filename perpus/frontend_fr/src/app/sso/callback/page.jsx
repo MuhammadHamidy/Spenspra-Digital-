@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { tokenStorage } from '@/lib/common/tokenStorage';
+import { berandaApi } from '@/lib/features/beranda/berandaApi';
 
 function SSOCallbackContent() {
   const router = useRouter();
@@ -10,88 +11,106 @@ function SSOCallbackContent() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    try {
-      const accessToken = searchParams.get('access_token');
-      const institutionId = searchParams.get('institution_id') || 'smpn1prambon';
-      const encodedUser = searchParams.get('user');
+    const completeAuthentication = async () => {
+      try {
+        const accessToken = searchParams.get('access_token');
+        const institutionId = searchParams.get('institution_id') || 'smpn1prambon';
+        const encodedUser = searchParams.get('user');
 
-      if (!accessToken) {
-        setError('Callback SSO tidak lengkap. Token autentikasi wajib dikirim.');
-        return;
-      }
+        if (!accessToken) {
+          setError('Callback SSO tidak lengkap. Token autentikasi wajib dikirim.');
+          return;
+        }
 
-      let user = { id: searchParams.get('sub') || '', roleName: 'SISWA' };
-      if (encodedUser) {
-        try {
-          const normalized = encodedUser.replace(/ /g, '+');
-          const decoded = decodeURIComponent(escape(atob(normalized)));
-          user = { ...user, ...JSON.parse(decoded) };
-        } catch {
+        let user = { id: searchParams.get('sub') || '', roleName: 'SISWA' };
+        if (encodedUser) {
           try {
             const normalized = encodedUser.replace(/ /g, '+');
-            user = { ...user, ...JSON.parse(atob(normalized)) };
-          } catch (e) {
-            console.warn('Gagal membaca data pengguna dari SSO callback:', e);
+            const decoded = decodeURIComponent(escape(atob(normalized)));
+            user = { ...user, ...JSON.parse(decoded) };
+          } catch {
+            try {
+              const normalized = encodedUser.replace(/ /g, '+');
+              user = { ...user, ...JSON.parse(atob(normalized)) };
+            } catch (e) {
+              console.warn('Gagal membaca data pengguna dari SSO callback:', e);
+            }
           }
         }
-      }
 
-      // Pastikan field nama, peran, dan kelas_atau_jabatan tersedia untuk beranda perpustakaan
-      if (!user.nama) user.nama = user.fullName || user.full_name || user.username || 'Pengguna Spenspra';
-      if (!user.peran) user.peran = user.roleName || 'SISWA';
-      if (!user.kelas_atau_jabatan) user.kelas_atau_jabatan = user.className || user.kelas || 'Peserta Didik';
+        // Store the token before asking the backend to verify the session.
+        tokenStorage.setToken(accessToken);
+        tokenStorage.setInstitutionId(institutionId);
 
-      try {
-        if (tokenStorage && typeof tokenStorage.setToken === 'function') {
-          tokenStorage.setToken(accessToken);
+        // The callback payload is only bootstrap data. The signed token/session is authoritative.
+        try {
+          const verifiedUser = await berandaApi.getSession();
+          if (verifiedUser) {
+            user = { ...user, ...verifiedUser };
+          }
+        } catch (sessionError) {
+          console.error('Sesi SSO tidak dapat diverifikasi:', sessionError);
+          setError('Sesi SSO tidak valid atau sudah kedaluwarsa. Silakan login kembali.');
+          return;
         }
-        if (tokenStorage && typeof tokenStorage.setInstitutionId === 'function') {
-          tokenStorage.setInstitutionId(institutionId);
-        }
-        if (tokenStorage && typeof tokenStorage.setUser === 'function') {
-          tokenStorage.setUser(user);
-        }
-      } catch (err) {
-        console.warn('Gagal memanggil tokenStorage helper:', err);
-      }
 
-      // Fallback cadangan langsung ke storage browser
-      try {
-        localStorage.setItem('perpusdig_auth_token', accessToken);
-        sessionStorage.setItem('perpusdig_auth_token', accessToken);
-        localStorage.setItem('access_token', accessToken);
-        sessionStorage.setItem('access_token', accessToken);
-        localStorage.setItem('perpusdig_auth_user', JSON.stringify(user));
-        sessionStorage.setItem('perpusdig_auth_user', JSON.stringify(user));
-      } catch (e) {}
+        // Pastikan field nama, peran, dan kelas_atau_jabatan tersedia untuk beranda perpustakaan
+        if (!user.nama)
+          user.nama = user.fullName || user.full_name || user.username || 'Pengguna Spenspra';
+        if (!user.peran) user.peran = user.roleName || 'SISWA';
+        if (!user.kelas_atau_jabatan)
+          user.kelas_atau_jabatan = user.className || user.kelas || 'Peserta Didik';
 
-      let destination = searchParams.get('redirect');
-      const roleUpper = (user.roleName || user.peran || user.role || '').toUpperCase();
-      
-      if (!destination || destination === '/sso/callback') {
-        if (roleUpper === 'ADMIN_PERPUS' || roleUpper === 'PUSTAKAWAN' || roleUpper === 'SUPER_ADMIN') {
-          destination = '/pustakawan';
-        } else {
+        tokenStorage.setUser(user);
+
+        // Fallback cadangan langsung ke storage browser
+        try {
+          localStorage.setItem('perpusdig_auth_token', accessToken);
+          sessionStorage.setItem('perpusdig_auth_token', accessToken);
+          localStorage.setItem('access_token', accessToken);
+          sessionStorage.setItem('access_token', accessToken);
+          localStorage.setItem('perpusdig_auth_user', JSON.stringify(user));
+          sessionStorage.setItem('perpusdig_auth_user', JSON.stringify(user));
+        } catch (e) {}
+
+        let destination = searchParams.get('redirect');
+        const roleUpper = (user.roleName || user.peran || user.role || '').toUpperCase();
+
+        if (!destination || destination === '/sso/callback') {
+          if (
+            roleUpper === 'ADMIN' ||
+            roleUpper === 'ADMIN_PERPUS' ||
+            roleUpper === 'PUSTAKAWAN' ||
+            roleUpper === 'SUPER_ADMIN'
+          ) {
+            destination = '/pustakawan';
+          } else {
+            destination = '/';
+          }
+        }
+
+        // Siswa dan Guru (selain Admin Perpus/Pustakawan/Super Admin) diarahkan ke beranda utama
+        if (
+          (roleUpper === 'SISWA' || roleUpper === 'GURU') &&
+          roleUpper !== 'ADMIN' &&
+          roleUpper !== 'ADMIN_PERPUS' &&
+          roleUpper !== 'PUSTAKAWAN' &&
+          roleUpper !== 'SUPER_ADMIN' &&
+          destination.startsWith('/pustakawan')
+        ) {
           destination = '/';
         }
-      }
 
-      // Siswa dan Guru (selain Admin Perpus/Pustakawan/Super Admin) diarahkan ke beranda utama
-      if (
-        (roleUpper === 'SISWA' || roleUpper === 'GURU') &&
-        roleUpper !== 'ADMIN_PERPUS' &&
-        roleUpper !== 'PUSTAKAWAN' &&
-        roleUpper !== 'SUPER_ADMIN' &&
-        destination.startsWith('/pustakawan')
-      ) {
-        destination = '/';
+        window.location.href = destination;
+      } catch (err) {
+        console.error('Error saat memproses SSO callback:', err);
+        setError(
+          'Terjadi kendala saat menyelesaikan login: ' + (err?.message || 'Gagal autentikasi')
+        );
       }
+    };
 
-      window.location.href = destination;
-    } catch (err) {
-      console.error('Error saat memproses SSO callback:', err);
-      setError('Terjadi kendala saat menyelesaikan login: ' + (err?.message || 'Gagal autentikasi'));
-    }
+    completeAuthentication();
   }, [router, searchParams]);
 
   if (error) {
@@ -100,7 +119,12 @@ function SSOCallbackContent() {
         <div className="max-w-md w-full bg-white p-6 rounded-2xl border border-red-200 shadow-sm text-center">
           <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-3">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
             </svg>
           </div>
           <h3 className="text-sm font-bold text-slate-800 mb-1">Gagal Menyelesaikan Autentikasi</h3>
@@ -109,9 +133,10 @@ function SSOCallbackContent() {
             href={
               typeof window !== 'undefined' && window.location.hostname.includes('spenspra.com')
                 ? 'https://sso.spenspra.com/login'
-                : typeof window !== 'undefined' && window.location.hostname.includes('spenspra.sch.id')
-                ? 'https://sso.spenspra.sch.id/login'
-                : (process.env.NEXT_PUBLIC_SSO_LOGIN_URL || 'http://sso.localhost/login')
+                : typeof window !== 'undefined' &&
+                    window.location.hostname.includes('spenspra.sch.id')
+                  ? 'https://sso.spenspra.sch.id/login'
+                  : process.env.NEXT_PUBLIC_SSO_LOGIN_URL || 'http://sso.localhost/login'
             }
             className="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
           >
@@ -127,7 +152,9 @@ function SSOCallbackContent() {
       <div className="flex flex-col items-center gap-3">
         <div className="w-9 h-9 border-3 border-[#4B3B78] border-t-transparent rounded-full animate-spin"></div>
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-slate-800">Menyelesaikan autentikasi Perpustakaan Digital...</p>
+          <p className="text-sm font-semibold text-slate-800">
+            Menyelesaikan autentikasi Perpustakaan Digital...
+          </p>
           <p className="text-xs text-slate-400">Mohon tunggu sebentar, Anda sedang dialihkan.</p>
         </div>
       </div>
@@ -143,8 +170,12 @@ export default function SSOCallbackPage() {
           <div className="flex flex-col items-center gap-3">
             <div className="w-9 h-9 border-3 border-[#4B3B78] border-t-transparent rounded-full animate-spin"></div>
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-slate-800">Menyelesaikan autentikasi Perpustakaan Digital...</p>
-              <p className="text-xs text-slate-400">Mohon tunggu sebentar, Anda sedang dialihkan.</p>
+              <p className="text-sm font-semibold text-slate-800">
+                Menyelesaikan autentikasi Perpustakaan Digital...
+              </p>
+              <p className="text-xs text-slate-400">
+                Mohon tunggu sebentar, Anda sedang dialihkan.
+              </p>
             </div>
           </div>
         </div>

@@ -212,7 +212,13 @@ export const tokenStorage = {
           const matchId = !jwtUser.id || !parsed.id || String(jwtUser.id) === String(parsed.id);
           const matchUsername = !jwtUser.username || !parsed.username || String(jwtUser.username).toLowerCase() === String(parsed.username).toLowerCase();
           if (matchId && matchUsername) {
-            return parsed;
+            return {
+              ...parsed,
+              role: jwtUser.role,
+              roleName: jwtUser.roleName,
+              role_name: jwtUser.role_name,
+              peran: jwtUser.peran,
+            };
           }
           // Identity mismatch: purge and use jwtUser
         } else if (parsed && (parsed.id || parsed.username || parsed.fullName || parsed.full_name)) {

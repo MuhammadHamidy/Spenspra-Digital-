@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 
 export function middleware(request) {
   const { pathname } = request.nextUrl;
-  if (pathname === '/login') {
+  // Portal aplikasi harus dapat dilihat publik sebelum autentikasi.
+  if (pathname === '/' || pathname === '/login') {
     return NextResponse.next();
   }
 

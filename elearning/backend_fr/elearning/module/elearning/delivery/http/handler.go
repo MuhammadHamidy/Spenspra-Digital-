@@ -14,6 +14,33 @@ type ELearningHandler struct {
 	useCase domain.UseCase
 }
 
+func actorID(c *fiber.Ctx) string {
+	return strings.TrimSpace(c.Get("X-User-Id"))
+}
+
+func actorRole(c *fiber.Ctx) string {
+	return strings.ToUpper(strings.TrimSpace(c.Get("X-User-Role")))
+}
+
+func canManageAll(role string) bool {
+	return role == "ADMIN" || role == "SUPER_ADMIN" || role == "ADMIN_ELEARNING"
+}
+
+func (h *ELearningHandler) requireExamOwner(c *fiber.Ctx, exam *domain.CBTExam) *fiber.Error {
+	role := actorRole(c)
+	if canManageAll(role) {
+		return nil
+	}
+	if role != "GURU" {
+		return fiber.NewError(http.StatusForbidden, "hanya guru pengampu yang dapat mengelola ujian")
+	}
+	userID := actorID(c)
+	if userID == "" || exam.TeacherID == "" || exam.TeacherID != userID {
+		return fiber.NewError(http.StatusForbidden, "ujian hanya dapat dikelola oleh guru pembuatnya")
+	}
+	return nil
+}
+
 func NewELearningHandler(useCase domain.UseCase) *ELearningHandler {
 	return &ELearningHandler{useCase: useCase}
 }
@@ -53,7 +80,6 @@ func (h *ELearningHandler) RegisterRoutes(app *fiber.App) {
 	api.Post("/sessions/:id/unlock", h.UnlockStudent)
 	api.Post("/sessions/:id/finish", h.FinishStudentExam)
 	api.Get("/exams/:id/monitoring", h.GetLiveProctoring)
-
 
 }
 
@@ -341,6 +367,15 @@ func (h *ELearningHandler) ListExams(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
 	}
+	if actorRole(c) == "GURU" && actorID(c) != "" {
+		filtered := list[:0]
+		for _, exam := range list {
+			if exam.TeacherID == actorID(c) {
+				filtered = append(filtered, exam)
+			}
+		}
+		list = filtered
+	}
 	formatted := make([]fiber.Map, len(list))
 	for i, ex := range list {
 		formatted[i] = formatExamForFrontend(ex)
@@ -378,12 +413,17 @@ func (h *ELearningHandler) CreateExam(c *fiber.Ctx) error {
 			req.TeacherName = "Bapak/Ibu Guru"
 		}
 	}
-	if req.TeacherID == "" {
-		if uID := c.Get("X-User-Id"); strings.TrimSpace(uID) != "" {
-			req.TeacherID = strings.TrimSpace(uID)
-		} else {
-			req.TeacherID = "guru-default"
+	if actorRole(c) == "GURU" {
+		if userID := actorID(c); userID != "" {
+			req.TeacherID = userID
 		}
+	} else if req.TeacherID == "" {
+		if userID := actorID(c); userID != "" {
+			req.TeacherID = userID
+		}
+	}
+	if req.TeacherID == "" {
+		return c.Status(http.StatusUnauthorized).JSON(responses.Fail("AUTH_ERROR", "identitas guru wajib tersedia"))
 	}
 
 	if err := h.useCase.AddExam(c.Context(), &req); err != nil {
@@ -397,6 +437,9 @@ func (h *ELearningHandler) UpdateExam(c *fiber.Ctx) error {
 	existing, err := h.useCase.GetExamDetail(c.Context(), id)
 	if err != nil {
 		return c.Status(http.StatusNotFound).JSON(responses.Fail("NOT_FOUND", "Ujian tidak ditemukan"))
+	}
+	if err := h.requireExamOwner(c, existing); err != nil {
+		return c.Status(err.Code).JSON(responses.Fail("FORBIDDEN", err.Message))
 	}
 
 	var input CBTExamInput
@@ -451,8 +494,11 @@ func (h *ELearningHandler) UpdateExam(c *fiber.Ctx) error {
 	if tID == "" {
 		tID = strings.TrimSpace(input.TeacherID)
 	}
-	if tID != "" {
+	if tID != "" && canManageAll(actorRole(c)) {
 		req.TeacherID = tID
+	}
+	if actorRole(c) == "GURU" {
+		req.TeacherID = existing.TeacherID
 	}
 
 	if tok := strings.TrimSpace(input.Token); tok != "" {
@@ -517,6 +563,13 @@ func (h *ELearningHandler) UpdateExam(c *fiber.Ctx) error {
 
 func (h *ELearningHandler) DeleteExam(c *fiber.Ctx) error {
 	id := c.Params("id")
+	existing, err := h.useCase.GetExamDetail(c.Context(), id)
+	if err != nil {
+		return c.Status(http.StatusNotFound).JSON(responses.Fail("NOT_FOUND", "ujian tidak ditemukan"))
+	}
+	if err := h.requireExamOwner(c, existing); err != nil {
+		return c.Status(err.Code).JSON(responses.Fail("FORBIDDEN", err.Message))
+	}
 	if err := h.useCase.DeleteExam(c.Context(), id); err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
 	}
@@ -681,14 +734,23 @@ func formatQuestionForFrontend(q domain.CBTQuestion) fiber.Map {
 		"correct_answer":  q.CorrectAnswer,
 		"points":          q.ScoreWeight,
 		"score_weight":    q.ScoreWeight,
-		"created_at":       q.CreatedAt,
+		"created_at":      q.CreatedAt,
 	}
 }
 
 func (h *ELearningHandler) GetExamQuestions(c *fiber.Ctx) error {
 	id := c.Params("id")
-	role := c.Get("X-User-Role")
+	role := actorRole(c)
 	isTeacher := role == "GURU" || role == "ADMIN" || role == "SUPER_ADMIN"
+	if isTeacher {
+		exam, err := h.useCase.GetExamDetail(c.Context(), id)
+		if err != nil {
+			return c.Status(http.StatusNotFound).JSON(responses.Fail("NOT_FOUND", "ujian tidak ditemukan"))
+		}
+		if err := h.requireExamOwner(c, exam); err != nil {
+			return c.Status(err.Code).JSON(responses.Fail("FORBIDDEN", err.Message))
+		}
+	}
 	questions, err := h.useCase.GetExamQuestions(c.Context(), id, isTeacher)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
@@ -704,6 +766,13 @@ func (h *ELearningHandler) GetExamQuestions(c *fiber.Ctx) error {
 
 func (h *ELearningHandler) AddExamQuestion(c *fiber.Ctx) error {
 	id := c.Params("id")
+	exam, err := h.useCase.GetExamDetail(c.Context(), id)
+	if err != nil {
+		return c.Status(http.StatusNotFound).JSON(responses.Fail("NOT_FOUND", "ujian tidak ditemukan"))
+	}
+	if err := h.requireExamOwner(c, exam); err != nil {
+		return c.Status(err.Code).JSON(responses.Fail("FORBIDDEN", err.Message))
+	}
 	var input CBTQuestionInput
 	if err := c.BodyParser(&input); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(responses.Fail("INVALID_PAYLOAD", err.Error()))
@@ -717,6 +786,13 @@ func (h *ELearningHandler) AddExamQuestion(c *fiber.Ctx) error {
 
 func (h *ELearningHandler) SaveExamQuestions(c *fiber.Ctx) error {
 	id := c.Params("id")
+	exam, err := h.useCase.GetExamDetail(c.Context(), id)
+	if err != nil {
+		return c.Status(http.StatusNotFound).JSON(responses.Fail("NOT_FOUND", "ujian tidak ditemukan"))
+	}
+	if err := h.requireExamOwner(c, exam); err != nil {
+		return c.Status(err.Code).JSON(responses.Fail("FORBIDDEN", err.Message))
+	}
 
 	// Payload can be { questions: [...] } or direct slice [...]
 	type BulkPayload struct {
@@ -753,13 +829,13 @@ func (h *ELearningHandler) SaveExamQuestions(c *fiber.Ctx) error {
 func (h *ELearningHandler) StartStudentExam(c *fiber.Ctx) error {
 	id := c.Params("id")
 	type StartReq struct {
-		Token       string `json:"token"`
-		StudentID   string `json:"student_id"`
-		StudentIdCamel string `json:"studentId"`
-		StudentName string `json:"student_name"`
+		Token            string `json:"token"`
+		StudentID        string `json:"student_id"`
+		StudentIdCamel   string `json:"studentId"`
+		StudentName      string `json:"student_name"`
 		StudentNameCamel string `json:"studentName"`
-		ClassCode   string `json:"class_code"`
-		ClassName   string `json:"className"`
+		ClassCode        string `json:"class_code"`
+		ClassName        string `json:"className"`
 	}
 	var req StartReq
 	if err := c.BodyParser(&req); err != nil {
@@ -933,7 +1009,6 @@ func (h *ELearningHandler) GetStudentAnswers(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(responses.Success(formatted, "Jawaban siswa berhasil dimuat"))
 }
 
-
 func (h *ELearningHandler) FinishStudentExam(c *fiber.Ctx) error {
 	id := c.Params("id")
 	type FinishReq struct {
@@ -979,6 +1054,13 @@ func (h *ELearningHandler) FinishStudentExam(c *fiber.Ctx) error {
 
 func (h *ELearningHandler) GetLiveProctoring(c *fiber.Ctx) error {
 	id := c.Params("id")
+	exam, err := h.useCase.GetExamDetail(c.Context(), id)
+	if err != nil {
+		return c.Status(http.StatusNotFound).JSON(responses.Fail("NOT_FOUND", "ujian tidak ditemukan"))
+	}
+	if err := h.requireExamOwner(c, exam); err != nil {
+		return c.Status(err.Code).JSON(responses.Fail("FORBIDDEN", err.Message))
+	}
 	data, err := h.useCase.GetLiveProctoring(c.Context(), id)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
@@ -1052,4 +1134,3 @@ func (h *ELearningHandler) GetLiveProctoring(c *fiber.Ctx) error {
 		"total":    len(formattedSessions),
 	}, "Data proctoring real-time dimuat"))
 }
-

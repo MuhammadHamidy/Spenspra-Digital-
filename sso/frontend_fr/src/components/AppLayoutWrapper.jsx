@@ -23,7 +23,7 @@ export default function AppLayoutWrapper({ children }) {
     logout();
   });
 
-  if (pathname === '/login') return children;
+  if (pathname === '/login' || (pathname === '/' && !user)) return children;
 
   // Untuk akun Guru dan Civitas Non-Super Admin: Tidak ada Sidebar dan tidak ada Navbar!
   if (!isSuperAdmin) {
@@ -106,4 +106,3 @@ export default function AppLayoutWrapper({ children }) {
     </div>
   );
 }
-

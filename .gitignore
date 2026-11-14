@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 !.env.docker.example
+!.env.docker.local.example
 !.example.env.*
 
 # Sensitive Keys and Certificates
@@ -47,6 +48,7 @@ Thumbs.db
 
 # Documents (jangan di-push)
 *.md
+!DOCKER_LOCAL.md
 *.pdf
 *.doc
 *.docx
