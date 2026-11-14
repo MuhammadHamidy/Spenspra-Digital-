@@ -27,12 +27,23 @@ export default function AppLayoutWrapper({ children }) {
 
   // Untuk akun Guru dan Civitas Non-Super Admin: Tidak ada Sidebar dan tidak ada Navbar!
   if (!isSuperAdmin) {
+    const isSiswa = role.includes('SISWA');
+    const roleBadge = isSiswa
+      ? 'Peserta Didik'
+      : role.includes('KEPALA')
+      ? 'Kepala Sekolah'
+      : role === 'ADMIN_PERPUS' || role === 'PUSTAKAWAN'
+      ? 'Admin Perpustakaan'
+      : role === 'ADMIN_RAPOR'
+      ? 'Admin e-Rapor'
+      : 'Pendidik';
+
     return (
-      <div className="min-h-screen bg-[#F8F9FC] text-[#172033] font-sans flex flex-col">
-        {/* Header Bersih & Minimalis Khusus Guru/Civitas Sesuai DESIGN fix.md */}
-        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-[#E5E7EB] px-6 sm:px-10 py-3 flex items-center justify-between shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-white p-1 border border-[#E5E7EB] shadow-xs flex items-center justify-center shrink-0">
+      <div className="min-h-screen bg-neutral-100 text-neutral-1000 font-sans flex flex-col">
+        {/* Header Bersih & Minimalis Khusus Civitas Sesuai Design System */}
+        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-neutral-300 px-5 sm:px-10 py-3.5 flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-3.5">
+            <div className="h-11 w-11 rounded-xl bg-white p-1 border border-neutral-300 shadow-2xs flex items-center justify-center shrink-0">
               <img
                 src="/image/new_logo_prambon.png"
                 alt="Logo SMPN 1 Prambon"
@@ -40,33 +51,45 @@ export default function AppLayoutWrapper({ children }) {
               />
             </div>
             <div>
-              <h1 className="text-sm font-bold text-[#4B3B78] leading-tight tracking-tight">
-                SMP NEGERI 1 PRAMBON
-              </h1>
-              <p className="text-[11px] font-medium text-[#667085]">
-                Portal Layanan Sekolah
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm sm:text-base font-bold text-primary-500 leading-tight tracking-tight">
+                  SMP NEGERI 1 PRAMBON
+                </h1>
+                <span className="hidden md:inline-block px-2 py-0.5 rounded-full text-[9px] font-bold bg-primary-50 text-primary-700 border border-primary-100">
+                  SSO PORTAL
+                </span>
+              </div>
+              <p className="text-[11px] font-medium text-neutral-500">
+                Pusat Layanan Ekosistem Digital Sekolah
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3.5">
             <div className="hidden sm:block text-right">
-              <p className="text-xs font-semibold text-[#172033] leading-tight">
-                {user?.fullName || user?.full_name || user?.username || 'Guru Pengampu'}
+              <p className="text-xs font-bold text-neutral-1000 leading-tight">
+                {user?.fullName || user?.full_name || user?.username || 'Civitas Sekolah'}
               </p>
-              <p className="text-[11px] text-[#667085]">
-                {user?.nimNip || user?.nip || (role === 'SUPER_ADMIN' ? 'Super Admin' : 'Guru Pengampu')}
-              </p>
+              <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                <span className="text-[10px] font-semibold text-primary-500 bg-primary-50 px-1.5 py-0.2 rounded">
+                  {roleBadge}
+                </span>
+                <span className="text-[10px] text-neutral-500 font-mono">
+                  {user?.nimNip || user?.nip || user?.nisn || 'Terverifikasi'}
+                </span>
+              </div>
             </div>
+
             <button
               type="button"
               onClick={() => setIsLogoutConfirmOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E5E7EB] bg-white text-[#C0392B] hover:bg-[#FFF9F8] hover:border-[#F1B4AC] text-xs font-semibold transition shadow-xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-danger-300/80 bg-white text-danger-500 hover:bg-danger-50 text-xs font-semibold transition shadow-2xs cursor-pointer"
+              title="Keluar dari sesi Single Sign-On"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
-              <span>Keluar</span>
+              <span>Keluar Sesi</span>
             </button>
           </div>
         </header>
@@ -74,8 +97,8 @@ export default function AppLayoutWrapper({ children }) {
         <ConfirmModal
           isOpen={isLogoutConfirmOpen}
           title="Konfirmasi Keluar Sesi"
-          message="Keluar dari sesi portal SSO SMPN 1 Prambon? Seluruh sesi aktif akan diakhiri."
-          confirmText="Ya, Keluar"
+          message="Keluar dari sesi portal SSO SMPN 1 Prambon? Seluruh sesi aktif pada layanan sekolah akan diakhiri secara aman."
+          confirmText="Ya, Keluar Sesi"
           cancelText="Batal"
           isDanger={true}
           onConfirm={logout}
@@ -83,7 +106,7 @@ export default function AppLayoutWrapper({ children }) {
         />
 
         {/* Konten Utama Terpusat */}
-        <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+        <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
           {children}
         </main>
       </div>

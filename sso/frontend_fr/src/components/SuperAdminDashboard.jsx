@@ -249,85 +249,97 @@ export default function SuperAdminDashboard() {
               </span>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3 text-xs">
-              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 flex flex-col justify-between hover:bg-slate-50 transition">
-                <div className="space-y-1.5">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+              <div className="rounded-xl border border-neutral-300 bg-white p-4.5 flex flex-col justify-between hover:border-success-500/60 hover:shadow-2xs transition">
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-900">🎓 Spenspra Belajar (LMS & CBT)</span>
-                    <span className="rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-bold px-2 py-0.5">Online</span>
+                    <span className="font-bold text-neutral-1000 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-success-500" />
+                      Spenspra Belajar
+                    </span>
+                    <span className="rounded-full bg-success-50 border border-success-200 text-success-700 text-[10px] font-bold px-2 py-0.5">Online</span>
                   </div>
-                  <p className="text-slate-600 text-[11px]">
-                    Materi digital, penugasan, dan ujian CBT dengan pengawasan anti-cheat.
+                  <p className="text-neutral-700 text-[11px] leading-relaxed">
+                    LMS, materi digital, penugasan, dan ujian CBT dengan pengawasan anti-cheat.
                   </p>
                 </div>
-                <div className="mt-3 pt-2 border-t border-slate-200/60 flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400 font-mono">Port :3004</span>
+                <div className="mt-4 pt-2.5 border-t border-neutral-200 flex items-center justify-between">
+                  <span className="text-[10px] text-neutral-400 font-mono">Port :3004</span>
                   <a
                     href={getBelajarLaunchUrl()}
-                    className="text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-0.5"
+                    className="text-xs font-bold text-success-500 hover:text-success-800 flex items-center gap-0.5 cursor-pointer"
                   >
                     Buka ↗
                   </a>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 flex flex-col justify-between hover:bg-slate-50 transition">
-                <div className="space-y-1.5">
+              <div className="rounded-xl border border-neutral-300 bg-white p-4.5 flex flex-col justify-between hover:border-primary-500/60 hover:shadow-2xs transition">
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-900">📊 e-Rapor Spenspra</span>
-                    <span className="rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-bold px-2 py-0.5">Online</span>
+                    <span className="font-bold text-neutral-1000 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-primary-500" />
+                      e-Rapor Spenspra
+                    </span>
+                    <span className="rounded-full bg-success-50 border border-success-200 text-success-700 text-[10px] font-bold px-2 py-0.5">Online</span>
                   </div>
-                  <p className="text-slate-600 text-[11px]">
-                    Kurikulum Merdeka, penilaian UTS/UAS, dan cetak rapor resmi.
+                  <p className="text-neutral-700 text-[11px] leading-relaxed">
+                    Kurikulum Merdeka, penilaian formatif & sumatif, dan cetak rapor resmi.
                   </p>
                 </div>
-                <div className="mt-3 pt-2 border-t border-slate-200/60 flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400 font-mono">Port :3001</span>
+                <div className="mt-4 pt-2.5 border-t border-neutral-200 flex items-center justify-between">
+                  <span className="text-[10px] text-neutral-400 font-mono">Port :3001</span>
                   <a
                     href={getRaporLaunchUrl()}
-                    className="text-xs font-bold text-blue-700 hover:text-blue-900 flex items-center gap-0.5"
+                    className="text-xs font-bold text-primary-500 hover:text-primary-700 flex items-center gap-0.5 cursor-pointer"
                   >
                     Buka ↗
                   </a>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 flex flex-col justify-between hover:bg-slate-50 transition">
-                <div className="space-y-1.5">
+              <div className="rounded-xl border border-neutral-300 bg-white p-4.5 flex flex-col justify-between hover:border-secondary-500/60 hover:shadow-2xs transition">
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-900">📚 Perpustakaan Digital</span>
-                    <span className="rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-bold px-2 py-0.5">Online</span>
+                    <span className="font-bold text-neutral-1000 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-secondary-500" />
+                      e-Perpustakaan
+                    </span>
+                    <span className="rounded-full bg-success-50 border border-success-200 text-success-700 text-[10px] font-bold px-2 py-0.5">Online</span>
                   </div>
-                  <p className="text-slate-600 text-[11px]">
-                    Katalog koleksi pustaka & sirkulasi peminjaman barcode siswa.
+                  <p className="text-neutral-700 text-[11px] leading-relaxed">
+                    Katalog koleksi pustaka & sirkulasi peminjaman barcode RFID siswa.
                   </p>
                 </div>
-                <div className="mt-3 pt-2 border-t border-slate-200/60 flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400 font-mono">Port :3002</span>
+                <div className="mt-4 pt-2.5 border-t border-neutral-200 flex items-center justify-between">
+                  <span className="text-[10px] text-neutral-400 font-mono">Port :3002</span>
                   <a
                     href={getPerpusLaunchUrl()}
-                    className="text-xs font-bold text-blue-700 hover:text-blue-900 flex items-center gap-0.5"
+                    className="text-xs font-bold text-secondary-500 hover:text-secondary-700 flex items-center gap-0.5 cursor-pointer"
                   >
                     Buka ↗
                   </a>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 flex flex-col justify-between hover:bg-slate-50 transition">
-                <div className="space-y-1.5">
+              <div className="rounded-xl border border-neutral-300 bg-white p-4.5 flex flex-col justify-between hover:border-accent-500/60 hover:shadow-2xs transition">
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-900">📱 Absensi Barcode</span>
-                    <span className="rounded-full bg-blue-100 text-blue-700 text-[9px] font-bold px-2 py-0.5">Terintegrasi</span>
+                    <span className="font-bold text-neutral-1000 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-accent-500" />
+                      Presensi QR
+                    </span>
+                    <span className="rounded-full bg-accent-50 border border-accent-300 text-neutral-800 text-[10px] font-bold px-2 py-0.5">Terintegrasi</span>
                   </div>
-                  <p className="text-slate-600 text-[11px]">
+                  <p className="text-neutral-700 text-[11px] leading-relaxed">
                     Scan kartu QR/barcode siswa untuk absensi kelas dan kehadiran.
                   </p>
                 </div>
-                <div className="mt-3 pt-2 border-t border-slate-200/60 flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400 font-mono">Token Engine</span>
+                <div className="mt-4 pt-2.5 border-t border-neutral-200 flex items-center justify-between">
+                  <span className="text-[10px] text-neutral-400 font-mono">Token Engine</span>
                   <Link
                     href="/students"
-                    className="text-xs font-bold text-blue-700 hover:text-blue-900 flex items-center gap-0.5"
+                    className="text-xs font-bold text-accent-700 hover:text-accent-800 flex items-center gap-0.5"
                   >
                     Cek Kartu ↗
                   </Link>
