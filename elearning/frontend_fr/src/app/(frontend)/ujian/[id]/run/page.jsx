@@ -383,16 +383,16 @@ export default function CBTExamRunnerPage({ params }) {
               <div className="pt-2 border-t border-neutral-200 space-y-2 text-left">
                 <div className="flex items-center justify-between text-xs text-neutral-600">
                   <span>Tipe Ujian:</span>
-                  <span className="font-bold text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full">
+                  <span className="font-bold text-primary-700 bg-primary-100 px-2.5 py-0.5 rounded-full">
                     Uraian / Esai ({finishResult.totalEssay || questions.length} Soal)
                   </span>
                 </div>
-                <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 space-y-1">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+                <div className="p-2.5 rounded-lg bg-success-50 border border-success-200 text-success-900 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-success-800">
                     <span>✓</span>
                     <span>Jawaban Esai Berhasil Disimpan</span>
                   </div>
-                  <p className="text-[11px] text-emerald-700 leading-relaxed">
+                  <p className="text-[11px] text-success-700 leading-relaxed">
                     Seluruh lembar jawaban esai Anda telah tersimpan di sistem. Skor akhir akan dinilai dan dipublikasikan oleh Guru Pengampu setelah proses koreksi.
                   </p>
                 </div>
@@ -410,7 +410,7 @@ export default function CBTExamRunnerPage({ params }) {
                 {finishResult.totalEssay > 0 && (
                   <div className="flex items-center justify-between text-xs text-neutral-600">
                     <span>Soal Uraian / Esai:</span>
-                    <span className="font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                    <span className="font-bold text-primary-700 bg-primary-50 px-2 py-0.5 rounded border border-primary-200">
                       {finishResult.totalEssay} Soal (Koreksi Manual)
                     </span>
                   </div>

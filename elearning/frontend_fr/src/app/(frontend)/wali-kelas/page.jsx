@@ -660,8 +660,8 @@ export default function WaliKelasRaporPage() {
           }}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
             walasActiveTab === 'UAS_RECAP'
-              ? 'bg-purple-600 text-white shadow-xs'
-              : 'bg-white text-purple-700 hover:bg-purple-50 border border-purple-200'
+              ? 'bg-primary-600 text-white shadow-xs'
+              : 'bg-white text-primary-700 hover:bg-primary-50 border border-primary-200'
           }`}
         >
           <span>🏆</span>
@@ -733,7 +733,7 @@ export default function WaliKelasRaporPage() {
           <div className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-900 border border-purple-200">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-primary-100 text-primary-900 border border-primary-200">
                   UAS / ASAS Semester
                 </span>
                 <h2 className="text-base sm:text-lg font-bold text-neutral-900 tracking-tight">

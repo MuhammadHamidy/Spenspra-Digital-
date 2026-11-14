@@ -343,7 +343,7 @@ export default function StudentExamsHubPage() {
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {(exam.examCategory === 'SEMESTER_UAS' || exam.isCoordinatorExam || exam.targetGradeLevel) && (
-                        <span className="px-2.5 py-0.5 rounded-[999px] bg-purple-100 text-purple-900 border border-purple-200 text-[10px] font-black">
+                        <span className="px-2.5 py-0.5 rounded-[999px] bg-primary-100 text-primary-800 border border-primary-200 text-[10px] font-black">
                           🏆 ASAS Tingkat {exam.targetGradeLevel || 'Sekolah'}
                         </span>
                       )}

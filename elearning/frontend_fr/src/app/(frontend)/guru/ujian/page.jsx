@@ -678,19 +678,19 @@ export default function TeacherExamsManagementPage() {
                       onClick={() => setNewQuestionType('ESSAY')}
                       className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
                         newQuestionType === 'ESSAY'
-                          ? 'border-purple-500 bg-purple-50/70 ring-2 ring-purple-500/20 text-purple-950 font-medium'
+                          ? 'border-primary-500 bg-primary-50/70 ring-2 ring-primary-500/20 text-primary-950 font-medium'
                           : 'border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-600'
                       }`}
                     >
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
-                        newQuestionType === 'ESSAY' ? 'bg-purple-600 text-white' : 'bg-neutral-100 text-neutral-500'
+                        newQuestionType === 'ESSAY' ? 'bg-primary-600 text-white' : 'bg-neutral-100 text-neutral-500'
                       }`}>
                         ✍️
                       </div>
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-1.5">
                           <p className="font-bold text-xs sm:text-sm text-neutral-900">Soal Esai / Uraian</p>
-                          {newQuestionType === 'ESSAY' && <span className="text-purple-600 font-bold text-xs">✓</span>}
+                          {newQuestionType === 'ESSAY' && <span className="text-primary-600 font-bold text-xs">✓</span>}
                         </div>
                         <p className="text-[11px] text-neutral-500 leading-snug">
                           Jawaban teks bebas, penjelasan studi kasus, atau sub-soal (a, b, c).
@@ -922,8 +922,8 @@ export default function TeacherExamsManagementPage() {
 
                 {/* 4B. Form Khusus Esai / Uraian */}
                 {newQuestionType === 'ESSAY' && (
-                  <div className="p-4 rounded-xl bg-purple-50/60 border border-purple-200 space-y-3.5">
-                    <div className="flex items-center gap-2 text-purple-900 font-bold text-xs">
+                  <div className="p-4 rounded-xl bg-primary-50/60 border border-primary-200 space-y-3.5">
+                    <div className="flex items-center gap-2 text-primary-900 font-bold text-xs">
                       <span>💡</span>
                       <span>Konfigurasi Jawaban Uraian / Esai</span>
                     </div>
@@ -939,7 +939,7 @@ export default function TeacherExamsManagementPage() {
                           max="100"
                           value={essayPoints}
                           onChange={(e) => setEssayPoints(e.target.value)}
-                          className="w-24 text-xs font-bold p-2.5 rounded-lg border border-purple-300 bg-white"
+                          className="w-24 text-xs font-bold p-2.5 rounded-lg border border-primary-300 bg-white"
                         />
                         <span className="text-xs text-neutral-500 font-medium">Poin (standar 10-25 poin)</span>
                       </div>
@@ -957,7 +957,7 @@ export default function TeacherExamsManagementPage() {
                         placeholder="Tuliskan poin-poin jawaban yang diharapkan dari siswa sebagai acuan koreksi..."
                         value={essayRubric}
                         onChange={(e) => setEssayRubric(e.target.value)}
-                        className="w-full text-xs p-3 rounded-lg border border-purple-300 bg-white font-sans leading-relaxed focus:outline-hidden"
+                        className="w-full text-xs p-3 rounded-lg border border-primary-300 bg-white font-sans leading-relaxed focus:outline-hidden"
                       />
                     </div>
                   </div>
@@ -1040,7 +1040,7 @@ export default function TeacherExamsManagementPage() {
                             #{idx + 1}
                           </span>
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            q.type === 'MCQ' ? 'bg-primary-100 text-primary-800' : 'bg-purple-100 text-purple-800'
+                            q.type === 'MCQ' ? 'bg-primary-100 text-primary-800' : 'bg-secondary-100 text-secondary-800'
                           }`}>
                             {q.type === 'MCQ' ? 'Pilihan Ganda' : 'Esai'}
                           </span>
@@ -1068,7 +1068,7 @@ export default function TeacherExamsManagementPage() {
                             </>
                           )}
                           {q.type === 'ESSAY' && (
-                            <span className="font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 text-[10px]">
+                            <span className="font-bold text-secondary-700 bg-secondary-50 px-2 py-0.5 rounded border border-secondary-200 text-[10px]">
                               {q.points || 10} Poin (Esai)
                             </span>
                           )}
@@ -1605,7 +1605,7 @@ export default function TeacherExamsManagementPage() {
                         <div className="space-y-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {isUas && (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-primary-100 text-primary-800 border border-primary-200">
                                 🏆 ASAS Tingkat {ex.targetGradeLevel || '7'}
                               </span>
                             )}
