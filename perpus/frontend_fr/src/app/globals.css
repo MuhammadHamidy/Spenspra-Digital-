@@ -58,10 +58,34 @@
   --radius-lg: 12px;
   --radius-xl: 16px;
   --radius-full: 999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(23, 32, 51, 0.08);
+  --shadow-md: 0 4px 12px rgba(23, 32, 51, 0.08);
+  --shadow-lg: 0 12px 24px rgba(23, 32, 51, 0.12);
 }
 
 @layer base {
   :root {
+    --font-sans: "Poppins", system-ui, sans-serif;
+
+    /* Typography */
+    --text-display: 700 32px/1.25 var(--font-sans);
+    --text-h1: 700 28px/1.3 var(--font-sans);
+    --text-h2: 700 24px/1.3 var(--font-sans);
+    --text-h3: 700 20px/1.4 var(--font-sans);
+    --text-body-lg: 600 16px/1.5 var(--font-sans);
+    --text-body: 400 16px/1.5 var(--font-sans);
+    --text-small: 400 12px/1.5 var(--font-sans);
+    --text-caption: 400 10px/1.4 var(--font-sans);
+
+    /* Semantic UI Tokens */
+    --bg-app: var(--color-neutral-100);
+    --bg-surface: var(--color-neutral-50);
+    --border-default: var(--color-neutral-300);
+    --text-main: var(--color-neutral-1000);
+    --text-muted: var(--color-neutral-700);
+
     --background: #F8F9FC;
     --foreground: #172033;
     --card: #FFFFFF;

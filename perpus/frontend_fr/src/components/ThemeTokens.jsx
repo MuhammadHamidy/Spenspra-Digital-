@@ -1,45 +1,35 @@
 import React from 'react';
-import AppIcon from './AppIcon';
 
-// Design System Color Palette Tokens
+// Design System Color Palette Tokens - Sesuai DESIGN fix.md
 export const THEME_PALETTE = {
-  darkNavy: '#0A1931',
-  oceanBlue: '#1A3D63',
-  slateBlue: '#4A7FA7',
-  powderBlue: '#B3CFE5',
-  snowBg: '#F6FAFD',
+  bgApp: '#F8F9FC',
+  bgSurface: '#FFFFFF',
+  borderSubtle: '#E5E7EB',
+  borderStrong: '#98A2B3',
+  textPrimary: '#172033',
+  textSecondary: '#667085',
+  primary: '#4B3B78',
+  secondary: '#4F8FBB',
+  accent: '#F2C94C',
+  success: '#2E7D5B',
+  danger: '#C0392B',
 };
 
-// Reusable Theme Badge Component without text emojis
-export function RoleThemeBadge({ role, compact = false }) {
+// Reusable Theme Badge Component (Flat, sentence case, no glow)
+export function RoleThemeBadge({ role }) {
   const roleUpper = (role || 'GURU').toUpperCase();
 
-  if (roleUpper === 'ADMIN') {
+  if (roleUpper === 'ADMIN' || roleUpper === 'SUPER_ADMIN') {
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-extrabold rounded-lg bg-[#1A3D63] text-white border border-[#4A7FA7] shadow-xs">
-        <AppIcon name="admin" color="white" size={12} />
-        <span>ADMIN</span>
+      <span className="inline-flex items-center px-2.5 py-0.5 text-xs font-semibold rounded-full bg-[var(--color-primary-100,#EDEAF5)] text-[var(--color-primary-800,#30264F)] border border-[var(--color-primary-300,#B9B0D2)]">
+        Admin
       </span>
     );
   }
 
   return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-extrabold rounded-lg bg-[#E6F0FA] text-[#1A3D63] border border-[#B3CFE5] shadow-xs">
-      <AppIcon name="profile" color="blue" size={12} />
-      <span>{compact ? 'GURU' : 'GURU'}</span>
+    <span className="inline-flex items-center px-2.5 py-0.5 text-xs font-semibold rounded-full bg-[var(--color-neutral-100,#F8F9FC)] text-[var(--color-neutral-800,#344054)] border border-[var(--color-neutral-300,#E5E7EB)]">
+      Guru
     </span>
-  );
-}
-
-// Visual Color Tokens Indicator Component
-export default function ThemeTokensVisualizer() {
-  return (
-    <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-900 border border-slate-800 text-xs">
-      <span className="font-bold text-slate-400">Palette:</span>
-      <span className="w-3 h-3 rounded-full bg-indigo-500 inline-block" title="Indigo Primary"></span>
-      <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" title="Emerald Success"></span>
-      <span className="w-3 h-3 rounded-full bg-amber-500 inline-block" title="Amber Warning"></span>
-      <span className="w-3 h-3 rounded-full bg-rose-500 inline-block" title="Rose Danger"></span>
-    </div>
   );
 }

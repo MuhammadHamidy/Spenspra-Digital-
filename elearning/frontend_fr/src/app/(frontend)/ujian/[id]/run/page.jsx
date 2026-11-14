@@ -449,87 +449,177 @@ export default function CBTExamRunnerPage({ params }) {
 
   return (
     <div className="min-h-screen bg-neutral-100 flex flex-col select-none relative font-sans">
-      {/* 1. TOP HEADER (CBT APP BAR) */}
-      <header className="h-16 bg-white border-b border-neutral-200 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 shadow-xs">
-        {/* Left: Exam Info */}
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-[8px] bg-primary-500 text-white flex items-center justify-center font-bold text-sm shrink-0">
-            CBT
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-xs sm:text-sm font-bold text-neutral-900 truncate">
+
+      {/* 1. ACCENT HEADER (Referensi: Yellow Gradient + Exam Info) */}
+      <header className="bg-gradient-to-r from-[#F2C94C] to-[#E8A020] px-4 sm:px-6 py-4 relative overflow-hidden sticky top-0 z-30 shadow-md">
+        {/* Dekoratif lingkaran */}
+        <div className="absolute right-4 top-[-20px] w-28 h-28 rounded-full bg-white/10 pointer-events-none" />
+        <div className="absolute right-16 top-[-10px] w-16 h-16 rounded-full bg-white/10 pointer-events-none" />
+        <div className="absolute right-0 bottom-[-30px] w-20 h-20 rounded-full bg-white/10 pointer-events-none" />
+
+        <div className="max-w-7xl mx-auto flex items-center gap-3">
+          {/* Tombol Kembali */}
+          <button
+            type="button"
+            onClick={() => router.push('/ujian')}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-black/10 hover:bg-black/20 transition-colors shrink-0 text-neutral-900"
+            title="Kembali ke Portal Ujian"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+
+          {/* Judul Ujian */}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-sm sm:text-base font-bold text-neutral-900 truncate leading-tight">
               {exam?.title}
             </h1>
-            <p className="text-[11px] text-neutral-500 truncate">
-              {exam?.subject} • {user?.fullName || user?.full_name} ({user?.className || '7A'})
-            </p>
-          </div>
-        </div>
-
-        {/* Center: Proctoring Anti-Cheat Badges */}
-        <div className="hidden md:flex items-center gap-3">
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-[999px] bg-neutral-100 text-neutral-700 text-xs font-semibold border border-neutral-200">
-            <span className="w-2 h-2 rounded-full bg-success-500 animate-pulse" />
-            <span>Anti-Cheat Aktif</span>
-          </div>
-
-          {violationsCount > 0 && (
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-[999px] bg-danger-100 text-danger-700 text-xs font-bold border border-danger-200 animate-bounce">
-              <span>⚠️ {violationsCount} / {exam?.maxViolations || 3} Pelanggaran</span>
+            <div className="flex items-center gap-3 mt-0.5">
+              <span className="flex items-center gap-1 text-xs font-semibold text-neutral-800">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                {totalQuestions} Soal
+              </span>
+              <span className="flex items-center gap-1 text-xs font-semibold text-neutral-800">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {exam?.durationMinutes || 90} menit
+              </span>
             </div>
-          )}
-        </div>
+          </div>
 
-        {/* Right: Timer & Fullscreen Enforcer */}
-        <div className="flex items-center gap-3 shrink-0">
-          <div
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-[8px] font-mono text-sm sm:text-base font-bold shadow-2xs ${
+          {/* Timer + Anti-Cheat + Fullscreen */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/10 text-neutral-900 text-xs font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-600 animate-pulse" />
+              <span>Anti-Cheat</span>
+            </div>
+            {violationsCount > 0 && (
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-600 text-white text-xs font-bold animate-bounce">
+                <span>⚠️ {violationsCount}/{exam?.maxViolations || 3}</span>
+              </div>
+            )}
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-sm font-bold ${
               secondsLeft < 300
-                ? 'bg-danger-500 text-white animate-pulse'
-                : 'bg-primary-50 text-primary-600 border border-primary-200'
-            }`}
-          >
-            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span>{formatTime(secondsLeft)}</span>
+                ? 'bg-red-600 text-white animate-pulse'
+                : 'bg-black/15 text-neutral-900'
+            }`}>
+              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{formatTime(secondsLeft)}</span>
+            </div>
+            <button
+              type="button"
+              onClick={requestFullscreen}
+              className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-black/15 hover:bg-black/25 text-neutral-900 text-xs font-semibold transition-colors"
+              title="Layar Penuh"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              </svg>
+              Penuh
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* 2. MAIN BODY: Left Sidebar (Nomor Soal) + Right (Konten Soal) */}
+      <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 flex flex-col lg:flex-row gap-5 items-start">
+
+        {/* LEFT SIDEBAR: Nomor Soal */}
+        <aside className="w-full lg:w-64 shrink-0 bg-white rounded-[12px] border border-neutral-200 shadow-sm p-4 space-y-3 lg:sticky lg:top-[90px]">
+          <div className="flex items-center gap-2">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-neutral-700">
+              Nomor Soal
+            </h3>
+            <span className="w-5 h-5 rounded-full bg-neutral-800 text-white flex items-center justify-center text-[10px] font-bold shrink-0 cursor-default" title="Klik nomor untuk berpindah soal">
+              i
+            </span>
+          </div>
+
+          {/* Grid Nomor Bulat */}
+          <div className="grid grid-cols-5 gap-2">
+            {questions.map((q, idx) => {
+              const isCurrent = idx === currentIndex;
+              const isAnswered = Boolean(
+                (answers[q.id]?.selectedOption && String(answers[q.id]?.selectedOption).trim() !== '') ||
+                (answers[q.id]?.essayAnswer && String(answers[q.id]?.essayAnswer).trim() !== '')
+              );
+              const isDoubtful = Boolean(doubtfuls[q.id]);
+
+              let circleClass = 'border-2 border-neutral-300 text-neutral-600 bg-white hover:border-neutral-400';
+              if (isDoubtful) {
+                circleClass = 'border-2 border-amber-500 bg-amber-400 text-neutral-900 font-bold';
+              } else if (isAnswered) {
+                circleClass = 'border-2 border-success-600 bg-success-600 text-white font-bold';
+              }
+              if (isCurrent) {
+                circleClass = 'border-2 border-orange-500 bg-white text-orange-600 font-bold ring-2 ring-orange-300 ring-offset-1';
+              }
+
+              return (
+                <button
+                  key={q.id || idx}
+                  type="button"
+                  onClick={() => setCurrentIndex(idx)}
+                  className={`w-full aspect-square rounded-full text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${circleClass}`}
+                  title={`Soal No. ${idx + 1}`}
+                >
+                  {idx + 1}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Legenda */}
+          <div className="pt-3 border-t border-neutral-100 space-y-1.5 text-[11px] text-neutral-600 font-medium">
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-3.5 rounded-full bg-success-600 border-2 border-success-600 shrink-0" />
+              <span>Dijawab ({answeredCount})</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-3.5 rounded-full bg-amber-400 border-2 border-amber-500 shrink-0" />
+              <span>Ragu-Ragu ({doubtfulCount})</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-3.5 rounded-full bg-white border-2 border-orange-500 shrink-0" />
+              <span>Soal Aktif</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-3.5 rounded-full bg-white border-2 border-neutral-300 shrink-0" />
+              <span>Belum Dijawab ({unansweredCount})</span>
+            </div>
           </div>
 
           <Button
             variant="accent"
             size="sm"
-            onClick={requestFullscreen}
-            className="hidden sm:inline-flex"
-            title="Kunci ke Mode Layar Penuh"
+            className="w-full mt-1"
+            onClick={() => setShowConfirmFinish(true)}
           >
-            Layar Penuh
+            Selesaikan Ujian
           </Button>
-        </div>
-      </header>
+        </aside>
 
-      {/* 2. MAIN BODY (QUESTION VIEW + NAVIGATION PALETTE) */}
-      <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-        {/* Left: Question Card (3 Cols) */}
-        <div className="lg:col-span-3 space-y-4">
-          <div className="bg-white rounded-[12px] border border-neutral-200 shadow-md p-5 sm:p-7 space-y-6">
-            {/* Question Top Bar */}
-            <div className="flex items-center justify-between pb-4 border-b border-neutral-200">
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 rounded-[6px] bg-primary-500 text-white text-xs font-bold shadow-xs">
-                  Soal No. {currentIndex + 1}
-                </span>
-                <span className="text-xs text-neutral-400 font-medium">
-                  dari {totalQuestions} Butir Soal
-                </span>
-              </div>
-
-              {/* Ragu-ragu Checkbox Button */}
+        {/* RIGHT: Konten Soal */}
+        <div className="flex-1 min-w-0 space-y-4">
+          <div className="bg-white rounded-[12px] border border-neutral-200 shadow-sm p-5 sm:p-7 space-y-5">
+            {/* Heading Soal */}
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
+              <h2 className="text-base sm:text-lg font-bold text-neutral-900">
+                Soal Nomor {currentIndex + 1}
+              </h2>
+              {/* Ragu-ragu Toggle */}
               <button
                 type="button"
                 onClick={handleToggleDoubtful}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-[8px] text-xs font-bold transition-all cursor-pointer border ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer border ${
                   doubtfuls[currentQ?.id]
-                    ? 'bg-accent-500 text-neutral-900 border-accent-600 shadow-2xs'
+                    ? 'bg-amber-400 text-neutral-900 border-amber-500'
                     : 'bg-neutral-50 text-neutral-600 border-neutral-300 hover:bg-neutral-100'
                 }`}
               >
@@ -572,14 +662,24 @@ export default function CBTExamRunnerPage({ params }) {
                 </div>
               )}
 
-              {/* 3. Teks Pertanyaan (Mendukung Sub-Soal a, b, c) */}
-              <div className="text-sm sm:text-base text-neutral-900 leading-relaxed font-semibold whitespace-pre-wrap">
+              {/* 3. Teks Pertanyaan */}
+              <div className="text-sm sm:text-base text-neutral-900 leading-relaxed whitespace-pre-wrap">
                 {currentQ?.questionText}
               </div>
 
+              {/* Petunjuk Pengerjaan */}
+              {currentQ?.type === 'MCQ' && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-xs">
+                  <svg className="w-4 h-4 shrink-0 mt-0.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span><strong>Petunjuk Pengerjaan:</strong> Silakan klik pilihan jawabanmu.</span>
+                </div>
+              )}
+
               {/* Multiple Choice Options */}
               {currentQ?.type === 'MCQ' && (
-                <div className="space-y-3 pt-2">
+                <div className="space-y-2.5 pt-1">
                   {currentQ?.options?.map((opt) => {
                     const isSelected = answers[currentQ.id]?.selectedOption === opt.key;
 
@@ -587,14 +687,14 @@ export default function CBTExamRunnerPage({ params }) {
                       <div
                         key={opt.key}
                         onClick={() => handleSelectOption(opt.key)}
-                        className={`flex items-start gap-3 p-3.5 sm:p-4 rounded-[8px] border transition-all cursor-pointer ${
+                        className={`flex items-center gap-3 p-3.5 sm:p-4 rounded-full border-2 transition-all cursor-pointer ${
                           isSelected
                             ? 'bg-primary-50 border-primary-500 shadow-xs'
                             : 'bg-white border-neutral-200 hover:border-primary-300 hover:bg-neutral-50/50'
                         }`}
                       >
                         <div
-                          className={`w-7 h-7 rounded-[6px] flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                          className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shrink-0 transition-colors ${
                             isSelected
                               ? 'bg-primary-500 text-white'
                               : 'bg-neutral-100 text-neutral-700'
@@ -664,77 +764,6 @@ export default function CBTExamRunnerPage({ params }) {
                 )}
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* Right: Question Palette Navigator (1 Col) */}
-        <div className="space-y-4">
-          <div className="bg-white rounded-[12px] border border-neutral-200 shadow-md p-5 space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500">
-              Navigasi Soal
-            </h3>
-
-            {/* Palette Grid */}
-            <div className="grid grid-cols-5 gap-2">
-              {questions.map((q, idx) => {
-                const isCurrent = idx === currentIndex;
-                const isAnswered = Boolean(
-                  (answers[q.id]?.selectedOption && String(answers[q.id]?.selectedOption).trim() !== '') ||
-                  (answers[q.id]?.essayAnswer && String(answers[q.id]?.essayAnswer).trim() !== '')
-                );
-                const isDoubtful = Boolean(doubtfuls[q.id]);
-
-                let bgClass = 'bg-neutral-100 text-neutral-800 hover:bg-neutral-200 border border-neutral-300';
-                if (isDoubtful) {
-                  bgClass = 'bg-accent-500 text-neutral-900 font-bold border border-accent-600 shadow-xs';
-                } else if (isAnswered) {
-                  bgClass = 'bg-success-600 text-white font-bold border border-success-700 shadow-xs';
-                }
-
-                return (
-                  <button
-                    key={q.id || idx}
-                    type="button"
-                    onClick={() => setCurrentIndex(idx)}
-                    className={`w-full h-10 rounded-[8px] text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${bgClass} ${
-                      isCurrent
-                        ? 'ring-2 ring-primary-500 ring-offset-2 scale-105 font-black shadow-sm'
-                        : ''
-                    }`}
-                    title={`Pindah ke Soal No. ${idx + 1}`}
-                  >
-                    <span className="leading-none text-current font-bold text-xs sm:text-sm">
-                      {idx + 1}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Legend */}
-            <div className="pt-3 border-t border-neutral-100 space-y-2 text-[11px] text-neutral-600 font-medium">
-              <div className="flex items-center gap-2">
-                <span className="w-3.5 h-3.5 rounded bg-success-600 border border-success-700 shrink-0" />
-                <span>Sudah Dijawab ({answeredCount})</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3.5 h-3.5 rounded bg-accent-500 border border-accent-600 shrink-0" />
-                <span>Ragu-Ragu ({doubtfulCount})</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3.5 h-3.5 rounded bg-neutral-100 border border-neutral-300 shrink-0" />
-                <span>Belum Dijawab ({unansweredCount})</span>
-              </div>
-            </div>
-
-            <Button
-              variant="accent"
-              size="sm"
-              className="w-full mt-2"
-              onClick={() => setShowConfirmFinish(true)}
-            >
-              Selesaikan Ujian
-            </Button>
           </div>
         </div>
       </div>

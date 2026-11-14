@@ -1112,6 +1112,255 @@ export default function TeacherExamsManagementPage() {
     );
   }
 
+  if (isCreateModalOpen || isEditModalOpen) {
+    return (
+      <div className="space-y-6 max-w-4xl mx-auto pb-12 animate-in fade-in duration-200">
+        {/* Top Navigation Header */}
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200 shadow-xs flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                if (!isSubmitting) {
+                  setIsCreateModalOpen(false);
+                  setIsEditModalOpen(false);
+                }
+              }}
+              className="p-2.5 rounded-xl border border-neutral-200 bg-neutral-50 hover:bg-neutral-100 text-neutral-700 font-bold text-xs flex items-center gap-1.5 transition-all hover:-translate-x-0.5 cursor-pointer shrink-0"
+              title="Kembali ke Daftar Ujian"
+            >
+              <span>←</span>
+              <span>Daftar Ujian</span>
+            </button>
+            <div>
+              <h1 className="text-base sm:text-xl font-bold text-neutral-900 tracking-tight">
+                {editingExamId ? 'Edit Jadwal & Sesi e-Ujian' : 'Buat Jadwal & Sesi e-Ujian Baru'}
+              </h1>
+              <p className="text-xs text-neutral-500">
+                Pengaturan jadwal pelaksanaan, token CBT, dan toleransi anti-cheat browser lockdown.
+              </p>
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (!isSubmitting) {
+                setIsCreateModalOpen(false);
+                setIsEditModalOpen(false);
+              }
+            }}
+            disabled={isSubmitting}
+          >
+            Batal
+          </Button>
+        </div>
+
+        {/* Full Form Card (Tanpa Popup Modal) */}
+        <Card className="border border-neutral-200 bg-white shadow-xs p-6 sm:p-8">
+          <form onSubmit={handleSaveExam} className="space-y-5">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-neutral-800">Nama / Judul Ujian</label>
+              <Input
+                type="text"
+                placeholder="Contoh: Penilaian Akhir Semester (PAS) Ganjil 2026/2027"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-neutral-800">Mata Pelajaran (Diampu)</label>
+                  <span className="text-[10px] text-primary-700 font-bold bg-primary-50 px-1.5 py-0.5 rounded">
+                    Sesuai Penugasan Guru
+                  </span>
+                </div>
+                {subjects.length === 0 ? (
+                  <div className="p-2.5 rounded-[8px] bg-amber-50 border border-amber-200 text-[11px] text-amber-800 leading-snug">
+                    ⚠️ Akun Anda belum memiliki mata pelajaran pengampu yang diatur oleh Administrator di SSO / e-Rapor. Hubungi Administrator untuk mengatur penugasan mapel Anda.
+                  </div>
+                ) : (
+                  <select
+                    value={subject}
+                    onChange={(e) => {
+                      const newSubj = e.target.value;
+                      setSubject(newSubj);
+                      const matched = subjects.find((s) => s.name === newSubj);
+                      setSubjectCode(matched?.code || 'MAPEL');
+                      const relevantClasses = getClassesForSubject(newSubj);
+                      if (relevantClasses.length > 0 && !relevantClasses.some((c) => c.name === className)) {
+                        setClassName(relevantClasses[0].name);
+                      }
+                    }}
+                    className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium"
+                  >
+                    {subjects.map((s) => (
+                      <option key={s.id || s.code} value={s.name}>
+                        {s.name} ({s.code})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-neutral-800">Target Kelas / Rombel</label>
+                <select
+                  value={className}
+                  onChange={(e) => setClassName(e.target.value)}
+                  disabled={subjects.length === 0}
+                  className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium disabled:bg-neutral-100 disabled:text-neutral-400"
+                >
+                  {getClassesForSubject(subject).map((cls) => (
+                    <option key={cls.id || cls.name} value={cls.name}>
+                      Kelas {cls.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Jadwal Pelaksanaan */}
+            <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-neutral-800 flex items-center gap-1.5">
+                  <span>📅</span>
+                  <span>Waktu Pelaksanaan Ujian:</span>
+                </label>
+                <span className="text-[11px] text-neutral-500 font-medium">Ujian dibuka otomatis pada jadwal ini</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-neutral-700">Tanggal Ujian</label>
+                  <Input
+                    type="date"
+                    value={examDate}
+                    onChange={(e) => setExamDate(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-neutral-700">Jam Mulai</label>
+                  <Input
+                    type="time"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-neutral-700">Batas Selesai / Deadline</label>
+                  <Input
+                    type="time"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-neutral-800">Token Ujian</label>
+                <Input
+                  type="text"
+                  placeholder="TOKEN"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value.toUpperCase())}
+                  className="font-mono uppercase font-bold"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-neutral-800">Durasi Pengerjaan</label>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type="number"
+                    value={durationMinutes}
+                    onChange={(e) => setDurationMinutes(e.target.value)}
+                    min="10"
+                    max="180"
+                    required
+                  />
+                  <span className="text-xs text-neutral-500 font-medium">Menit</span>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-neutral-800">Toleransi Anti-Cheat</label>
+                <select
+                  value={maxViolations}
+                  onChange={(e) => setMaxViolations(Number(e.target.value))}
+                  className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium truncate"
+                >
+                  <option value={1}>1x (Zero Tolerance - Ketat)</option>
+                  <option value={2}>2x Pelanggaran</option>
+                  <option value={3}>3x Pelanggaran (Standar)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs space-y-1">
+              <p className="font-bold flex items-center gap-1.5">
+                <span>🔐</span>
+                <span>PIN Buka Kunci Pengawas:</span>
+              </p>
+              <p className="text-emerald-800 leading-relaxed text-[11px]">
+                Jika layar siswa terkunci karena membuka notifikasi atau keluar jendela, Pengawas dapat membukanya langsung di HP siswa dengan memasukkan <strong>Token Ujian ({token || '...'})</strong> atau PIN Master <strong>SPENSPRA</strong>.
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-neutral-800">Petunjuk Pengerjaan (Opsional)</label>
+              <textarea
+                rows={3}
+                placeholder="Instruksi tambahan bagi peserta sebelum memulai ujian..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full text-xs p-3 rounded-[8px] border border-neutral-300 leading-relaxed"
+              />
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 border-t border-neutral-200">
+              <Button
+                type="button"
+                variant="outline"
+                size="md"
+                className="w-full sm:w-auto min-h-[42px]"
+                disabled={isSubmitting}
+                onClick={() => {
+                  setIsCreateModalOpen(false);
+                  setIsEditModalOpen(false);
+                }}
+              >
+                Batal
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="md"
+                className="w-full sm:w-auto min-h-[42px] font-bold"
+                loading={isSubmitting}
+                disabled={isSubmitting || subjects.length === 0}
+              >
+                {editingExamId ? 'Simpan Perubahan' : 'Terbitkan Jadwal Ujian'}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
       {/* Header */}
@@ -1285,217 +1534,6 @@ export default function TeacherExamsManagementPage() {
           </table>
         </div>
       </Card>
-
-      {/* Modal Create & Edit Exam */}
-      <Modal
-        isOpen={isCreateModalOpen || isEditModalOpen}
-        onClose={() => {
-          if (!isSubmitting) {
-            setIsCreateModalOpen(false);
-            setIsEditModalOpen(false);
-          }
-        }}
-        title={editingExamId ? 'Edit Jadwal & Sesi e-Ujian' : 'Buat Jadwal & Sesi e-Ujian Baru'}
-        subtitle="Ujian akan menggunakan browser lockdown anti-cheat secara otomatis."
-        size="lg"
-      >
-        <form onSubmit={handleSaveExam} className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-neutral-800">Nama / Judul Ujian</label>
-            <Input
-              type="text"
-              placeholder="Contoh: Penilaian Akhir Semester (PAS) Ganjil 2026/2027"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-neutral-800">Mata Pelajaran (Diampu)</label>
-                <span className="text-[10px] text-primary-700 font-bold bg-primary-50 px-1.5 py-0.5 rounded">
-                  Sesuai Penugasan Guru
-                </span>
-              </div>
-              {subjects.length === 0 ? (
-                <div className="p-2.5 rounded-[8px] bg-amber-50 border border-amber-200 text-[11px] text-amber-800 leading-snug">
-                  ⚠️ Akun Anda belum memiliki mata pelajaran pengampu yang diatur oleh Administrator di SSO / e-Rapor. Hubungi Administrator untuk mengatur penugasan mapel Anda.
-                </div>
-              ) : (
-                <select
-                  value={subject}
-                  onChange={(e) => {
-                    const newSubj = e.target.value;
-                    setSubject(newSubj);
-                    const matched = subjects.find((s) => s.name === newSubj);
-                    setSubjectCode(matched?.code || 'MAPEL');
-                    const relevantClasses = getClassesForSubject(newSubj);
-                    if (relevantClasses.length > 0 && !relevantClasses.some((c) => c.name === className)) {
-                      setClassName(relevantClasses[0].name);
-                    }
-                  }}
-                  className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium"
-                >
-                  {subjects.map((s) => (
-                    <option key={s.id || s.code} value={s.name}>
-                      {s.name} ({s.code})
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-neutral-800">Target Kelas / Rombel</label>
-              <select
-                value={className}
-                onChange={(e) => setClassName(e.target.value)}
-                disabled={subjects.length === 0}
-                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium disabled:bg-neutral-100 disabled:text-neutral-400"
-              >
-                {getClassesForSubject(subject).map((cls) => (
-                  <option key={cls.id || cls.name} value={cls.name}>
-                    Kelas {cls.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Jadwal Pelaksanaan */}
-          <div className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-neutral-800 flex items-center gap-1.5">
-                <span>📅</span>
-                <span>Waktu Pelaksanaan Ujian:</span>
-              </label>
-              <span className="text-[10px] text-neutral-500 font-medium">Ujian mulai otomatis pada jam ini</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-neutral-700">Tanggal Ujian</label>
-                <Input
-                  type="date"
-                  value={examDate}
-                  onChange={(e) => setExamDate(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-neutral-700">Jam Mulai</label>
-                <Input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-neutral-700">Batas Selesai / Deadline</label>
-                <Input
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-neutral-800">Token Ujian</label>
-              <Input
-                type="text"
-                placeholder="TOKEN"
-                value={token}
-                onChange={(e) => setToken(e.target.value.toUpperCase())}
-                className="font-mono uppercase font-bold"
-                required
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-neutral-800">Durasi Pengerjaan</label>
-              <div className="flex items-center gap-1.5">
-                <Input
-                  type="number"
-                  value={durationMinutes}
-                  onChange={(e) => setDurationMinutes(e.target.value)}
-                  min="10"
-                  max="180"
-                  required
-                />
-                <span className="text-xs text-neutral-500 font-medium">Menit</span>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-neutral-800">Toleransi Anti-Cheat</label>
-              <select
-                value={maxViolations}
-                onChange={(e) => setMaxViolations(Number(e.target.value))}
-                className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium truncate"
-              >
-                <option value={1}>1x (Zero Tolerance - Ketat)</option>
-                <option value={2}>2x Pelanggaran</option>
-                <option value={3}>3x Pelanggaran (Standar)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-[11px] space-y-1">
-            <p className="font-bold flex items-center gap-1.5">
-              <span>🔐</span>
-              <span>PIN Buka Kunci Pengawas:</span>
-            </p>
-            <p className="text-emerald-800 leading-relaxed">
-              Jika layar siswa terkunci karena membuka notifikasi atau keluar jendela, Pengawas dapat membukanya langsung di HP siswa dengan memasukkan <strong>Token Ujian ({token || '...'})</strong> atau PIN Master <strong>SPENSPRA</strong>.
-            </p>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-neutral-800">Petunjuk Pengerjaan</label>
-            <textarea
-              rows={2}
-              placeholder="Instruksi tambahan bagi peserta sebelum memulai ujian..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300"
-            />
-          </div>
-
-          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-neutral-100">
-            <Button
-              type="button"
-              variant="outline"
-              size="md"
-              className="w-full sm:w-auto min-h-[42px]"
-              disabled={isSubmitting}
-              onClick={() => {
-                setIsCreateModalOpen(false);
-                setIsEditModalOpen(false);
-              }}
-            >
-              Batal
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="md"
-              className="w-full sm:w-auto min-h-[42px] font-bold"
-              loading={isSubmitting}
-              disabled={isSubmitting || subjects.length === 0}
-            >
-              {editingExamId ? 'Simpan Perubahan' : 'Terbitkan Jadwal Ujian'}
-            </Button>
-          </div>
-        </form>
-      </Modal>
 
       {/* Confirmation Modal */}
       <ConfirmModal
