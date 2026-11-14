@@ -8,6 +8,7 @@ import { gradeApi } from '@/lib/gradeApi';
 import { exportToExcelXml } from '@/lib/excelExport';
 import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
 import { classApiAdapter } from '@/lib/features/classes/infrastructure/classApiAdapter';
+import { elearningApi } from '@/lib/elearningApi';
 import WaliKelasHeaderBanner from '@/features/wali-kelas/components/WaliKelasHeaderBanner';
 import WaliKelasStatsBar from '@/features/wali-kelas/components/WaliKelasStatsBar';
 import WaliKelasToolbar from '@/features/wali-kelas/components/WaliKelasToolbar';
@@ -58,6 +59,12 @@ export default function WaliKelasRaporPage() {
   // Data Wali Kelas (Otomatis dari SSO)
   const [teacherName, setTeacherName] = useState('-');
   const [teacherNip, setTeacherNip] = useState('-');
+
+  // State Tab & Rekap Hasil Ujian UAS / ASAS Semester
+  const [walasActiveTab, setWalasActiveTab] = useState('RAPOR_SUMMARY'); // 'RAPOR_SUMMARY' | 'UAS_RECAP'
+  const [uasRecapData, setUasRecapData] = useState(null);
+  const [isLoadingUasRecap, setIsLoadingUasRecap] = useState(false);
+  const [uasSearchQuery, setUasSearchQuery] = useState('');
 
   // Kehadiran Siswa
   const [attendanceMap, setAttendanceMap] = useState({});
@@ -451,6 +458,79 @@ export default function WaliKelasRaporPage() {
     setTimeout(() => setAttendanceSaveNotice(false), 4000);
   };
 
+  const loadUasRecap = useCallback(async (cls) => {
+    if (!cls) return;
+    setIsLoadingUasRecap(true);
+    try {
+      const res = await elearningApi.getUASClassRecap(cls);
+      setUasRecapData(res);
+    } catch (err) {
+      console.error('Failed to load UAS recap:', err);
+    } finally {
+      setIsLoadingUasRecap(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedClass) {
+      loadUasRecap(selectedClass);
+    }
+  }, [selectedClass, loadUasRecap]);
+
+  const handleExportUasExcel = () => {
+    if (!uasRecapData || !uasRecapData.matrix || uasRecapData.matrix.length === 0) {
+      alert('Belum ada data nilai UAS untuk diekspor!');
+      return;
+    }
+
+    const subjects = uasRecapData.subjects || [];
+    const headers = [
+      'No',
+      'NISN',
+      'Nama Siswa',
+      'Kelas',
+      ...subjects.map((sb) => sb.name || sb.code),
+      'Total Nilai',
+      'Rata-rata',
+      'Peringkat Kelas',
+    ];
+
+    const rows = uasRecapData.matrix.map((row, idx) => {
+      const subScores = subjects.map((sb) => {
+        const key = sb.code || sb.name;
+        const score = row.scores[key];
+        return typeof score === 'number' ? score : '-';
+      });
+
+      return [
+        idx + 1,
+        row.nisn || '-',
+        row.name,
+        `Kelas ${selectedClass}`,
+        ...subScores,
+        row.totalScore || 0,
+        row.average !== null ? row.average : '-',
+        row.rank || '-',
+      ];
+    });
+
+    exportToExcelXml({
+      filename: `Rekap_Nilai_UAS_ASAS_Kelas_${selectedClass}_${academicYear.replace('/', '-')}.xls`,
+      sheetName: `UAS Kelas ${selectedClass}`,
+      title: 'REKAPITULASI HASIL ASESMEN SUMATIF AKHIR SEMESTER (ASAS / UAS)',
+      subtitle: `SMP NEGERI 1 PRAMBON • TAHUN AJARAN ${academicYear} SEMESTER ${semester.toUpperCase()}`,
+      metadata: [
+        { label: 'Kelas Binaan', value: `Kelas ${selectedClass}` },
+        { label: 'Wali Kelas', value: `${teacherName} (NIP. ${teacherNip})` },
+        { label: 'Total Siswa Terdaftar (SSO)', value: uasRecapData.students.length },
+        { label: 'Total Ujian UAS Terbit', value: uasRecapData.uasExams.length },
+        { label: 'Tanggal Ekspor', value: new Date().toLocaleDateString('id-ID', { dateStyle: 'full' }) },
+      ],
+      headers,
+      rows,
+    });
+  };
+
   const updateTempAttendanceItem = (studentId, field, value) => {
     const num = Math.max(0, parseInt(value, 10) || 0);
     setTempAttendance((prev) => ({
@@ -557,6 +637,38 @@ export default function WaliKelasRaporPage() {
         onOpenSignature={() => setIsSignatureModalOpen(true)}
       />
 
+      {/* Tab Navigation Menu Wali Kelas */}
+      <div className="flex items-center gap-2 border-b border-neutral-200 pb-2">
+        <button
+          type="button"
+          onClick={() => setWalasActiveTab('RAPOR_SUMMARY')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+            walasActiveTab === 'RAPOR_SUMMARY'
+              ? 'bg-primary-600 text-white shadow-xs'
+              : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200'
+          }`}
+        >
+          <span>📘</span>
+          <span>Buku Nilai Rapor Sisipan & Kehadiran</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setWalasActiveTab('UAS_RECAP');
+            if (!uasRecapData && selectedClass) loadUasRecap(selectedClass);
+          }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+            walasActiveTab === 'UAS_RECAP'
+              ? 'bg-purple-600 text-white shadow-xs'
+              : 'bg-white text-purple-700 hover:bg-purple-50 border border-purple-200'
+          }`}
+        >
+          <span>🏆</span>
+          <span>Rekapitulasi Hasil UAS / ASAS Semester (CBT)</span>
+        </button>
+      </div>
+
       {/* Notifikasi Penyimpanan Kehadiran */}
       {attendanceSaveNotice && (
         <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center justify-between shadow-xs">
@@ -570,44 +682,245 @@ export default function WaliKelasRaporPage() {
         </div>
       )}
 
-      {/* 2. Filter & Stat Bar */}
-      <WaliKelasStatsBar
-        kkm={schoolKkm}
-        selectedClass={selectedClass}
-        setSelectedClass={setSelectedClass}
-        isAdminOrKepalaSekolah={isAdminOrKepalaSekolah}
-        availableClasses={availableClasses}
-        totalStudents={totalStudents}
-        classAverage={classAverage}
-        passedStudents={passedStudents}
-        remedialStudents={remedialStudents}
-      />
+      {/* KONTEN TAB 1: BUKU NILAI RAPOR & KEHADIRAN */}
+      {walasActiveTab === 'RAPOR_SUMMARY' && (
+        <>
+          {/* 2. Filter & Stat Bar */}
+          <WaliKelasStatsBar
+            kkm={schoolKkm}
+            selectedClass={selectedClass}
+            setSelectedClass={setSelectedClass}
+            isAdminOrKepalaSekolah={isAdminOrKepalaSekolah}
+            availableClasses={availableClasses}
+            totalStudents={totalStudents}
+            classAverage={classAverage}
+            passedStudents={passedStudents}
+            remedialStudents={remedialStudents}
+          />
 
-      {/* 3. Action Toolbar */}
-      <WaliKelasToolbar
-        onOpenAttendance={handleOpenAttendanceModal}
-        onPrint={handlePrint}
-        onExportExcel={handleExportExcel}
-        onBulkPrint={() => setIsBulkPrintModalOpen(true)}
-        isAdminOrKepalaSekolah={isAdminOrKepalaSekolah}
-        onOpenSignature={() => setIsSignatureModalOpen(true)}
-      />
+          {/* 3. Action Toolbar */}
+          <WaliKelasToolbar
+            onOpenAttendance={handleOpenAttendanceModal}
+            onPrint={handlePrint}
+            onExportExcel={handleExportExcel}
+            onBulkPrint={() => setIsBulkPrintModalOpen(true)}
+            isAdminOrKepalaSekolah={isAdminOrKepalaSekolah}
+            onOpenSignature={() => setIsSignatureModalOpen(true)}
+          />
 
-      {/* 4. Tabel Nilai & Paginasi */}
-      <WaliKelasStudentTable
-        kkm={schoolKkm}
-        isLoading={isLoading}
-        selectedClass={selectedClass}
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        paginatedStudents={paginatedStudents}
-        filteredStudentsCount={filteredStudents.length}
-        currentPage={currentPage}
-        pageSize={pageSize}
-        setCurrentPage={setCurrentPage}
-        setPageSize={setPageSize}
-        onSelectStudentForReport={setSelectedStudentForReport}
-      />
+          {/* 4. Tabel Nilai & Paginasi */}
+          <WaliKelasStudentTable
+            kkm={schoolKkm}
+            isLoading={isLoading}
+            selectedClass={selectedClass}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            paginatedStudents={paginatedStudents}
+            filteredStudentsCount={filteredStudents.length}
+            currentPage={currentPage}
+            pageSize={pageSize}
+            setCurrentPage={setCurrentPage}
+            setPageSize={setPageSize}
+            onSelectStudentForReport={setSelectedStudentForReport}
+          />
+        </>
+      )}
+
+      {/* KONTEN TAB 2: REKAPITULASI HASIL UAS / ASAS SEMESTER (CBT SERENTAK) */}
+      {walasActiveTab === 'UAS_RECAP' && (
+        <div className="space-y-4 animate-in fade-in duration-150">
+          {/* Toolbar UAS Rekap */}
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-900 border border-purple-200">
+                  UAS / ASAS Semester
+                </span>
+                <h2 className="text-base sm:text-lg font-bold text-neutral-900 tracking-tight">
+                  Rekapitulasi Nilai Seluruh Mata Pelajaran Kelas {selectedClass}
+                </h2>
+              </div>
+              <p className="text-xs text-neutral-500">
+                Nilai CBT mengalir otomatis dari lembar pengerjaan siswa. Data siswa & mata pelajaran terintegrasi 100% dari SSO & e-Rapor.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-center">
+              <button
+                type="button"
+                onClick={() => loadUasRecap(selectedClass)}
+                disabled={isLoadingUasRecap}
+                className="px-3 py-2 rounded-xl border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-700 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                title="Muat Ulang Data Nilai dari Server"
+              >
+                <span>🔄</span>
+                <span>{isLoadingUasRecap ? 'Memuat...' : 'Segarkan'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportUasExcel}
+                disabled={!uasRecapData?.matrix?.length}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-2 shadow-xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Unduh format spreadsheet Excel (.xlsx)"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>📥 Unduh Rekap Excel (.xlsx)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Filter Pencarian Siswa */}
+          <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border border-neutral-200">
+            <div className="relative w-full max-w-xs">
+              <input
+                type="text"
+                placeholder="Cari siswa atau NISN..."
+                value={uasSearchQuery}
+                onChange={(e) => setUasSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-neutral-300 text-xs focus:outline-hidden focus:ring-1 focus:ring-primary-500"
+              />
+              <span className="absolute left-2.5 top-2 text-neutral-400 text-xs">🔍</span>
+            </div>
+
+            <div className="flex items-center gap-2 text-[11px] text-neutral-500">
+              <span>Total Siswa (SSO): <strong>{uasRecapData?.students?.length || 0}</strong></span>
+              <span>•</span>
+              <span>Ujian Terbit: <strong>{uasRecapData?.uasExams?.length || 0} Mapel</strong></span>
+            </div>
+          </div>
+
+          {/* Tabel Matriks Nilai UAS */}
+          <div className="bg-white rounded-2xl border border-neutral-200 shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-neutral-50 text-neutral-600 font-bold border-b border-neutral-200 uppercase text-[10px] tracking-wider">
+                    <th className="py-3 px-3 w-10 text-center sticky left-0 bg-neutral-50 z-10 border-r border-neutral-200">No</th>
+                    <th className="py-3 px-3 w-28 sticky left-10 bg-neutral-50 z-10 border-r border-neutral-200">NISN</th>
+                    <th className="py-3 px-4 min-w-[180px] sticky left-38 bg-neutral-50 z-10 border-r border-neutral-200 shadow-xs">Nama Siswa</th>
+                    {(uasRecapData?.subjects || []).map((sb) => (
+                      <th key={sb.id || sb.code} className="py-3 px-3 text-center min-w-[70px]" title={sb.name}>
+                        {sb.code || sb.name}
+                      </th>
+                    ))}
+                    <th className="py-3 px-3 text-center font-bold text-neutral-900 bg-neutral-100/60 min-w-[75px]">Total</th>
+                    <th className="py-3 px-3 text-center font-bold text-primary-700 bg-primary-50/60 min-w-[75px]">Rata²</th>
+                    <th className="py-3 px-3 text-center font-bold text-amber-800 bg-amber-50/60 min-w-[65px]">Rank</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {isLoadingUasRecap ? (
+                    <tr>
+                      <td colSpan={(uasRecapData?.subjects?.length || 0) + 6} className="py-12 text-center text-neutral-400">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />
+                          <span className="text-xs">Mengambil rekap nilai UAS dari server e-learning & SSO...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : !uasRecapData?.matrix?.length ? (
+                    <tr>
+                      <td colSpan={(uasRecapData?.subjects?.length || 0) + 6} className="py-12 text-center text-neutral-400">
+                        <p className="font-bold text-neutral-600">Belum Ada Data Siswa atau Nilai UAS Terdaftar</p>
+                        <p className="text-[11px] text-neutral-400 mt-1">
+                          Pastikan siswa terdaftar pada Kelas {selectedClass} di SSO dan ujian UAS telah diterbitkan koordinator mapel.
+                        </p>
+                      </td>
+                    </tr>
+                  ) : (
+                    uasRecapData.matrix
+                      .filter((row) => {
+                        if (!uasSearchQuery.trim()) return true;
+                        const q = uasSearchQuery.toLowerCase();
+                        return (row.name && row.name.toLowerCase().includes(q)) || (row.nisn && row.nisn.includes(q));
+                      })
+                      .map((row, idx) => (
+                        <tr key={row.studentId || idx} className="hover:bg-neutral-50/70 transition-colors">
+                          <td className="py-2.5 px-3 text-center font-bold text-neutral-400 sticky left-0 bg-white border-r border-neutral-100">
+                            {idx + 1}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-[11px] text-neutral-600 sticky left-10 bg-white border-r border-neutral-100">
+                            {row.nisn}
+                          </td>
+                          <td className="py-2.5 px-4 font-bold text-neutral-900 sticky left-38 bg-white border-r border-neutral-100 shadow-xs">
+                            {row.name}
+                          </td>
+                          {(uasRecapData?.subjects || []).map((sb) => {
+                            const key = sb.code || sb.name;
+                            const score = row.scores[key];
+                            return (
+                              <td key={key} className="py-2.5 px-3 text-center font-mono text-xs">
+                                {score !== null && score !== undefined ? (
+                                  <span className={`font-bold ${score < 75 ? 'text-danger-600' : 'text-neutral-900'}`}>
+                                    {score}
+                                  </span>
+                                ) : (
+                                  <span className="text-neutral-300">-</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td className="py-2.5 px-3 text-center font-bold font-mono text-neutral-800 bg-neutral-50/40">
+                            {row.totalScore > 0 ? row.totalScore : '-'}
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-black font-mono text-primary-700 bg-primary-50/30">
+                            {row.average !== null ? row.average : '-'}
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-bold font-mono text-amber-800 bg-amber-50/30">
+                            {row.rank !== '-' ? (
+                              <span className="px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-900 text-[10px]">
+                                #{row.rank}
+                              </span>
+                            ) : '-'}
+                          </td>
+                        </tr>
+                      ))
+                  )}
+                </tbody>
+
+                {/* Footer Statistik per Mapel */}
+                {uasRecapData?.matrix?.length > 0 && (
+                  <tfoot className="border-t-2 border-neutral-200 bg-neutral-50/80 font-bold text-[11px]">
+                    <tr>
+                      <td colSpan={3} className="py-2.5 px-4 text-neutral-800 text-right sticky left-0 bg-neutral-50 border-r border-neutral-200">
+                        Rata-Rata Kelas:
+                      </td>
+                      {(uasRecapData?.subjects || []).map((sb) => {
+                        const key = sb.code || sb.name;
+                        const avg = uasRecapData.subjectStats?.[key]?.average;
+                        return (
+                          <td key={key} className="py-2.5 px-3 text-center font-mono text-primary-700">
+                            {avg !== null && avg !== undefined ? avg : '-'}
+                          </td>
+                        );
+                      })}
+                      <td colSpan={3} className="bg-neutral-50"></td>
+                    </tr>
+                    <tr className="border-t border-neutral-200 text-neutral-500 text-[10px]">
+                      <td colSpan={3} className="py-2 px-4 text-right sticky left-0 bg-neutral-50 border-r border-neutral-200">
+                        Nilai Tertinggi / Terendah:
+                      </td>
+                      {(uasRecapData?.subjects || []).map((sb) => {
+                        const key = sb.code || sb.name;
+                        const stat = uasRecapData.subjectStats?.[key];
+                        return (
+                          <td key={key} className="py-2 px-3 text-center font-mono">
+                            {stat?.count > 0 ? `${stat.highest}/${stat.lowest}` : '-'}
+                          </td>
+                        );
+                      })}
+                      <td colSpan={3} className="bg-neutral-50"></td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 5. Modal Input Kehadiran Siswa (Lazy Loaded) */}
       <AttendanceModal

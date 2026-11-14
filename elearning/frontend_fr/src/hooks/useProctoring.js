@@ -443,18 +443,13 @@ export function useProctoring({
         return { success: false, message: 'Harap masukkan PIN Pengawas!' };
       }
 
-      // Validasi terhadap PIN resmi: custom unlockPin, altUnlockPins (misal token ujian), dan master PIN
+      // Validasi terhadap PIN resmi: custom supervisorPin yang di-generate acak oleh sistem dan token ujian
       const currentUnlockPin = String(unlockPinRef.current || '').trim().toUpperCase();
       const currentAltPins = (altUnlockPinsRef.current || []).map((p) => String(p || '').trim().toUpperCase());
 
       const validPins = new Set([
         currentUnlockPin,
         ...currentAltPins,
-        'SPENSPRA',
-        'GURU123',
-        'ADMINCBT',
-        'SPENSPRA2026',
-        'SMP1PRAMBON',
       ].filter(Boolean));
 
       if (validPins.has(cleanPin)) {

@@ -8,7 +8,7 @@ import Input from '@/components/Input';
 import Modal from '@/components/Modal';
 import StatusBadge from '@/components/StatusBadge';
 import ConfirmModal from '@/components/ConfirmModal';
-import { elearningApi } from '@/lib/elearningApi';
+import { elearningApi, generateRandomPin } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
 export default function TeacherExamsManagementPage() {
@@ -34,6 +34,10 @@ export default function TeacherExamsManagementPage() {
   });
 
   // Form State: Create / Edit Exam
+  const [examCategory, setExamCategory] = useState('SEMESTER_UAS'); // 'REGULAR' | 'SEMESTER_UAS'
+  const [targetGradeLevel, setTargetGradeLevel] = useState('7'); // '7' | '8' | '9'
+  const [supervisorPin, setSupervisorPin] = useState(() => generateRandomPin(6));
+  const [examFilterTab, setExamFilterTab] = useState('ALL'); // 'ALL' | 'SEMESTER_UAS' | 'REGULAR'
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('Matematika');
   const [subjectCode, setSubjectCode] = useState('MAT');
@@ -119,6 +123,16 @@ export default function TeacherExamsManagementPage() {
     return filtered.length > 0 ? filtered : classes;
   };
 
+  // Helper mendapatkan seluruh rombel paralel tingkat dari Master SSO (cth: Tingkat 7 -> 7A, 7B, 7C, dst.)
+  const getParallelClassesForLevel = (lvl) => {
+    if (!lvl) return [];
+    const prefix = String(lvl).trim();
+    return classes.filter((cls) => {
+      const clean = String(cls.name || '').trim().replace(/^kelas\s*/i, '');
+      return clean.startsWith(prefix);
+    });
+  };
+
   const loadExams = async () => {
     try {
       const data = await elearningApi.getExams();
@@ -132,6 +146,9 @@ export default function TeacherExamsManagementPage() {
     const defaultSubj = subjects[0] || { name: '', code: '' };
     setEditingExamId(null);
     setTitle('');
+    setExamCategory('SEMESTER_UAS');
+    setTargetGradeLevel('7');
+    setSupervisorPin(generateRandomPin(6));
     setSubject(defaultSubj.name || '');
     setSubjectCode(defaultSubj.code || '');
 
@@ -143,11 +160,11 @@ export default function TeacherExamsManagementPage() {
     const endObj = new Date(now.getTime() + 90 * 60 * 1000);
     const endStr = `${pad(endObj.getHours())}:${pad(endObj.getMinutes())}`;
 
-    setToken(Math.random().toString(36).substring(2, 8).toUpperCase());
+    setToken(`ASAS${Math.random().toString(36).substring(2, 6).toUpperCase()}`);
     setExamDate(now.toISOString().split('T')[0]);
     setStartTime(startStr);
     setEndTime(endStr);
-    setDurationMinutes(60);
+    setDurationMinutes(90);
     setMaxViolations(1);
     setDescription('');
     setIsCreateModalOpen(true);
@@ -156,6 +173,9 @@ export default function TeacherExamsManagementPage() {
   const handleOpenEditModal = (ex) => {
     setEditingExamId(ex.id);
     setTitle(ex.title || '');
+    setExamCategory(ex.examCategory || (ex.targetGradeLevel ? 'SEMESTER_UAS' : 'REGULAR'));
+    setTargetGradeLevel(ex.targetGradeLevel || '7');
+    setSupervisorPin(ex.supervisorPin || generateRandomPin(6));
     setSubject(ex.subject || subjects[0]?.name || 'Matematika');
     setSubjectCode(ex.subjectCode || subjects[0]?.code || 'MAT');
     setClassName(ex.className || classes[0]?.name || '7A');
@@ -195,14 +215,30 @@ export default function TeacherExamsManagementPage() {
       const teacherName = user?.fullName || user?.full_name || user?.nama || user?.name || 'Bapak/Ibu Guru';
       const teacherId = String(user?.id || user?.nip || user?.username || '');
 
+      const isUas = examCategory === 'SEMESTER_UAS';
+      const parallelClasses = isUas ? getParallelClassesForLevel(targetGradeLevel).map((c) => c.name) : [];
+      const effectiveClassName = isUas
+        ? `Tingkat ${targetGradeLevel} (${parallelClasses.length > 0 ? parallelClasses.join(', ') : 'Semua Rombel'})`
+        : className;
+
       const payload = {
         title: title.trim(),
         subject,
         course_name: subject,
         subjectCode,
         course_id: subjectCode,
-        className,
-        class_code: className,
+        className: effectiveClassName,
+        class_code: effectiveClassName,
+        examCategory,
+        exam_category: examCategory,
+        targetGradeLevel: isUas ? targetGradeLevel : '',
+        target_grade_level: isUas ? targetGradeLevel : '',
+        targetClasses: isUas ? parallelClasses : [className],
+        target_classes: isUas ? parallelClasses : [className],
+        isCoordinatorExam: isUas,
+        is_coordinator_exam: isUas,
+        supervisorPin: isUas ? supervisorPin.trim().toUpperCase() : '',
+        supervisor_pin: isUas ? supervisorPin.trim().toUpperCase() : '',
         teacherName,
         teacher_name: teacherName,
         teacherId,
@@ -1161,11 +1197,65 @@ export default function TeacherExamsManagementPage() {
         {/* Full Form Card (Tanpa Popup Modal) */}
         <Card className="border border-neutral-200 bg-white shadow-xs p-6 sm:p-8">
           <form onSubmit={handleSaveExam} className="space-y-5">
+            {/* Pilihan Kategori Ujian: UAS/ASAS Koordinator vs Ujian Reguler */}
+            <div className="space-y-2 pb-2 border-b border-neutral-100">
+              <label className="text-xs font-bold text-neutral-800">Jenis / Kategori Ujian:</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExamCategory('SEMESTER_UAS');
+                    if (!supervisorPin) setSupervisorPin(generateRandomPin(6));
+                    if (!token.startsWith('ASAS')) setToken(`ASAS${Math.random().toString(36).substring(2, 6).toUpperCase()}`);
+                  }}
+                  className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
+                    examCategory === 'SEMESTER_UAS'
+                      ? 'border-primary-500 bg-primary-50/70 ring-2 ring-primary-500/20 text-primary-950'
+                      : 'border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-600'
+                  }`}
+                >
+                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${
+                    examCategory === 'SEMESTER_UAS' ? 'bg-primary-600 text-white shadow-xs' : 'bg-neutral-100 text-neutral-500'
+                  }`}>
+                    ASAS
+                  </span>
+                  <div className="space-y-0.5 min-w-0">
+                    <p className="font-bold text-xs sm:text-sm text-neutral-900">Ujian UAS / ASAS Semester (Koordinator)</p>
+                    <p className="text-[11px] text-neutral-500 leading-snug">
+                      1 Guru PJ membuat soal untuk seluruh kelas paralel tingkat (7, 8, atau 9). Nilai otomatis masuk ke rekap Wali Kelas.
+                    </p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setExamCategory('REGULAR')}
+                  className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
+                    examCategory === 'REGULAR'
+                      ? 'border-primary-500 bg-primary-50/70 ring-2 ring-primary-500/20 text-primary-950'
+                      : 'border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-600'
+                  }`}
+                >
+                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${
+                    examCategory === 'REGULAR' ? 'bg-primary-600 text-white shadow-xs' : 'bg-neutral-100 text-neutral-500'
+                  }`}>
+                    UH
+                  </span>
+                  <div className="space-y-0.5 min-w-0">
+                    <p className="font-bold text-xs sm:text-sm text-neutral-900">Ujian Reguler / Harian</p>
+                    <p className="text-[11px] text-neutral-500 leading-snug">
+                      Ulangan harian atau kuis mandiri per rombel kelas yang diajar guru bersangkutan.
+                    </p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
             <div className="space-y-1">
               <label className="text-xs font-bold text-neutral-800">Nama / Judul Ujian</label>
               <Input
                 type="text"
-                placeholder="Contoh: Penilaian Akhir Semester (PAS) Ganjil 2026/2027"
+                placeholder={examCategory === 'SEMESTER_UAS' ? "Contoh: Asesmen Sumatif Akhir Semester (ASAS) Ganjil 2026/2027" : "Contoh: Penilaian Harian Bab 1 Algoritma & Pemrograman"}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
@@ -1175,9 +1265,9 @@ export default function TeacherExamsManagementPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-neutral-800">Mata Pelajaran (Diampu)</label>
+                  <label className="text-xs font-bold text-neutral-800">Mata Pelajaran (Diampu di SSO)</label>
                   <span className="text-[10px] text-primary-700 font-bold bg-primary-50 px-1.5 py-0.5 rounded">
-                    Sesuai Penugasan Guru
+                    Sesuai Penugasan SSO
                   </span>
                 </div>
                 {subjects.length === 0 ? (
@@ -1208,21 +1298,44 @@ export default function TeacherExamsManagementPage() {
                 )}
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-neutral-800">Target Kelas / Rombel</label>
-                <select
-                  value={className}
-                  onChange={(e) => setClassName(e.target.value)}
-                  disabled={subjects.length === 0}
-                  className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium disabled:bg-neutral-100 disabled:text-neutral-400"
-                >
-                  {getClassesForSubject(subject).map((cls) => (
-                    <option key={cls.id || cls.name} value={cls.name}>
-                      Kelas {cls.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {examCategory === 'SEMESTER_UAS' ? (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-neutral-800">Target Jenjang Tingkat (Paralel)</label>
+                    <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">
+                      Koordinator Mapel
+                    </span>
+                  </div>
+                  <select
+                    value={targetGradeLevel}
+                    onChange={(e) => setTargetGradeLevel(e.target.value)}
+                    className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-bold text-primary-700"
+                  >
+                    <option value="7">Tingkat 7 (Semua Kelas 7)</option>
+                    <option value="8">Tingkat 8 (Semua Kelas 8)</option>
+                    <option value="9">Tingkat 9 (Semua Kelas 9)</option>
+                  </select>
+                  <p className="text-[10px] text-neutral-500 leading-relaxed">
+                    Rombel terdaftar di SSO: <strong>{getParallelClassesForLevel(targetGradeLevel).map((c) => c.name).join(', ') || 'Belum ada rombel di SSO'}</strong>
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-neutral-800">Target Kelas / Rombel</label>
+                  <select
+                    value={className}
+                    onChange={(e) => setClassName(e.target.value)}
+                    disabled={subjects.length === 0}
+                    className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium disabled:bg-neutral-100 disabled:text-neutral-400"
+                  >
+                    {getClassesForSubject(subject).map((cls) => (
+                      <option key={cls.id || cls.name} value={cls.name}>
+                        Kelas {cls.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Jadwal Pelaksanaan */}
@@ -1269,7 +1382,9 @@ export default function TeacherExamsManagementPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-neutral-800">Token Ujian</label>
+                <label className="text-xs font-bold text-neutral-800">
+                  {examCategory === 'SEMESTER_UAS' ? 'Token Masuk Serentak 1 Sekolah' : 'Token Ujian'}
+                </label>
                 <Input
                   type="text"
                   placeholder="TOKEN"
@@ -1309,14 +1424,36 @@ export default function TeacherExamsManagementPage() {
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs space-y-1">
-              <p className="font-bold flex items-center gap-1.5">
-                <span>🔐</span>
-                <span>PIN Buka Kunci Pengawas:</span>
-              </p>
-              <p className="text-emerald-800 leading-relaxed text-[11px]">
-                Jika layar siswa terkunci karena membuka notifikasi atau keluar jendela, Pengawas dapat membukanya langsung di HP siswa dengan memasukkan <strong>Token Ujian ({token || '...'})</strong> atau PIN Master <strong>SPENSPRA</strong>.
-              </p>
+            {/* PIN Buka Kunci Pengawas Acak Dinamis Sistem */}
+            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="font-bold flex items-center gap-1.5 text-emerald-900">
+                  <span>🔐</span>
+                  <span>PIN Buka Kunci Pengawas (Acak Dinamis Sistem):</span>
+                </p>
+                {examCategory === 'SEMESTER_UAS' && (
+                  <button
+                    type="button"
+                    onClick={() => setSupervisorPin(generateRandomPin(6))}
+                    className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 underline cursor-pointer"
+                    title="Buat PIN acak baru"
+                  >
+                    🎲 Acak Ulang PIN
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  value={supervisorPin}
+                  onChange={(e) => setSupervisorPin(e.target.value.toUpperCase())}
+                  className="w-36 px-3 py-1.5 rounded-lg border border-emerald-300 bg-white font-mono font-black text-sm tracking-widest text-center text-emerald-900 uppercase"
+                  required
+                />
+                <p className="text-[11px] text-emerald-800 leading-snug">
+                  PIN ini seragam satu sekolah untuk seluruh ruang ujian pada sesi ini. Pengawas dapat membukanya langsung di HP siswa tanpa perlu kata sandi statis.
+                </p>
+              </div>
             </div>
 
             <div className="space-y-1">
@@ -1363,14 +1500,14 @@ export default function TeacherExamsManagementPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
-      {/* Header */}
+      {/* Header & Tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
             Bank Soal & Jadwal e-Ujian (CBT)
           </h1>
           <p className="text-xs sm:text-sm text-neutral-500 mt-0.5">
-            Susun butir soal pilihan ganda & esai, tentukan token sesi, dan atur toleransi pelanggaran anti-cheat.
+            Kelola ujian reguler atau paket UAS / ASAS serentak tingkat sekolah terintegrasi SSO & e-Rapor.
           </p>
         </div>
 
@@ -1384,6 +1521,44 @@ export default function TeacherExamsManagementPage() {
         </Button>
       </div>
 
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-2 border-b border-neutral-200 pb-2">
+        <button
+          type="button"
+          onClick={() => setExamFilterTab('ALL')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            examFilterTab === 'ALL'
+              ? 'bg-neutral-900 text-white shadow-xs'
+              : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200'
+          }`}
+        >
+          Semua Ujian ({exams.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setExamFilterTab('SEMESTER_UAS')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            examFilterTab === 'SEMESTER_UAS'
+              ? 'bg-primary-600 text-white shadow-xs'
+              : 'bg-white text-primary-700 hover:bg-primary-50 border border-primary-200'
+          }`}
+        >
+          <span>🏆</span>
+          <span>UAS / ASAS Semester ({exams.filter((e) => e.examCategory === 'SEMESTER_UAS' || e.isCoordinatorExam || e.targetGradeLevel).length})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setExamFilterTab('REGULAR')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            examFilterTab === 'REGULAR'
+              ? 'bg-neutral-900 text-white shadow-xs'
+              : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200'
+          }`}
+        >
+          Ujian Reguler / Harian ({exams.filter((e) => e.examCategory !== 'SEMESTER_UAS' && !e.isCoordinatorExam && !e.targetGradeLevel).length})
+        </button>
+      </div>
+
       {/* Exam Table */}
       <Card noPadding className="overflow-hidden border border-neutral-200 bg-white">
         <div className="overflow-x-auto">
@@ -1391,9 +1566,9 @@ export default function TeacherExamsManagementPage() {
             <thead>
               <tr className="bg-neutral-50 text-neutral-500 font-bold border-b border-neutral-200 uppercase text-[10px] tracking-wider">
                 <th className="py-3 px-4">Nama Sesi Ujian</th>
-                <th className="py-3 px-4">Mapel & Kelas</th>
+                <th className="py-3 px-4">Mapel & Target Kelas</th>
                 <th className="py-3 px-4">Jadwal Pelaksanaan</th>
-                <th className="py-3 px-4 font-mono">Token</th>
+                <th className="py-3 px-4 font-mono">Token & PIN Pengawas</th>
                 <th className="py-3 px-4">Durasi</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4 text-right">Aksi</th>
@@ -1413,21 +1588,41 @@ export default function TeacherExamsManagementPage() {
                   </td>
                 </tr>
               ) : (
-                exams.map((ex) => {
+                exams
+                  .filter((ex) => {
+                    const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+                    if (examFilterTab === 'SEMESTER_UAS') return isUas;
+                    if (examFilterTab === 'REGULAR') return !isUas;
+                    return true;
+                  })
+                  .map((ex) => {
                   const currentStatus = getExamStatus(ex);
+                  const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+
                   return (
                     <tr key={ex.id} className="hover:bg-neutral-50/80 transition-colors">
                       <td className="py-3 px-4 font-semibold text-neutral-900">
-                        <div className="space-y-0.5">
-                          <p className="truncate max-w-[220px] font-bold text-neutral-900">{ex.title}</p>
-                          <p className="text-[11px] text-neutral-400 truncate max-w-[220px]">{ex.description || 'Ujian CBT Sekolah'}</p>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {isUas && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200">
+                                🏆 ASAS Tingkat {ex.targetGradeLevel || '7'}
+                              </span>
+                            )}
+                            <p className="truncate max-w-[220px] font-bold text-neutral-900">{ex.title}</p>
+                          </div>
+                          <p className="text-[11px] text-neutral-400 truncate max-w-[240px]">{ex.description || 'Ujian CBT Sekolah'}</p>
                         </div>
                       </td>
                       <td className="py-3 px-4">
                         <div className="space-y-0.5">
                           <p className="font-bold text-primary-700">{ex.subject}</p>
-                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-neutral-100 text-neutral-600">
-                            Kelas {ex.className}
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            isUas
+                              ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                              : 'bg-neutral-100 text-neutral-600'
+                          }`}>
+                            {isUas ? `Serentak: ${ex.className}` : `Kelas ${ex.className}`}
                           </span>
                         </div>
                       </td>
@@ -1442,9 +1637,22 @@ export default function TeacherExamsManagementPage() {
                         </div>
                       </td>
                       <td className="py-3 px-4 font-mono font-bold text-neutral-800">
-                        <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
-                          {ex.token}
-                        </span>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-neutral-400 font-sans font-medium">Token:</span>
+                            <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                              {ex.token}
+                            </span>
+                          </div>
+                          {ex.supervisorPin && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-emerald-700 font-sans font-bold">PIN:</span>
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-300 text-[11px] tracking-wider">
+                                {ex.supervisorPin}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-neutral-600 font-medium">
                         {ex.durationMinutes} Menit

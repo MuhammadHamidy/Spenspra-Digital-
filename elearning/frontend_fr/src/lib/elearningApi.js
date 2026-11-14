@@ -173,6 +173,15 @@ const DUMMY_IDS = new Set([
 ]);
 
 // Local storage key helpers for seamless client offline/preview
+export function generateRandomPin(length = 6) {
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 function getLocal(key, fallback) {
   if (typeof window === 'undefined') return fallback;
   try {
@@ -407,6 +416,11 @@ export const elearningApi = {
         endTime: eTime || '09:30',
         maxViolations: Number(e.maxViolations || e.max_violations || 3),
         status: e.status || 'UPCOMING',
+        examCategory: e.examCategory || e.exam_category || (e.isUAS || e.targetGradeLevel || e.target_grade_level ? 'SEMESTER_UAS' : 'REGULAR'),
+        targetGradeLevel: e.targetGradeLevel || e.target_grade_level || '',
+        targetClasses: Array.isArray(e.targetClasses) ? e.targetClasses : (Array.isArray(e.target_classes) ? e.target_classes : []),
+        isCoordinatorExam: Boolean(e.isCoordinatorExam || e.is_coordinator_exam || e.targetGradeLevel || e.target_grade_level),
+        supervisorPin: (e.supervisorPin || e.supervisor_pin || '').toUpperCase(),
       };
     };
 
@@ -456,6 +470,7 @@ export const elearningApi = {
   },
 
   createExam: async (payload) => {
+    const generatedPin = payload.supervisorPin || (payload.examCategory === 'SEMESTER_UAS' || payload.targetGradeLevel ? generateRandomPin(6) : '');
     const enhancedPayload = {
       ...payload,
       class_code: payload.className || payload.class_code,
@@ -464,6 +479,12 @@ export const elearningApi = {
       duration_minutes: Number(payload.durationMinutes || payload.duration_minutes || 60),
       teacher_name: payload.teacherName || payload.teacher_name || 'Bapak/Ibu Guru',
       token: (payload.token || '').toUpperCase(),
+      exam_category: payload.examCategory || (payload.targetGradeLevel ? 'SEMESTER_UAS' : 'REGULAR'),
+      target_grade_level: payload.targetGradeLevel || '',
+      target_classes: payload.targetClasses || [],
+      is_coordinator_exam: Boolean(payload.targetGradeLevel || payload.isCoordinatorExam),
+      supervisor_pin: generatedPin.toUpperCase(),
+      supervisorPin: generatedPin.toUpperCase(),
     };
     const res = await fetchJson('/exams', {
       method: 'POST',
@@ -480,6 +501,7 @@ export const elearningApi = {
       subject: enhancedPayload.course_name,
       durationMinutes: enhancedPayload.duration_minutes,
       teacherName: enhancedPayload.teacher_name,
+      supervisorPin: enhancedPayload.supervisor_pin,
     };
     setLocal('exams', [newExam, ...local]);
     return res.success && res.data ? res.data : newExam;
@@ -1391,5 +1413,129 @@ export const elearningApi = {
       await fetchJson(`/sessions/${sessionId}/unlock`, { method: 'POST' }).catch(() => {});
     }
     return true;
+  },
+
+  getUASClassRecap: async (className) => {
+    // 1. Ambil daftar siswa riil di kelas dari SSO (Zero Dummy)
+    const rawStudents = await elearningApi.getStudentsByClass(className);
+    const students = Array.isArray(rawStudents) ? rawStudents : [];
+    if (students.length === 0) {
+      return { className, students: [], subjects: [], uasExams: [], matrix: [], subjectStats: {} };
+    }
+
+    // 2. Ambil daftar mapel resmi dari SSO
+    const rawSubjects = await elearningApi.getSubjects();
+    const subjects = Array.isArray(rawSubjects) ? rawSubjects : [];
+
+    // 3. Ambil seluruh ujian CBT bertipe SEMESTER_UAS yang berlaku untuk kelas ini
+    const allExams = await elearningApi.getExams();
+    const normalize = (c) => String(c || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+    const cNorm = normalize(className);
+
+    const uasExams = (allExams || []).filter((ex) => {
+      const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+      if (!isUasType) return false;
+
+      if (ex.targetClasses && Array.isArray(ex.targetClasses) && ex.targetClasses.length > 0) {
+        return ex.targetClasses.some((tc) => normalize(tc) === cNorm);
+      }
+      if (ex.targetGradeLevel) {
+        return cNorm.startsWith(String(ex.targetGradeLevel));
+      }
+      return normalize(ex.className) === cNorm;
+    });
+
+    // 4. Kumpulkan seluruh hasil/sesi ujian untuk ujian-ujian tersebut
+    const examResultsMap = new Map();
+    for (const ex of uasExams) {
+      try {
+        const sessions = await elearningApi.getExamMonitorSessions(ex.id);
+        (sessions || []).forEach((sess) => {
+          const sId = String(sess.studentId || sess.student_id || sess.id || '');
+          if (sId) {
+            const score = typeof sess.score === 'number' ? sess.score : (Number(sess.score) || 0);
+            examResultsMap.set(`${ex.id}_${sId}`, { score, status: sess.status });
+          }
+        });
+      } catch (_) {}
+    }
+
+    // 5. Susun matriks nilai per siswa untuk setiap mata pelajaran resmi SSO
+    const matrix = students.map((std, idx) => {
+      const sId = String(std.id || std.nisn || std.username || '');
+      const studentName = std.name || std.fullName || std.full_name || `Siswa ${idx + 1}`;
+      const nisn = std.nisn || std.nis || std.username || '-';
+
+      const subjectScores = {};
+      let totalScore = 0;
+      let countWithScore = 0;
+
+      subjects.forEach((sb) => {
+        const matchedExam = uasExams.find((ex) =>
+          (ex.subjectCode && sb.code && ex.subjectCode === sb.code) ||
+          (ex.subject && sb.name && ex.subject.toLowerCase() === sb.name.toLowerCase())
+        );
+
+        if (matchedExam) {
+          const res = examResultsMap.get(`${matchedExam.id}_${sId}`);
+          if (res !== undefined) {
+            subjectScores[sb.code || sb.name] = res.score;
+            totalScore += res.score;
+            countWithScore += 1;
+          } else {
+            subjectScores[sb.code || sb.name] = null;
+          }
+        } else {
+          subjectScores[sb.code || sb.name] = null;
+        }
+      });
+
+      const average = countWithScore > 0 ? Number((totalScore / countWithScore).toFixed(1)) : null;
+
+      return {
+        studentId: sId,
+        nisn,
+        name: studentName,
+        scores: subjectScores,
+        totalScore,
+        average,
+        completedCount: countWithScore,
+        totalUasExams: uasExams.length,
+      };
+    });
+
+    // Hitung Peringkat / Rank Kelas
+    const sorted = [...matrix].sort((a, b) => (b.average || 0) - (a.average || 0));
+    sorted.forEach((item, rIdx) => {
+      const original = matrix.find((m) => m.studentId === item.studentId);
+      if (original) original.rank = item.average !== null ? rIdx + 1 : '-';
+    });
+
+    // Hitung Statistik Nilai per Mapel
+    const subjectStats = {};
+    subjects.forEach((sb) => {
+      const key = sb.code || sb.name;
+      const validScores = matrix.map((m) => m.scores[key]).filter((s) => s !== null && typeof s === 'number');
+      if (validScores.length > 0) {
+        const sum = validScores.reduce((acc, v) => acc + v, 0);
+        subjectStats[key] = {
+          average: Number((sum / validScores.length).toFixed(1)),
+          highest: Math.max(...validScores),
+          lowest: Math.min(...validScores),
+          count: validScores.length,
+        };
+      } else {
+        subjectStats[key] = { average: null, highest: null, lowest: null, count: 0 };
+      }
+    });
+
+    return {
+      className,
+      students,
+      subjects,
+      uasExams,
+      matrix,
+      subjectStats,
+    };
   },
 };

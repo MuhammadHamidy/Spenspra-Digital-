@@ -96,6 +96,26 @@ export default function StudentExamsHubPage() {
 
   const filteredExams = useMemo(() => {
     return exams.filter((ex) => {
+      // 1. Jika ujian bertipe UAS / ASAS Tingkat Terpusat
+      const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+      if (isUas) {
+        if (!studentClassNorm) return false;
+
+        // Cek jika rombel siswa terdaftar di daftar target kelas UAS
+        if (Array.isArray(ex.targetClasses) && ex.targetClasses.length > 0) {
+          if (ex.targetClasses.some((tc) => normalizeClass(tc) === studentClassNorm)) {
+            return true;
+          }
+        }
+
+        // Cek jika jenjang tingkat siswa cocok (misal kelas 7A -> tingkat 7)
+        if (ex.targetGradeLevel) {
+          if (studentClassNorm.startsWith(String(ex.targetGradeLevel))) {
+            return true;
+          }
+        }
+      }
+
       const examClassRaw = ex.className || ex.class_code || ex.classCode || '';
       const examClassNorm = normalizeClass(examClassRaw);
 
@@ -322,11 +342,16 @@ export default function StudentExamsHubPage() {
                   {/* Top Badges */}
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-1.5 flex-wrap">
+                      {(exam.examCategory === 'SEMESTER_UAS' || exam.isCoordinatorExam || exam.targetGradeLevel) && (
+                        <span className="px-2.5 py-0.5 rounded-[999px] bg-purple-100 text-purple-900 border border-purple-200 text-[10px] font-black">
+                          🏆 ASAS Tingkat {exam.targetGradeLevel || 'Sekolah'}
+                        </span>
+                      )}
                       <span className="px-2.5 py-0.5 rounded-[999px] bg-primary-100 text-primary-800 text-[10px] font-bold">
                         {exam.subject}
                       </span>
                       <span className="px-2 py-0.5 rounded-[999px] bg-neutral-100 text-neutral-700 text-[10px] font-semibold">
-                        Kelas {exam.className}
+                        {exam.targetGradeLevel ? `Tingkat ${exam.targetGradeLevel}` : `Kelas ${exam.className}`}
                       </span>
                     </div>
 

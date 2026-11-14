@@ -130,8 +130,8 @@ export default function CBTExamRunnerPage({ params }) {
     maxViolations: 1, // Solusi 2: Zero-Tolerance (1x pelanggaran langsung terkunci)
     zeroTolerance: true,
     enabled: !loading && !finishResult && Boolean(session),
-    unlockPin: exam?.token || 'SPENSPRA',
-    altUnlockPins: [exam?.token, exam?.supervisorPin, 'SPENSPRA', 'GURU123', 'ADMINCBT', 'SPENSPRA2026', 'SMP1PRAMBON'].filter(Boolean),
+    unlockPin: exam?.supervisorPin || exam?.token || '',
+    altUnlockPins: [exam?.supervisorPin, exam?.token].filter(Boolean),
     onLock: handleLockSession,
     onViolation: handleViolationRecorded,
     onUnlock: async (unlockInfo) => {
@@ -166,19 +166,18 @@ export default function CBTExamRunnerPage({ params }) {
     setSupervisorPinError('');
 
     const examToken = String(exam?.token || '').trim().toUpperCase();
-    const isMasterOrToken =
-      (examToken && entered === examToken) ||
-      ['SPENSPRA', 'GURU123', 'ADMINCBT', 'SPENSPRA2026', 'SMP1PRAMBON'].includes(entered);
+    const officialSupervisorPin = String(exam?.supervisorPin || '').trim().toUpperCase();
+    const isValidPin = (officialSupervisorPin && entered === officialSupervisorPin) || (examToken && entered === examToken);
 
     const res = unlockSession(entered);
-    if (!res.success && !isMasterOrToken) {
+    if (!res.success && !isValidPin) {
       setSupervisorPinError(res.message || 'PIN Pengawas tidak cocok!');
       setIsUnlocking(false);
       return;
     }
 
-    if (!res.success && isMasterOrToken) {
-      unlockSession('SPENSPRA');
+    if (!res.success && isValidPin) {
+      unlockSession(entered);
     }
 
     // Beritahukan ke server backend agar status sesi di database dan monitor guru kembali IN_PROGRESS
