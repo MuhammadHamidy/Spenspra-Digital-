@@ -10,6 +10,7 @@ import { exportToExcelXml } from '@/lib/excelExport';
 import Modal from '@/components/Modal';
 import ImportGradesModal from '@/components/ImportGradesModal';
 import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
+import { elearningApi } from '@/lib/elearningApi';
 
 const PREDICATE_LABELS = {
   A: 'Sangat baik dalam',
@@ -74,6 +75,7 @@ export default function PenilaianPTSPage() {
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [isSyncingCbt, setIsSyncingCbt] = useState(false);
 
   const roleStr = String(currentUser?.role || currentUser?.roleName || '').toUpperCase();
   const isTeacherRole = roleStr === 'GURU' || roleStr.includes('TEACHER');
@@ -451,6 +453,129 @@ export default function PenilaianPTSPage() {
     });
   };
 
+  const handleSyncFromCBT = async () => {
+    if (isLocked) {
+      alert('Nilai untuk kelas ini telah dikunci/finalisasi.');
+      return;
+    }
+    if (!className || !subject) {
+      alert('Pilih kelas dan mata pelajaran terlebih dahulu.');
+      return;
+    }
+
+    setIsSyncingCbt(true);
+    try {
+      const exams = await elearningApi.getExams();
+      const normalize = (c) => String(c || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+      const cNorm = normalize(className);
+      const gradeDigit = className.match(/\d+/)?.[0] || '';
+      const currentSubjectObj = subjects.find((item) => item.code === subject);
+      const subjectName = (currentSubjectObj?.name || subject || '').toLowerCase();
+
+      const matchingExams = (exams || []).filter((ex) => {
+        const exSub = (ex.subject || '').toLowerCase();
+        const exCode = (ex.subjectCode || '').toLowerCase();
+        const matchSub =
+          (exCode && exCode === subject.toLowerCase()) ||
+          exSub.includes(subject.toLowerCase()) ||
+          (subjectName && (exSub.includes(subjectName) || subjectName.includes(exSub)));
+
+        if (!matchSub) return false;
+
+        const matchCls =
+          normalize(ex.className) === cNorm ||
+          (Array.isArray(ex.targetClasses) && ex.targetClasses.some((tc) => normalize(tc) === cNorm)) ||
+          (ex.targetGradeLevel && gradeDigit && String(ex.targetGradeLevel) === gradeDigit) ||
+          (ex.targetGradeLevel && cNorm.startsWith(String(ex.targetGradeLevel)));
+
+        return matchCls;
+      });
+
+      if (matchingExams.length === 0) {
+        alert(`Tidak ditemukan jadwal ujian CBT yang sesuai untuk Mapel "${currentSubjectObj?.name || subject}" di Kelas ${className}.`);
+        setIsSyncingCbt(false);
+        return;
+      }
+
+      const studentScoreMap = new Map();
+      for (const ex of matchingExams) {
+        const sessions = await elearningApi.getExamMonitorSessions(ex.id);
+        (sessions || []).forEach((sess) => {
+          const sId = String(sess.studentId || sess.student_id || sess.id || '');
+          const sNisn = String(sess.nisn || '');
+          const sName = String(sess.studentName || sess.student_name || '').toLowerCase().trim();
+          const score = typeof sess.score === 'number' ? sess.score : (sess.score !== undefined && sess.score !== null ? Number(sess.score) : null);
+
+          if (score !== null && !isNaN(score)) {
+            if (sId) studentScoreMap.set(sId, score);
+            if (sNisn && sNisn !== '-') studentScoreMap.set(sNisn, score);
+            if (sName) studentScoreMap.set(sName, score);
+          }
+        });
+
+        if (typeof window !== 'undefined') {
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith(`exam_session_${ex.id}_`)) {
+              try {
+                const sess = JSON.parse(localStorage.getItem(k));
+                if (sess && sess.score !== null && sess.score !== undefined) {
+                  const sId = String(sess.studentId || sess.student_id || '');
+                  const score = Number(sess.score);
+                  if (sId && !isNaN(score)) {
+                    studentScoreMap.set(sId, score);
+                  }
+                }
+              } catch (_) {}
+            }
+          }
+        }
+      }
+
+      let pulledCount = 0;
+      setRows((prev) => {
+        const updated = prev.map((r) => {
+          const sId = String(r.id || '');
+          const sNisn = String(r.nisn || '');
+          const sName = String(r.name || '').toLowerCase().trim();
+
+          const score =
+            studentScoreMap.get(sId) ??
+            (sNisn && sNisn !== '-' ? studentScoreMap.get(sNisn) : undefined) ??
+            studentScoreMap.get(sName);
+
+          if (score !== undefined && score !== null && !isNaN(score)) {
+            pulledCount++;
+            const finalScore = Math.min(100, Math.max(0, score));
+            const pred = getPredicate(finalScore);
+            const desc = formatDescription(pred);
+            return {
+              ...r,
+              score: finalScore,
+              description: r.description || desc,
+            };
+          }
+          return r;
+        });
+        saveDraftLocally(updated);
+        return updated;
+      });
+
+      if (pulledCount > 0) {
+        setSaveStatus('LOCAL_DRAFT');
+        setSaved(true);
+        setSaveMessage(`Berhasil menarik ${pulledCount} nilai siswa dari CBT (${matchingExams.map((e) => e.title).join(', ')}). Klik "Simpan Nilai USTS" untuk menyimpan ke server.`);
+      } else {
+        alert(`Ditemukan ${matchingExams.length} ujian CBT, namun belum ada nilai siswa dari Kelas ${className} yang tersimpan.`);
+      }
+    } catch (err) {
+      console.error('Gagal sinkron CBT:', err);
+      alert('Terjadi kesalahan saat menyinkronkan CBT: ' + err.message);
+    } finally {
+      setIsSyncingCbt(false);
+    }
+  };
+
   const handleApplyImportedGrades = (updates) => {
     if (isLocked) {
       alert('Nilai untuk kelas ini telah dikunci/finalisasi.');
@@ -787,6 +912,21 @@ export default function PenilaianPTSPage() {
       {/* Tombol Bar Tombol Cepat: Excel, Import, Log, Template */}
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex flex-wrap items-center gap-2">
+          {!isKepalaSekolah && (
+            <button
+              type="button"
+              onClick={handleSyncFromCBT}
+              disabled={isSyncingCbt || isLocked || !className || !subject}
+              className="px-3.5 py-2 rounded-lg bg-linear-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="Tarik nilai dari e-Ujian CBT untuk rombel ini"
+            >
+              <svg className={`w-4 h-4 ${isSyncingCbt ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>{isSyncingCbt ? 'Menyinkronkan...' : '⚡ Tarik Nilai dari CBT'}</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={handleDownloadTemplate}
