@@ -104,6 +104,31 @@ export default function CivitasDashboard() {
   };
 
   useEffect(() => {
+    // Jika ada parameter app dari redirect landing page/portal luar saat user sudah memiliki sesi aktif,
+    // langsung luncurkan aplikasi target tanpa menampilkan ulang dashboard menu civitas.
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const reqApp = (urlParams.get('app') || urlParams.get('redirect_uri') || urlParams.get('redirect') || '').toLowerCase();
+      if (reqApp) {
+        if (['rapor', 'erapor', 'e-rapor'].some((k) => reqApp.includes(k))) {
+          window.location.replace(getRaporLaunchUrl());
+          return;
+        }
+        if (['elearning', 'belajar', 'lms', 'cbt', 'ujian'].some((k) => reqApp.includes(k))) {
+          window.location.replace(getBelajarLaunchUrl());
+          return;
+        }
+        if (['perpus', 'perpusdig', 'perpustakaan', 'pustaka'].some((k) => reqApp.includes(k))) {
+          window.location.replace(getPerpusLaunchUrl());
+          return;
+        }
+        if (reqApp.includes('presensi')) {
+          window.location.replace('/presensi');
+          return;
+        }
+      }
+    }
+
     accountApiAdapter.getAcademicPeriod().then((serverPeriod) => {
       if (serverPeriod?.year && serverPeriod?.semester) {
         setAcademicPeriod(serverPeriod);
@@ -160,7 +185,7 @@ export default function CivitasDashboard() {
   // ────────────────────────────────────────────────────────────
   if (isKepalaSekolah) {
     return (
-      <div className="mx-auto max-w-6xl space-y-7 pb-12 animate-in fade-in duration-200">
+      <div className="w-full max-w-7xl mx-auto space-y-7 pb-12 animate-in fade-in duration-200">
         {/* Executive Header Banner */}
         <section className="relative overflow-hidden rounded-2xl border border-primary-300/40 bg-gradient-to-br from-[#2D2348] via-[#3C2F60] to-[#4B3B78] text-white p-7 sm:p-9 shadow-sm">
           <div className="absolute right-0 top-0 -mt-10 -mr-10 h-72 w-72 rounded-full bg-accent-500/10 blur-3xl pointer-events-none" />
@@ -385,7 +410,7 @@ export default function CivitasDashboard() {
     : (user?.nimNip || user?.nip ? `NIP: ${user?.nimNip || user?.nip}` : 'Pendidik SMPN 1 Prambon');
 
   return (
-    <div className="mx-auto max-w-6xl space-y-7 pb-12 animate-in fade-in duration-200">
+    <div className="w-full max-w-7xl mx-auto space-y-7 pb-12 animate-in fade-in duration-200">
       {/* 1. INSTITUTIONAL WELCOME STRIP */}
       <section className="rounded-2xl border border-neutral-300 bg-white p-6 sm:p-7 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-5">
         <div className="space-y-1.5">

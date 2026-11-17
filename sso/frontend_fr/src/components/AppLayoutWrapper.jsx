@@ -41,56 +41,58 @@ export default function AppLayoutWrapper({ children }) {
     return (
       <div className="min-h-screen bg-neutral-100 text-neutral-1000 font-sans flex flex-col">
         {/* Header Bersih & Minimalis Khusus Civitas Sesuai Design System */}
-        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-neutral-300 px-5 sm:px-10 py-3.5 flex items-center justify-between shadow-2xs">
-          <div className="flex items-center gap-3.5">
-            <div className="h-11 w-11 rounded-xl bg-white p-1 border border-neutral-300 shadow-2xs flex items-center justify-center shrink-0">
-              <img
-                src="/image/new_logo_prambon.png"
-                alt="Logo SMPN 1 Prambon"
-                className="h-full w-full object-contain"
-              />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm sm:text-base font-bold text-primary-500 leading-tight tracking-tight">
-                  SMP NEGERI 1 PRAMBON
-                </h1>
-                <span className="hidden md:inline-block px-2 py-0.5 rounded-full text-[9px] font-bold bg-primary-50 text-primary-700 border border-primary-100">
-                  SSO PORTAL
-                </span>
+        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-neutral-300 px-4 sm:px-6 lg:px-8 py-3.5 shadow-2xs">
+          <div className="w-full max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3.5">
+              <div className="h-11 w-11 rounded-xl bg-white p-1 border border-neutral-300 shadow-2xs flex items-center justify-center shrink-0">
+                <img
+                  src="/image/new_logo_prambon.png"
+                  alt="Logo SMPN 1 Prambon"
+                  className="h-full w-full object-contain"
+                />
               </div>
-              <p className="text-[11px] font-medium text-neutral-500">
-                Pusat Layanan Ekosistem Digital Sekolah
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3.5">
-            <div className="hidden sm:block text-right">
-              <p className="text-xs font-bold text-neutral-1000 leading-tight">
-                {user?.fullName || user?.full_name || user?.username || 'Civitas Sekolah'}
-              </p>
-              <div className="flex items-center justify-end gap-1.5 mt-0.5">
-                <span className="text-[10px] font-semibold text-primary-500 bg-primary-50 px-1.5 py-0.2 rounded">
-                  {roleBadge}
-                </span>
-                <span className="text-[10px] text-neutral-500 font-mono">
-                  {user?.nimNip || user?.nip || user?.nisn || 'Terverifikasi'}
-                </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-sm sm:text-base font-bold text-primary-500 leading-tight tracking-tight">
+                    SMP NEGERI 1 PRAMBON
+                  </h1>
+                  <span className="hidden md:inline-block px-2 py-0.5 rounded-full text-[9px] font-bold bg-primary-50 text-primary-700 border border-primary-100">
+                    SSO PORTAL
+                  </span>
+                </div>
+                <p className="text-[11px] font-medium text-neutral-500">
+                  Pusat Layanan Ekosistem Digital Sekolah
+                </p>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsLogoutConfirmOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-danger-300/80 bg-white text-danger-500 hover:bg-danger-50 text-xs font-semibold transition shadow-2xs cursor-pointer"
-              title="Keluar dari sesi Single Sign-On"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              <span>Keluar Sesi</span>
-            </button>
+            <div className="flex items-center gap-3.5">
+              <div className="hidden sm:block text-right">
+                <p className="text-xs font-bold text-neutral-1000 leading-tight">
+                  {user?.fullName || user?.full_name || user?.username || 'Civitas Sekolah'}
+                </p>
+                <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                  <span className="text-[10px] font-semibold text-primary-500 bg-primary-50 px-1.5 py-0.2 rounded">
+                    {roleBadge}
+                  </span>
+                  <span className="text-[10px] text-neutral-500 font-mono">
+                    {user?.nimNip || user?.nip || user?.nisn || 'Terverifikasi'}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsLogoutConfirmOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-danger-300/80 bg-white text-danger-500 hover:bg-danger-50 text-xs font-semibold transition shadow-2xs cursor-pointer"
+                title="Keluar dari sesi Single Sign-On"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span>Keluar Sesi</span>
+              </button>
+            </div>
           </div>
         </header>
 
@@ -106,7 +108,7 @@ export default function AppLayoutWrapper({ children }) {
         />
 
         {/* Konten Utama Terpusat */}
-        <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+        <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
           {children}
         </main>
       </div>

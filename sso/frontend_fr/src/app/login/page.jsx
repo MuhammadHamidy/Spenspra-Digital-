@@ -19,6 +19,19 @@ function LoginForm() {
   const reason = searchParams.get('reason');
   const [showPassword, setShowPassword] = useState(false);
 
+  // Ambil parameter app target dari query URL
+  const appParam = (searchParams.get('app') || '').toLowerCase();
+  const redirectUriParam = searchParams.get('redirect_uri') || searchParams.get('redirect') || '';
+
+  const getTargetAppName = () => {
+    if (appParam === 'rapor' || appParam === 'erapor') return 'e-Rapor Spenspra';
+    if (appParam === 'elearning' || appParam === 'belajar') return 'Spenspra Belajar';
+    if (appParam === 'perpus' || appParam === 'perpusdig') return 'e-Perpustakaan';
+    if (appParam === 'presensi') return 'Presensi Digital QR';
+    return '';
+  };
+  const targetAppName = getTargetAppName();
+
   // Ambil target redirect dari query string jika ada secara eksplisit
   React.useEffect(() => {
     const raw = searchParams.get('redirect_uri') || searchParams.get('app') || searchParams.get('redirect');
@@ -27,11 +40,12 @@ function LoginForm() {
         setRedirectTarget(getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor'));
       } else if (raw.toLowerCase() === 'perpus' || raw.toLowerCase() === 'perpusdig') {
         setRedirectTarget(getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus'));
+      } else if (raw.toLowerCase() === 'belajar' || raw.toLowerCase() === 'elearning') {
+        setRedirectTarget(getDynamicAppUrl(process.env.NEXT_PUBLIC_ELEARNING_URL || process.env.NEXT_PUBLIC_BELAJAR_URL, 'belajar'));
       } else {
         setRedirectTarget(raw);
       }
     } else {
-      // Jika URL bersih (/login), pastikan target redirect dibersihkan
       try {
         sessionStorage.removeItem('sso_login_redirect_target');
       } catch {}
@@ -50,8 +64,14 @@ function LoginForm() {
       const user = res?.user || {};
       const roleName = (user.roleName || user.role || user.role_name || '').toUpperCase();
 
-      // Hanya gunakan query redirect jika hadir di URL saat ini
-      let targetUrl = redirectTarget || searchParams.get('redirect_uri') || searchParams.get('app') || searchParams.get('redirect');
+      const requestedApp = (
+        searchParams.get('app') ||
+        searchParams.get('redirect_uri') ||
+        searchParams.get('redirect') ||
+        redirectTarget ||
+        ''
+      ).toLowerCase();
+
       try {
         sessionStorage.removeItem('sso_login_redirect_target');
       } catch {}
@@ -80,24 +100,78 @@ function LoginForm() {
         return;
       }
 
-      // 2. ADMIN RAPOR MURNI: Masuk ke halaman Administrasi e-Rapor
-      if (roleName === 'ADMIN_RAPOR' || roleName === 'ADMIN-RAPOR') {
+      // 2. ADMIN RAPOR MURNI: Jika tidak ada target spesifik, masuk ke halaman Administrasi e-Rapor
+      if ((roleName === 'ADMIN_RAPOR' || roleName === 'ADMIN-RAPOR') && !requestedApp) {
         const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
         window.location.href = `${raporBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent('/admin/teachers')}`;
         return;
       }
 
-      // 3. ADMIN PERPUS (Akun Khusus Meja Kerja Perpustakaan):
-      // Langsung diarahkan ke Meja Administrasi Pustakawan
-      if (roleName === 'ADMIN_PERPUS' || roleName === 'PUSTAKAWAN') {
+      // 3. ADMIN PERPUS (Pustakawan): Jika tidak ada target spesifik, langsung ke Meja Administrasi Pustakawan
+      if ((roleName === 'ADMIN_PERPUS' || roleName === 'PUSTAKAWAN') && !requestedApp) {
         const perpusBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus');
         window.location.href = `${perpusBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}&redirect=${encodeURIComponent('/pustakawan')}`;
         return;
       }
 
-      // 4. GURU / PENDIDIK / CIVITAS (Termasuk Bu Conie & guru lainnya):
-      // Harus SELALU masuk ke /dashboard SSO agar dapat memilih kartu aplikasi
-      // (Spenspra Belajar, e-Rapor Guru Pengampu, dan Perpustakaan untuk membaca/meminjam buku).
+      // 4. DIRECT REDIRECT BERDASARKAN SISTEM YANG DIPILIH DI AWAL:
+      // Pengguna mengklik kartu tertentu (e-Rapor, Belajar, Perpustakaan, atau Presensi) di portal depan,
+      // maka sistem LANGSUNG meluncurkan aplikasi tujuan tanpa menampilkan ulang menu dashboard!
+      if (requestedApp) {
+        // A. e-Rapor Spenspra
+        if (['rapor', 'erapor', 'e-rapor'].some((k) => requestedApp.includes(k))) {
+          const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
+          const raporRole = isEducator ? (roleName === 'WALI_KELAS' ? 'WALI_KELAS' : 'GURU') : 'SISWA';
+          const rPayload = { ...userPayload, roleName: raporRole, peran: raporRole };
+          const rEncoded = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(rPayload)))) : '';
+          window.location.href = `${raporBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${rEncoded}`;
+          return;
+        }
+
+        // B. Spenspra Belajar (LMS & CBT e-Ujian)
+        if (['elearning', 'belajar', 'lms', 'cbt', 'ujian'].some((k) => requestedApp.includes(k))) {
+          const belajarBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_ELEARNING_URL || process.env.NEXT_PUBLIC_BELAJAR_URL, 'belajar');
+          const belajarRole = isEducator ? 'GURU' : 'SISWA';
+          const bPayload = { ...userPayload, roleName: belajarRole, peran: belajarRole };
+          const bEncoded = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(bPayload)))) : '';
+          window.location.href = `${belajarBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${bEncoded}`;
+          return;
+        }
+
+        // C. e-Perpustakaan
+        if (['perpus', 'perpusdig', 'perpustakaan', 'pustaka'].some((k) => requestedApp.includes(k))) {
+          const perpusBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus');
+          const isLibrarian = ['ADMIN_PERPUS', 'PUSTAKAWAN'].includes(roleName);
+          const destination = isLibrarian ? '/pustakawan' : '/';
+          const pPayload = {
+            id: user?.id || user?.person_id || '',
+            username: user?.username || '',
+            fullName: user?.fullName || user?.full_name || user?.name || '',
+            roleName: isLibrarian ? 'ADMIN_PERPUS' : (isEducator ? 'GURU' : 'SISWA'),
+            nama: user?.fullName || user?.full_name || user?.name || '',
+            peran: isLibrarian ? 'ADMIN_PERPUS' : (isEducator ? 'GURU' : 'SISWA'),
+            nimNip: user?.nimNip || user?.nip || user?.nisn || '',
+            kelas_atau_jabatan: user?.className || user?.kelas || (isEducator ? 'Pendidik' : 'Peserta Didik'),
+          };
+          const pEncoded = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(pPayload)))) : '';
+          window.location.href = `${perpusBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${pEncoded}&redirect=${encodeURIComponent(destination)}`;
+          return;
+        }
+
+        // D. Presensi Digital QR
+        if (requestedApp.includes('presensi')) {
+          window.location.href = '/presensi';
+          return;
+        }
+
+        // E. Direct Web URL (misal redirect_uri external)
+        if (requestedApp.startsWith('http://') || requestedApp.startsWith('https://')) {
+          window.location.href = requestedApp;
+          return;
+        }
+      }
+
+      // 5. Default Civitas: Hanya jika tidak memilih aplikasi spesifik di awal, buka dashboard SSO
       window.location.href = '/dashboard';
       return;
     } catch (err) {
@@ -127,6 +201,13 @@ function LoginForm() {
         <p className="text-xs text-slate-500 font-medium mt-0.5">
           Portal Masuk Single Sign-On (SSO)
         </p>
+
+        {targetAppName && (
+          <div className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary-50 border border-primary-200 text-primary-800 text-[11px] font-semibold animate-in fade-in">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary-600 animate-pulse" />
+            <span>Menuju Langsung: <strong className="font-bold text-primary-900">{targetAppName}</strong></span>
+          </div>
+        )}
       </div>
 
       {reason === 'inactivity' && (

@@ -257,16 +257,23 @@ export default function TeacherExamsManagementPage() {
       if (editingExamId) {
         await elearningApi.updateExam(editingExamId, payload);
         setIsEditModalOpen(false);
+        await loadExams();
       } else {
-        await elearningApi.createExam({
+        const createdExam = await elearningApi.createExam({
           ...payload,
           totalQuestions: 0,
           status: 'UPCOMING',
           isActive: true,
         });
         setIsCreateModalOpen(false);
+        await loadExams();
+        // Langsung arahkan guru ke halaman penuh pembuatan butir soal tanpa popup
+        const targetExam = createdExam && (createdExam.id || createdExam._id)
+          ? createdExam
+          : { ...payload, id: createdExam?.id || `exam-${Date.now()}` };
+        await handleOpenQuestionEditor(targetExam);
+        return;
       }
-      loadExams();
     } catch (err) {
       alert('Gagal menyimpan jadwal ujian: ' + err.message);
     } finally {
@@ -1150,7 +1157,7 @@ export default function TeacherExamsManagementPage() {
 
   if (isCreateModalOpen || isEditModalOpen) {
     return (
-      <div className="space-y-6 max-w-4xl mx-auto pb-12 animate-in fade-in duration-200">
+      <div className="space-y-6 w-full max-w-7xl mx-auto pb-12 animate-in fade-in duration-200">
         {/* Top Navigation Header */}
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200 shadow-xs flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -1485,11 +1492,11 @@ export default function TeacherExamsManagementPage() {
                 type="submit"
                 variant="primary"
                 size="md"
-                className="w-full sm:w-auto min-h-[42px] font-bold"
+                className="w-full sm:w-auto min-h-[42px] font-bold shadow-xs flex items-center justify-center gap-2"
                 loading={isSubmitting}
                 disabled={isSubmitting || subjects.length === 0}
               >
-                {editingExamId ? 'Simpan Perubahan' : 'Terbitkan Jadwal Ujian'}
+                {editingExamId ? 'Simpan Perubahan Jadwal' : 'Simpan & Lanjut Buat Butir Soal →'}
               </Button>
             </div>
           </form>

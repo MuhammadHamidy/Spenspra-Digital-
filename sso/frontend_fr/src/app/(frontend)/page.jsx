@@ -87,7 +87,7 @@ function PublicApplicationPortal() {
     <main className="min-h-screen bg-neutral-100 font-sans text-neutral-1000 flex flex-col justify-between">
       {/* Top Header */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-neutral-300">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
           <div className="flex items-center gap-3.5">
             <div className="h-11 w-11 rounded-xl bg-white p-1 border border-neutral-300 shadow-2xs flex items-center justify-center shrink-0">
               <img src="/image/new_logo_prambon.png" alt="Logo SMPN 1 Prambon" className="h-full w-full object-contain" />
@@ -119,7 +119,7 @@ function PublicApplicationPortal() {
       </header>
 
       {/* Hero & System Grid */}
-      <div className="mx-auto max-w-6xl w-full px-5 py-8 sm:px-8 sm:py-12 flex-1 space-y-8">
+      <div className="mx-auto max-w-7xl w-full px-5 py-8 sm:px-8 sm:py-12 flex-1 space-y-8">
         <section className="max-w-3xl space-y-2.5">
           <div className="inline-flex items-center gap-2 rounded-full bg-primary-50 px-3 py-1 text-[11px] font-bold text-primary-700 border border-primary-100">
             <span className="w-1.5 h-1.5 rounded-full bg-primary-500 animate-pulse" />
@@ -190,7 +190,7 @@ function PublicApplicationPortal() {
 
       {/* Footer */}
       <footer className="border-t border-neutral-300 bg-white py-5 px-5 sm:px-8 text-xs text-neutral-500">
-        <div className="mx-auto max-w-6xl flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-neutral-800">SMP Negeri 1 Prambon</span>
             <span>•</span>
@@ -218,10 +218,11 @@ export default function MainPage() {
     if (!user) {
       return;
     }
+    const search = typeof window !== 'undefined' ? window.location.search : '';
     if (isSuperAdmin) {
       router.replace('/superadmin');
     } else {
-      router.replace('/dashboard');
+      router.replace(`/dashboard${search}`);
     }
   }, [user, loading, isSuperAdmin, router]);
 
