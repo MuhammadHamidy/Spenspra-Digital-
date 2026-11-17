@@ -135,12 +135,12 @@ export default function Navbar({ onToggleMobileSidebar = () => {} }) {
     setIsDropdownOpen(false);
     const isProd = typeof window !== 'undefined' && window.location.hostname.includes('spenspra.com');
     const isSch = typeof window !== 'undefined' && window.location.hostname.includes('spenspra.sch.id');
-    const targetLogin = isProd
-      ? 'https://sso.spenspra.com/login'
+    const targetHome = isProd
+      ? 'https://spenspra.com/'
       : isSch
-      ? 'https://sso.spenspra.sch.id/login'
-      : (process.env.NEXT_PUBLIC_SSO_LOGIN_URL || 'http://sso.localhost/login');
-    window.location.href = targetLogin;
+      ? 'https://spenspra.sch.id/'
+      : (process.env.NEXT_PUBLIC_SSO_PORTAL_URL || (process.env.NEXT_PUBLIC_SSO_LOGIN_URL ? process.env.NEXT_PUBLIC_SSO_LOGIN_URL.replace(/\/login.*$/, '') : 'http://sso.localhost'));
+    window.location.href = targetHome;
   };
 
   return (

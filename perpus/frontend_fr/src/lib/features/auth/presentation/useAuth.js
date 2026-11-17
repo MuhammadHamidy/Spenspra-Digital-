@@ -75,9 +75,16 @@ export function useAuth() {
     logoutUseCase();
     setUser(null);
     if (typeof window !== 'undefined') {
-      window.location.href = '/login';
+      const isProd = window.location.hostname.includes('spenspra.com');
+      const isSch = window.location.hostname.includes('spenspra.sch.id');
+      const targetHome = isProd
+        ? 'https://spenspra.com/'
+        : isSch
+        ? 'https://spenspra.sch.id/'
+        : (process.env.NEXT_PUBLIC_SSO_PORTAL_URL || (process.env.NEXT_PUBLIC_SSO_LOGIN_URL ? process.env.NEXT_PUBLIC_SSO_LOGIN_URL.replace(/\/login.*$/, '') : 'http://sso.localhost'));
+      window.location.href = targetHome;
     } else {
-      router.replace('/login');
+      router.replace('/');
     }
   };
 

@@ -64,7 +64,11 @@ export function useAuth() {
     logoutUseCase();
     setUser(null);
     setLoading(false);
-    router.replace('/login');
+    if (typeof window !== 'undefined') {
+      window.location.href = '/';
+    } else {
+      router.replace('/');
+    }
   };
 
   return {
