@@ -10,6 +10,35 @@ import AppIcon from '@/components/AppIcon';
 import { elearningApi } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
+const formatViolationTypeLabel = (type) => {
+  switch (type) {
+    case 'WINDOW_BLUR':
+      return 'Fokus Hilang';
+    case 'TAB_SWITCH':
+      return 'Pindah Tab / Minimize';
+    case 'FULLSCREEN_EXIT':
+      return 'Keluar Layar Penuh';
+    case 'INSPECT_ATTEMPT':
+      return 'Membuka DevTools';
+    case 'SUPERVISOR_UNLOCK':
+      return 'Buka Kunci Pengawas';
+    default:
+      return type || 'Pelanggaran';
+  }
+};
+
+const formatViolationDesc = (desc, type) => {
+  if (!desc || (typeof desc === 'string' && desc.trim().startsWith('{'))) {
+    if (type === 'WINDOW_BLUR') return 'Menekan tombol Home, menarik status bar notifikasi, atau berpindah aplikasi.';
+    if (type === 'TAB_SWITCH') return 'Membuka tab baru atau meminimalkan browser ujian.';
+    if (type === 'FULLSCREEN_EXIT') return 'Keluar dari mode layar penuh (fullscreen).';
+    if (type === 'INSPECT_ATTEMPT') return 'Mencoba membuka inspect element / shortcut pengembang.';
+    if (type === 'SUPERVISOR_UNLOCK') return 'Layar ujian berhasil dibuka kembali oleh Pengawas.';
+    return 'Terdeteksi keluar dari lingkungan ujian CBT.';
+  }
+  return desc;
+};
+
 export default function LiveProctoringMonitoringPage() {
   const [user, setUser] = useState(null);
   const [exams, setExams] = useState([]);
@@ -683,15 +712,15 @@ export default function LiveProctoringMonitoringPage() {
                         {lastViolation ? (
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-1">
-                              <span className="text-[10px] font-bold text-danger-700 bg-danger-100 px-1 rounded">
-                                {lastViolation.type}
+                              <span className="text-[10px] font-bold text-danger-700 bg-danger-100 px-1.5 py-0.5 rounded">
+                                {formatViolationTypeLabel(lastViolation.type)}
                               </span>
                               <span className="text-[10px] text-neutral-400 font-mono">
                                 {new Date(lastViolation.timestamp).toLocaleTimeString('id-ID')} WIB
                               </span>
                             </div>
-                            <p className="text-[11px] text-neutral-700 line-clamp-1 max-w-[220px]">
-                              {lastViolation.description}
+                            <p className="text-[11px] text-neutral-700 line-clamp-1 max-w-[260px]" title={formatViolationDesc(lastViolation.description, lastViolation.type)}>
+                              {formatViolationDesc(lastViolation.description, lastViolation.type)}
                             </p>
                           </div>
                         ) : (
@@ -775,14 +804,14 @@ export default function LiveProctoringMonitoringPage() {
               >
                 <div className="flex items-center justify-between font-bold text-neutral-800">
                   <span className="text-[10px] text-danger-700 uppercase bg-danger-100 px-1.5 py-0.5 rounded">
-                    Kejadian #{i + 1}: {v.type}
+                    Kejadian #{i + 1}: {formatViolationTypeLabel(v.type)}
                   </span>
                   <span className="text-[10px] text-neutral-400 font-mono">
                     {new Date(v.timestamp).toLocaleTimeString('id-ID')} WIB
                   </span>
                 </div>
                 <p className="text-[11px] text-neutral-700 leading-relaxed pt-0.5">
-                  {v.description}
+                  {formatViolationDesc(v.description, v.type)}
                 </p>
               </div>
             ))}

@@ -50,6 +50,7 @@ export function useProctoring({
   const alarmOscillatorRef = useRef(null);
   const alarmGainRef = useRef(null);
   const alarmIntervalRef = useRef(null);
+  const vibrationIntervalRef = useRef(null);
 
   // Inisialisasi Audio Context
   const getAudioContext = useCallback(() => {
@@ -66,9 +67,18 @@ export function useProctoring({
     return audioCtxRef.current;
   }, []);
 
-  // Hentikan Sirene
+  // Hentikan Sirene & Getar
   const stopAlarmSirene = useCallback(() => {
     try {
+      if (vibrationIntervalRef.current) {
+        clearInterval(vibrationIntervalRef.current);
+        vibrationIntervalRef.current = null;
+      }
+      if (typeof window !== 'undefined' && 'navigator' in window && navigator.vibrate) {
+        try {
+          navigator.vibrate(0);
+        } catch (_) {}
+      }
       if (alarmIntervalRef.current) {
         clearInterval(alarmIntervalRef.current);
         alarmIntervalRef.current = null;
@@ -89,17 +99,36 @@ export function useProctoring({
     } catch (_) {}
   }, []);
 
-  // Bunyikan Sirene Peringatan Keras (Web Audio API)
+  // Bunyikan Sirene Peringatan Keras (Web Audio API) & Getaran Intensif Berulang
   const playAlarmSirene = useCallback(() => {
     try {
+      // 1. Getar perangkat HP berulang kali (sangat efektif walau HP di Silent Mode)
+      if (typeof window !== 'undefined' && 'navigator' in window && navigator.vibrate) {
+        try {
+          navigator.vibrate([600, 200, 600, 200, 600, 200]);
+          if (vibrationIntervalRef.current) clearInterval(vibrationIntervalRef.current);
+          vibrationIntervalRef.current = setInterval(() => {
+            try {
+              if (navigator.vibrate) {
+                navigator.vibrate([600, 200, 600, 200]);
+              }
+            } catch (_) {}
+          }, 1200);
+        } catch (_) {}
+      }
+
       const ctx = getAudioContext();
       if (!ctx) return;
+
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
 
       stopAlarmSirene();
 
       const now = ctx.currentTime;
       const gainNode = ctx.createGain();
-      gainNode.gain.setValueAtTime(0.9, now);
+      gainNode.gain.setValueAtTime(1.0, now);
       gainNode.connect(ctx.destination);
       alarmGainRef.current = gainNode;
 
@@ -125,6 +154,20 @@ export function useProctoring({
       console.warn('[CBT Proctoring] Gagal memutar alarm suara:', err);
     }
   }, [getAudioContext, stopAlarmSirene]);
+
+  // Test Suara & Getar Alarm (Untuk dicoba siswa sebelum ujian)
+  const testAlarmAudio = useCallback(() => {
+    try {
+      const ctx = getAudioContext();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      playAlarmSirene();
+      setTimeout(() => {
+        stopAlarmSirene();
+      }, 1500);
+    } catch (_) {}
+  }, [getAudioContext, playAlarmSirene, stopAlarmSirene]);
 
   // Listener Gesture Siswa untuk Unlock AudioContext & WakeLock
   useEffect(() => {
@@ -185,8 +228,9 @@ export function useProctoring({
 
       const root = document.documentElement;
       if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        const opts = { navigationUI: 'hide' };
         if (root.requestFullscreen) {
-          await root.requestFullscreen();
+          await root.requestFullscreen(opts).catch(() => root.requestFullscreen());
         } else if (root.webkitRequestFullscreen) {
           await root.webkitRequestFullscreen();
         } else if (root.mozRequestFullScreen) {
@@ -213,24 +257,27 @@ export function useProctoring({
       const now = new Date();
       const timeStr = now.toLocaleTimeString('id-ID');
       const lastViolation = lastViolationRef.current;
-      if (lastViolation.type === type && now.getTime() - lastViolation.at < 1500) return;
+
+      // Anti-cascade debounce: Hindari 1 aksi fisik (tekan home/tarik status bar)
+      // memicu 3x event berturut-turut (WINDOW_BLUR -> TAB_SWITCH -> FULLSCREEN_EXIT)
+      const isExitType = ['WINDOW_BLUR', 'TAB_SWITCH', 'FULLSCREEN_EXIT'].includes(type);
+      const wasExitType = ['WINDOW_BLUR', 'TAB_SWITCH', 'FULLSCREEN_EXIT'].includes(lastViolation.type);
+      const timeDiff = now.getTime() - lastViolation.at;
+
+      if (timeDiff < 3500 && (type === lastViolation.type || (isExitType && wasExitType))) {
+        return;
+      }
       lastViolationRef.current = { type, at: now.getTime() };
 
-      // Bunyikan Sirene Alarm Peringatan Darurat
+      // Bunyikan Sirene Alarm Peringatan Darurat & Getar HP
       playAlarmSirene();
-
-      // Getar perangkat HP berulang kali jika didukung
-      if (typeof window !== 'undefined' && 'navigator' in window && navigator.vibrate) {
-        try {
-          navigator.vibrate([400, 150, 400, 150, 400, 150, 400]);
-        } catch (_) {}
-      }
 
       setViolationCount((prev) => {
         const newCount = prev + 1;
         const entry = {
           type,
           message,
+          description: message, // Deskripsi bahasa Indonesia yang ramah & jelas
           details: JSON.stringify({
             visibilityState: typeof document !== 'undefined' ? document.visibilityState : 'unknown',
             userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
@@ -499,6 +546,7 @@ export function useProctoring({
     requestWakeLock,
     playAlarmSirene,
     stopAlarmSirene,
+    testAlarmAudio,
     dismissWarning,
     unlockSession,
     resetViolations: () => {

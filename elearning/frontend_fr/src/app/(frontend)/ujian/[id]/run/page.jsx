@@ -127,6 +127,7 @@ export default function CBTExamRunnerPage({ params }) {
     wakeLockActive,
     playAlarmSirene,
     stopAlarmSirene,
+    testAlarmAudio,
   } = useProctoring({
     examId,
     maxViolations: 1, // Solusi 2: Zero-Tolerance (1x pelanggaran langsung terkunci)
@@ -155,6 +156,18 @@ export default function CBTExamRunnerPage({ params }) {
       requestFullscreen();
     }
   }, [loading, session, isLocked, requestFullscreen]);
+
+  // Kiosk-Mode Touch & Overscroll Lockdown (Cegah munculnya tab bar browser saat scrolling di HP)
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.body.style.overscrollBehavior = 'none';
+      document.documentElement.style.overscrollBehavior = 'none';
+      return () => {
+        document.body.style.overscrollBehavior = '';
+        document.documentElement.style.overscrollBehavior = '';
+      };
+    }
+  }, []);
 
   // Handler Buka Kunci oleh Pengawas Ruangan
   const handleSupervisorUnlockSubmit = async (e) => {
@@ -638,13 +651,13 @@ export default function CBTExamRunnerPage({ params }) {
   const unansweredCount = Math.max(0, totalQuestions - answeredCount);
 
   return (
-    <div className="min-h-screen bg-neutral-100 flex flex-col select-none relative font-sans">
+    <div className="min-h-screen bg-neutral-100 flex flex-col select-none relative font-sans overscroll-none touch-pan-y">
 
       {/* GERBANG MASUK MODE UJIAN (USER GESTURE UNTUK FULLSCREEN & AUDIO ALARM DI HP) */}
       {!hasStartedExam && !finishResult && (
         <div className="fixed inset-0 z-50 bg-neutral-950/90 backdrop-blur-md flex items-center justify-center p-4 select-none">
           <div className="max-w-md w-full bg-white rounded-2xl p-6 sm:p-8 text-center space-y-5 shadow-2xl border border-neutral-200 animate-in zoom-in-95">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#F2C94C] to-[#E8A020] text-neutral-950 mx-auto flex items-center justify-center text-3xl font-black shadow-md">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#4B3B78] to-[#5B3E96] text-white mx-auto flex items-center justify-center text-2xl font-black shadow-md">
               CBT
             </div>
 
@@ -669,16 +682,34 @@ export default function CBTExamRunnerPage({ params }) {
               </ul>
             </div>
 
+            <div className="p-3.5 rounded-xl bg-violet-50/80 border border-violet-200 text-left space-y-2 text-xs">
+              <div className="flex items-center gap-1.5 font-bold text-violet-950">
+                <AppIcon name="notification" color="purple" size={15} />
+                <span>Pengaturan Audio & Mode Hening:</span>
+              </div>
+              <p className="text-[11px] text-violet-900 leading-relaxed">
+                Pastikan HP Anda <strong>TIDAK dalam Mode Hening (Silent / Jangan Ganggu)</strong> dan <strong>Volume Media dinaikkan</strong> agar suara alarm darurat terdengar saat ada pelanggaran.
+              </p>
+              <button
+                type="button"
+                onClick={testAlarmAudio}
+                className="w-full py-2 px-3 rounded-lg bg-white border border-violet-300 hover:bg-violet-100 text-violet-900 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+              >
+                <AppIcon name="timer" color="purple" size={14} />
+                <span>Uji Coba Suara & Getaran Alarm</span>
+              </button>
+            </div>
+
             <Button
-              variant="accent"
+              variant="primary"
               size="lg"
-              className="w-full font-bold shadow-md min-h-[48px] text-sm bg-gradient-to-r from-[#F2C94C] to-[#E8A020] hover:brightness-105 text-neutral-950 flex items-center justify-center gap-2"
+              className="w-full font-bold shadow-md min-h-[48px] text-sm bg-gradient-to-r from-[#4B3B78] to-[#5B3E96] hover:brightness-110 text-white flex items-center justify-center gap-2 cursor-pointer"
               onClick={() => {
                 requestFullscreen();
                 setHasStartedExam(true);
               }}
             >
-              <AppIcon name="lock" color="black" size={16} />
+              <AppIcon name="lock" color="white" size={16} />
               <span>Kunci Layar Penuh & Mulai Ujian</span>
             </Button>
 
@@ -689,19 +720,19 @@ export default function CBTExamRunnerPage({ params }) {
         </div>
       )}
 
-      {/* 1. ACCENT HEADER (Referensi: Yellow Gradient + Exam Info) */}
-      <header className="bg-gradient-to-r from-[#F2C94C] to-[#E8A020] px-4 sm:px-6 py-4 relative overflow-hidden sticky top-0 z-30 shadow-md">
+      {/* 1. ACCENT HEADER (Tema Brand Spenspra: Deep Violet / Indigo Gradient) */}
+      <header className="bg-gradient-to-r from-[#3B2C63] via-[#4B3B78] to-[#5B3E96] text-white px-4 sm:px-6 py-3.5 relative overflow-hidden sticky top-0 z-30 shadow-md">
         {/* Dekoratif lingkaran */}
-        <div className="absolute right-4 top-[-20px] w-28 h-28 rounded-full bg-white/10 pointer-events-none" />
-        <div className="absolute right-16 top-[-10px] w-16 h-16 rounded-full bg-white/10 pointer-events-none" />
-        <div className="absolute right-0 bottom-[-30px] w-20 h-20 rounded-full bg-white/10 pointer-events-none" />
+        <div className="absolute right-4 top-[-20px] w-28 h-28 rounded-full bg-white/5 pointer-events-none" />
+        <div className="absolute right-16 top-[-10px] w-16 h-16 rounded-full bg-white/5 pointer-events-none" />
+        <div className="absolute right-0 bottom-[-30px] w-20 h-20 rounded-full bg-white/5 pointer-events-none" />
 
         <div className="max-w-7xl mx-auto flex items-center gap-3">
           {/* Tombol Kembali */}
           <button
             type="button"
             onClick={() => router.push('/ujian')}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-black/10 hover:bg-black/20 transition-colors shrink-0 text-neutral-900"
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors shrink-0 text-white cursor-pointer"
             title="Kembali ke Portal Ujian"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -711,17 +742,17 @@ export default function CBTExamRunnerPage({ params }) {
 
           {/* Judul Ujian */}
           <div className="flex-1 min-w-0">
-            <h1 className="text-sm sm:text-base font-bold text-neutral-900 truncate leading-tight">
+            <h1 className="text-sm sm:text-base font-bold text-white truncate leading-tight">
               {exam?.title}
             </h1>
             <div className="flex items-center gap-3 mt-0.5">
-              <span className="flex items-center gap-1 text-xs font-semibold text-neutral-800">
+              <span className="flex items-center gap-1 text-xs font-semibold text-white/80">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
                 {totalQuestions} Soal
               </span>
-              <span className="flex items-center gap-1 text-xs font-semibold text-neutral-800">
+              <span className="flex items-center gap-1 text-xs font-semibold text-white/80">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -732,19 +763,19 @@ export default function CBTExamRunnerPage({ params }) {
 
           {/* Timer + Anti-Cheat + Fullscreen */}
           <div className="flex items-center gap-2 shrink-0">
-            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/10 text-neutral-900 text-xs font-semibold">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-600 animate-pulse" />
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 text-white text-xs font-semibold border border-white/15">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               <span>Anti-Cheat</span>
             </div>
             {violationsCount > 0 && (
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-600 text-white text-xs font-bold animate-bounce">
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-600 text-white text-xs font-bold animate-bounce shadow-xs">
                 <span>⚠️ {violationsCount}/{exam?.maxViolations || 3}</span>
               </div>
             )}
-            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-sm font-bold ${
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-sm font-bold border ${
               secondsLeft < 300
-                ? 'bg-red-600 text-white animate-pulse'
-                : 'bg-black/15 text-neutral-900'
+                ? 'bg-red-600 text-white border-red-400 animate-pulse'
+                : 'bg-white/15 text-white border-white/20'
             }`}>
               <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -754,7 +785,7 @@ export default function CBTExamRunnerPage({ params }) {
             <button
               type="button"
               onClick={requestFullscreen}
-              className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-black/15 hover:bg-black/25 text-neutral-900 text-xs font-semibold transition-colors"
+              className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition-colors border border-white/20 cursor-pointer"
               title="Layar Penuh"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -794,7 +825,7 @@ export default function CBTExamRunnerPage({ params }) {
                 circleClass = 'border-2 border-success-600 bg-success-600 text-white font-bold';
               }
               if (isCurrent) {
-                circleClass = 'border-2 border-orange-500 bg-white text-orange-600 font-bold ring-2 ring-orange-300 ring-offset-1';
+                circleClass = 'border-2 border-primary-600 bg-primary-50 text-primary-700 font-bold ring-2 ring-primary-300 ring-offset-1';
               }
 
               return (

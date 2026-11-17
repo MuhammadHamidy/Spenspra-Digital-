@@ -1363,7 +1363,15 @@ export const elearningApi = {
     if (!session) return;
 
     const vType = violation.type || violation.violation_type || 'WINDOW_BLUR';
-    const vDesc = violation.description || violation.details || 'Pelanggaran anti-cheat';
+    let vDesc = violation.description || violation.message || '';
+    if (!vDesc || (typeof vDesc === 'string' && vDesc.trim().startsWith('{'))) {
+      if (vType === 'WINDOW_BLUR') vDesc = 'Fokus layar ujian hilang: Menekan tombol Home, menarik status bar notifikasi, atau berpindah aplikasi.';
+      else if (vType === 'TAB_SWITCH') vDesc = 'Terdeteksi beralih aplikasi, membuka tab baru, atau meminimalkan browser ujian.';
+      else if (vType === 'FULLSCREEN_EXIT') vDesc = 'Terdeteksi keluar dari mode Layar Penuh (Fullscreen).';
+      else if (vType === 'INSPECT_ATTEMPT') vDesc = 'Mencoba membuka inspect element / shortcut pengembang.';
+      else if (vType === 'SUPERVISOR_UNLOCK') vDesc = 'Layar ujian berhasil dibuka kembali oleh Pengawas.';
+      else vDesc = 'Terdeteksi beraktivitas di luar lingkungan ujian CBT.';
+    }
     const timestamp = violation.timestamp || new Date().toISOString();
 
     session.violationsCount = (session.violationsCount || 0) + 1;
@@ -1373,7 +1381,7 @@ export const elearningApi = {
       type: vType,
       violation_type: vType,
       description: vDesc,
-      details: vDesc,
+      details: violation.details || vDesc,
       timestamp,
     });
 
