@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Card from '@/components/Card';
 import Button from '@/components/Button';
 import StatusBadge from '@/components/StatusBadge';
@@ -37,6 +37,49 @@ const formatViolationDesc = (desc, type) => {
     return 'Terdeteksi keluar dari lingkungan ujian CBT.';
   }
   return desc;
+};
+
+// Normalisasi tipe soal ke 5 jenis utama: MCQ, COMPLEX_MCQ, TRUE_FALSE, MATCHING, ESSAY
+const normalizeQuestionType = (q) => {
+  const raw = String(q?.type || q?.question_type || q?.questionType || '').trim().toUpperCase();
+  if (raw === 'MCQ' || raw === 'PILIHAN_GANDA' || raw === 'PG') return 'MCQ';
+  if (raw === 'COMPLEX_MCQ' || raw.includes('KOMPLEKS') || raw === 'COMPLEX' || raw === 'PG_KOMPLEKS') return 'COMPLEX_MCQ';
+  if (raw === 'TRUE_FALSE' || raw.includes('BENAR') || raw.includes('SALAH') || raw === 'TF') return 'TRUE_FALSE';
+  if (raw === 'MATCHING' || raw.includes('JODOH') || raw.includes('COCOK')) return 'MATCHING';
+  if (raw === 'ESSAY' || raw.includes('URAIAN') || raw.includes('ESAI')) return 'ESSAY';
+
+  // Fallback melalui inspeksi struktur atribut butir soal
+  if (Array.isArray(q?.matchingPairs) && q.matchingPairs.length > 0) return 'MATCHING';
+  if (q?.trueFalseAnswer !== undefined && q?.trueFalseAnswer !== null) return 'TRUE_FALSE';
+  if (Array.isArray(q?.correctOptions) && q.correctOptions.length > 1) return 'COMPLEX_MCQ';
+  if (Array.isArray(q?.options) && q.options.length > 0) {
+    if (q?.correctOptions && Array.isArray(q.correctOptions) && q.correctOptions.length > 1) return 'COMPLEX_MCQ';
+    return 'MCQ';
+  }
+  return 'ESSAY';
+};
+
+// Resolusi jawaban siswa dari berbagai format penyimpanan (ID, nomor urut, atau index)
+const resolveStudentAnswer = (q, idx, answersObj) => {
+  if (!answersObj) return null;
+  const direct =
+    answersObj[q.id] ??
+    answersObj[String(q.id)] ??
+    answersObj[q.questionNumber] ??
+    answersObj[idx + 1] ??
+    answersObj[String(idx + 1)] ??
+    answersObj[`q-${idx + 1}`] ??
+    answersObj[`q_${idx + 1}`];
+  if (direct !== undefined && direct !== null) return direct;
+
+  const values = Object.values(answersObj);
+  const byQuestionId = values.find(
+    (v) => v && typeof v === 'object' && (v.questionId === q.id || v.question_id === q.id || String(v.questionId) === String(q.id))
+  );
+  if (byQuestionId) return byQuestionId;
+
+  if (values[idx] !== undefined) return values[idx];
+  return null;
 };
 
 export default function LiveProctoringMonitoringPage() {
@@ -188,75 +231,6 @@ export default function LiveProctoringMonitoringPage() {
     }
   };
 
-  const handleSaveEssayScore = async () => {
-    if (!activeStudentAnswers) return;
-    setSavingGrade(true);
-    try {
-      const sId = activeStudentAnswers.studentId || activeStudentAnswers.student_id;
-      if (typeof window !== 'undefined' && selectedExamId && sId) {
-        localStorage.setItem(`essay_grades_${selectedExamId}_${sId}`, JSON.stringify(essayScores));
-      }
-
-      let totalEarned = 0;
-      let totalMaxPoints = 0;
-
-      examQuestions.forEach((q) => {
-        const qPoints = Number(q.points) > 0 ? Number(q.points) : 10;
-        totalMaxPoints += qPoints;
-
-        if (q.type === 'MCQ') {
-          const ans = studentAnswers[q.id];
-          if (ans && ans.selectedOption === q.correctOption) {
-            totalEarned += qPoints;
-          }
-        } else if (q.type === 'ESSAY') {
-          const essayScore = Number(essayScores[q.id]) || 0;
-          totalEarned += essayScore;
-        }
-      });
-
-      const finalScore = totalMaxPoints > 0 ? Math.round((totalEarned / totalMaxPoints) * 100) : 100;
-
-      const sessionKey = `exam_session_${selectedExamId}_${sId}`;
-      const existing = elearningApi.getStudentExamSession(selectedExamId, sId);
-      if (existing) {
-        existing.score = finalScore;
-        existing.essayGrades = essayScores;
-        localStorage.setItem(sessionKey, JSON.stringify(existing));
-      }
-
-      const monitorKey = `proctoring_${selectedExamId}`;
-      const liveSessions = JSON.parse(localStorage.getItem(monitorKey) || '[]');
-      const idx = liveSessions.findIndex((s) => s.studentId === sId || s.sessionId === activeStudentAnswers.sessionId);
-      if (idx >= 0) {
-        liveSessions[idx].score = finalScore;
-        liveSessions[idx].essayGrades = essayScores;
-        localStorage.setItem(monitorKey, JSON.stringify(liveSessions));
-      }
-
-      // Sinkronkan nilai hasil koreksi ke database backend jika ada sessionId
-      const effSessionId = activeStudentAnswers.sessionId || activeStudentAnswers.id;
-      if (effSessionId) {
-        try {
-          await fetch(`/api/elearning/sessions/${effSessionId}/finish`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ score: finalScore }),
-          });
-        } catch (_) {}
-      }
-
-      setNotice(`Koreksi nilai akhir (${finalScore}) untuk ${activeStudentAnswers.studentName} berhasil disimpan!`);
-      setTimeout(() => setNotice(null), 4000);
-      loadProctoringData();
-      setActiveStudentAnswers(null);
-    } catch (err) {
-      alert('Gagal menyimpan nilai: ' + err.message);
-    } finally {
-      setSavingGrade(false);
-    }
-  };
-
   const studentAnswers = useMemo(() => {
     if (!activeStudentAnswers) return {};
     let ans = activeStudentAnswers.answers;
@@ -300,6 +274,145 @@ export default function LiveProctoringMonitoringPage() {
     }
     return ans || {};
   }, [activeStudentAnswers, selectedExamId]);
+
+  // Kalkulasi rincian skor secara live untuk semua 5 jenis soal
+  const scoreBreakdown = useMemo(() => {
+    let totalMax = 0;
+    let totalEarned = 0;
+    let autoCorrectCount = 0;
+    let autoTotalCount = 0;
+
+    examQuestions.forEach((q, idx) => {
+      const qPoints = Number(q.points) > 0 ? Number(q.points) : 10;
+      totalMax += qPoints;
+      const qType = normalizeQuestionType(q);
+      const ans = resolveStudentAnswer(q, idx, studentAnswers);
+
+      if (qType === 'MCQ') {
+        autoTotalCount++;
+        const studentOpt = typeof ans === 'string' ? ans : (ans?.selectedOption || ans?.selected_option || '');
+        const correctOpt = q.correctOption || q.correct_option || 'A';
+        if (studentOpt && studentOpt.trim().toUpperCase() === correctOpt.trim().toUpperCase()) {
+          totalEarned += qPoints;
+          autoCorrectCount++;
+        }
+      } else if (qType === 'COMPLEX_MCQ') {
+        autoTotalCount++;
+        let studentOpts = [];
+        if (Array.isArray(ans?.selectedOptions)) {
+          studentOpts = ans.selectedOptions;
+        } else if (typeof ans?.selectedOption === 'string' && ans.selectedOption) {
+          studentOpts = ans.selectedOption.split(',').map((s) => s.trim());
+        } else if (typeof ans === 'string' && ans) {
+          studentOpts = ans.split(',').map((s) => s.trim());
+        }
+        const correctOpts = Array.isArray(q.correctOptions) && q.correctOptions.length > 0
+          ? q.correctOptions
+          : (q.correctOption ? [q.correctOption] : ['A']);
+        const sSorted = [...studentOpts].filter(Boolean).map((s) => s.toUpperCase()).sort().join(',');
+        const cSorted = [...correctOpts].filter(Boolean).map((s) => s.toUpperCase()).sort().join(',');
+        if (sSorted && sSorted === cSorted) {
+          totalEarned += qPoints;
+          autoCorrectCount++;
+        }
+      } else if (qType === 'TRUE_FALSE') {
+        autoTotalCount++;
+        const rawStudent = ans?.selectedOption ?? (ans?.trueFalseAnswer !== undefined ? (ans.trueFalseAnswer ? 'TRUE' : 'FALSE') : (typeof ans === 'string' ? ans : ''));
+        const sNorm = String(rawStudent || '').trim().toUpperCase();
+        const isStudentTrue = sNorm === 'TRUE' || sNorm === 'BENAR' || sNorm === 'T' || rawStudent === true;
+        const isStudentFalse = sNorm === 'FALSE' || sNorm === 'SALAH' || sNorm === 'F' || rawStudent === false;
+
+        const rawCorrect = q.trueFalseAnswer !== undefined ? (q.trueFalseAnswer ? 'TRUE' : 'FALSE') : (q.correctOption || 'TRUE');
+        const cNorm = String(rawCorrect || '').trim().toUpperCase();
+        const isCorrectTrue = cNorm === 'TRUE' || cNorm === 'BENAR' || cNorm === 'T' || q.trueFalseAnswer === true;
+
+        if ((isStudentTrue && isCorrectTrue) || (isStudentFalse && !isCorrectTrue)) {
+          totalEarned += qPoints;
+          autoCorrectCount++;
+        }
+      } else if (qType === 'MATCHING') {
+        autoTotalCount++;
+        let matchingAns = ans?.matchingAnswers;
+        if (!matchingAns && typeof ans?.selectedOption === 'string' && ans.selectedOption.startsWith('{')) {
+          try { matchingAns = JSON.parse(ans.selectedOption); } catch (_) {}
+        }
+        if (!matchingAns && typeof ans === 'string' && ans.startsWith('{')) {
+          try { matchingAns = JSON.parse(ans); } catch (_) {}
+        }
+        matchingAns = matchingAns || {};
+        const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
+        if (pairs.length > 0) {
+          let matched = 0;
+          pairs.forEach((p) => {
+            const studentVal = matchingAns[p.id] ?? matchingAns[String(p.id)] ?? '';
+            if (studentVal && studentVal.trim().toLowerCase() === (p.right || '').trim().toLowerCase()) {
+              matched++;
+            }
+          });
+          const ratio = matched / pairs.length;
+          totalEarned += Math.round(ratio * qPoints);
+          if (ratio === 1) autoCorrectCount++;
+        }
+      } else if (qType === 'ESSAY') {
+        const essayScore = Number(essayScores[q.id]) || 0;
+        totalEarned += Math.min(qPoints, Math.max(0, essayScore));
+      }
+    });
+
+    const finalScore = totalMax > 0 ? Math.round((totalEarned / totalMax) * 100) : 100;
+    return { totalMax, totalEarned, finalScore, autoCorrectCount, autoTotalCount };
+  }, [examQuestions, studentAnswers, essayScores]);
+
+  const handleSaveEssayScore = async () => {
+    if (!activeStudentAnswers) return;
+    setSavingGrade(true);
+    try {
+      const sId = activeStudentAnswers.studentId || activeStudentAnswers.student_id;
+      if (typeof window !== 'undefined' && selectedExamId && sId) {
+        localStorage.setItem(`essay_grades_${selectedExamId}_${sId}`, JSON.stringify(essayScores));
+      }
+
+      const { finalScore } = scoreBreakdown;
+
+      const sessionKey = `exam_session_${selectedExamId}_${sId}`;
+      const existing = elearningApi.getStudentExamSession(selectedExamId, sId);
+      if (existing) {
+        existing.score = finalScore;
+        existing.essayGrades = essayScores;
+        localStorage.setItem(sessionKey, JSON.stringify(existing));
+      }
+
+      const monitorKey = `proctoring_${selectedExamId}`;
+      const liveSessions = JSON.parse(localStorage.getItem(monitorKey) || '[]');
+      const idx = liveSessions.findIndex((s) => s.studentId === sId || s.sessionId === activeStudentAnswers.sessionId);
+      if (idx >= 0) {
+        liveSessions[idx].score = finalScore;
+        liveSessions[idx].essayGrades = essayScores;
+        localStorage.setItem(monitorKey, JSON.stringify(liveSessions));
+      }
+
+      // Sinkronkan nilai hasil koreksi ke database backend jika ada sessionId
+      const effSessionId = activeStudentAnswers.sessionId || activeStudentAnswers.id;
+      if (effSessionId && !String(effSessionId).startsWith('not-joined')) {
+        try {
+          await fetch(`/api/elearning/sessions/${effSessionId}/finish`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ score: finalScore }),
+          });
+        } catch (_) {}
+      }
+
+      setNotice(`Koreksi nilai akhir (${finalScore}) untuk ${activeStudentAnswers.studentName} berhasil disimpan!`);
+      setTimeout(() => setNotice(null), 4000);
+      loadProctoringData();
+      setActiveStudentAnswers(null);
+    } catch (err) {
+      alert('Gagal menyimpan nilai: ' + err.message);
+    } finally {
+      setSavingGrade(false);
+    }
+  };
 
   // Merge official class roster with live student sessions
   const mergedRoster = useMemo(() => {
@@ -442,6 +555,761 @@ export default function LiveProctoringMonitoringPage() {
       return true;
     });
   }, [mergedRoster, activeFilter, searchQuery]);
+
+  // JIKA SEDANG MEMERIKSA JAWABAN SISWA: Tampilkan sebagai Halaman Penuh Mandiri (Bukan Modal Pop-up)
+  if (activeStudentAnswers) {
+    const { totalMax, totalEarned, finalScore, autoCorrectCount, autoTotalCount } = scoreBreakdown;
+
+    return (
+      <div className="space-y-6 max-w-5xl mx-auto pb-24 animate-in fade-in duration-200">
+        {/* Top Header & Navigation Bar */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-[12px] border border-neutral-200 shadow-2xs">
+          <div className="space-y-1.5">
+            <button
+              onClick={() => setActiveStudentAnswers(null)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-600 hover:text-primary-700 transition-colors mb-1 cursor-pointer"
+            >
+              <AppIcon name="arrow-back" color="grey" size={14} />
+              <span>Kembali ke Live Monitoring</span>
+            </button>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
+                Lembar Jawaban & Koreksi Siswa
+              </h1>
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                activeStudentAnswers.status === 'SUBMITTED'
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+              }`}>
+                {activeStudentAnswers.status === 'SUBMITTED' ? 'Telah Selesai' : 'Sedang Mengerjakan'}
+              </span>
+            </div>
+            <p className="text-xs text-neutral-500">
+              <span className="font-bold text-neutral-800">{activeStudentAnswers.studentName}</span> • Kelas {activeStudentAnswers.className || selectedExam?.className} • NISN: {activeStudentAnswers.nisn || '-'}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => setActiveStudentAnswers(null)}
+              className="cursor-pointer text-xs font-semibold"
+            >
+              Kembali
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              disabled={savingGrade}
+              onClick={handleSaveEssayScore}
+              className="font-bold cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-xs"
+            >
+              <AppIcon name="tick" color="white" size={14} />
+              <span>{savingGrade ? 'Menyimpan...' : 'Simpan Koreksi & Nilai'}</span>
+            </Button>
+          </div>
+        </div>
+
+        {/* KPI Stats Cards Siswa */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+          <div className="p-4 bg-white rounded-xl border border-neutral-200 space-y-1">
+            <p className="text-[11px] font-semibold text-neutral-500">Mata Pelajaran</p>
+            <p className="text-base font-bold text-neutral-900 truncate">{selectedExam?.subject || selectedExam?.title}</p>
+            <p className="text-[10px] text-neutral-400">Target: Kelas {selectedExam?.className || '-'}</p>
+          </div>
+          <div className="p-4 bg-white rounded-xl border border-neutral-200 space-y-1">
+            <p className="text-[11px] font-semibold text-neutral-500">Status Sesi</p>
+            <p className="text-base font-bold text-emerald-700">
+              {activeStudentAnswers.status === 'SUBMITTED' ? 'Sudah Selesai' : 'Sedang Ujian'}
+            </p>
+            <p className="text-[10px] text-neutral-400">Pelanggaran: {activeStudentAnswers.violationsCount || 0}x</p>
+          </div>
+          <div className="p-4 bg-white rounded-xl border border-neutral-200 space-y-1">
+            <p className="text-[11px] font-semibold text-neutral-500">Jawaban Objektif Benar</p>
+            <p className="text-base font-bold text-primary-700">{autoCorrectCount} / {autoTotalCount} Butir</p>
+            <p className="text-[10px] text-neutral-400">PG, PGK, B/S, Jodoh</p>
+          </div>
+          <div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-1">
+            <p className="text-[11px] font-semibold text-emerald-800">Skor Akhir Siswa</p>
+            <p className="text-xl font-black text-emerald-700">{finalScore} / 100</p>
+            <p className="text-[10px] text-emerald-800 font-medium">{totalEarned} dari {totalMax} total poin</p>
+          </div>
+        </div>
+
+        {/* Daftar Butir Soal & Jawaban Siswa */}
+        {examQuestions.length === 0 ? (
+          <div className="py-20 text-center space-y-3 bg-white rounded-xl border border-neutral-200">
+            <div className="w-10 h-10 border-3 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-xs font-semibold text-neutral-600">Memuat lembar soal dan jawaban siswa...</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {examQuestions.map((q, idx) => {
+              const qType = normalizeQuestionType(q);
+              const qPoints = Number(q.points) > 0 ? Number(q.points) : 10;
+              const ans = resolveStudentAnswer(q, idx, studentAnswers);
+
+              // Tipe Spesifik Data
+              let typeBadgeClass = 'bg-neutral-100 text-neutral-700';
+              let typeLabel = 'Soal';
+              if (qType === 'MCQ') {
+                typeBadgeClass = 'bg-blue-50 text-blue-700 border border-blue-200';
+                typeLabel = 'Pilihan Ganda';
+              } else if (qType === 'COMPLEX_MCQ') {
+                typeBadgeClass = 'bg-sky-50 text-sky-700 border border-sky-200';
+                typeLabel = 'Pilihan Ganda Kompleks';
+              } else if (qType === 'TRUE_FALSE') {
+                typeBadgeClass = 'bg-teal-50 text-teal-700 border border-teal-200';
+                typeLabel = 'Benar / Salah';
+              } else if (qType === 'MATCHING') {
+                typeBadgeClass = 'bg-amber-50 text-amber-800 border border-amber-200';
+                typeLabel = 'Menjodohkan / Pencocokan';
+              } else if (qType === 'ESSAY') {
+                typeBadgeClass = 'bg-purple-50 text-purple-700 border border-purple-200';
+                typeLabel = 'Uraian / Esai';
+              }
+
+              // Periksa status jawaban untuk masing-masing tipe
+              let statusBadge = null;
+
+              if (qType === 'MCQ') {
+                const studentOption = typeof ans === 'string' ? ans : (ans?.selectedOption || ans?.selected_option || '');
+                const correctOption = q.correctOption || q.correct_option || 'A';
+                const isAnswered = Boolean(studentOption && studentOption.trim());
+                const isCorrect = isAnswered && studentOption.trim().toUpperCase() === correctOption.trim().toUpperCase();
+
+                if (!isAnswered) {
+                  statusBadge = (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-neutral-100 text-neutral-500 border border-neutral-200">
+                      Tidak Dijawab
+                    </span>
+                  );
+                } else if (isCorrect) {
+                  statusBadge = (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1">
+                      <AppIcon name="tick" color="green" size={11} />
+                      <span>BENAR (+{qPoints} Poin)</span>
+                    </span>
+                  );
+                } else {
+                  statusBadge = (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-danger-100 text-danger-800 border border-danger-300 inline-flex items-center gap-1">
+                      <AppIcon name="close-cancel" color="red" size={11} />
+                      <span>SALAH (0 Poin)</span>
+                    </span>
+                  );
+                }
+              } else if (qType === 'COMPLEX_MCQ') {
+                let studentOpts = [];
+                if (Array.isArray(ans?.selectedOptions)) {
+                  studentOpts = ans.selectedOptions;
+                } else if (typeof ans?.selectedOption === 'string' && ans.selectedOption) {
+                  studentOpts = ans.selectedOption.split(',').map((s) => s.trim());
+                } else if (typeof ans === 'string' && ans) {
+                  studentOpts = ans.split(',').map((s) => s.trim());
+                }
+                const correctOpts = Array.isArray(q.correctOptions) && q.correctOptions.length > 0
+                  ? q.correctOptions
+                  : (q.correctOption ? [q.correctOption] : ['A']);
+                const sSorted = [...studentOpts].filter(Boolean).map((s) => s.toUpperCase()).sort().join(',');
+                const cSorted = [...correctOpts].filter(Boolean).map((s) => s.toUpperCase()).sort().join(',');
+                const isAnswered = studentOpts.length > 0;
+                const isCorrect = isAnswered && sSorted === cSorted;
+
+                if (!isAnswered) {
+                  statusBadge = (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-neutral-100 text-neutral-500 border border-neutral-200">
+                      Tidak Dijawab
+                    </span>
+                  );
+                } else if (isCorrect) {
+                  statusBadge = (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1">
+                      <AppIcon name="tick" color="green" size={11} />
+                      <span>BENAR (+{qPoints} Poin)</span>
+                    </span>
+                  );
+                } else {
+                  statusBadge = (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-danger-100 text-danger-800 border border-danger-300 inline-flex items-center gap-1">
+                      <AppIcon name="close-cancel" color="red" size={11} />
+                      <span>SALAH (Kunci: {correctOpts.join(', ')})</span>
+                    </span>
+                  );
+                }
+              } else if (qType === 'TRUE_FALSE') {
+                const rawStudent = ans?.selectedOption ?? (ans?.trueFalseAnswer !== undefined ? (ans.trueFalseAnswer ? 'TRUE' : 'FALSE') : (typeof ans === 'string' ? ans : ''));
+                const sNorm = String(rawStudent || '').trim().toUpperCase();
+                const isStudentTrue = sNorm === 'TRUE' || sNorm === 'BENAR' || sNorm === 'T' || rawStudent === true;
+                const isStudentFalse = sNorm === 'FALSE' || sNorm === 'SALAH' || sNorm === 'F' || rawStudent === false;
+                const isAnswered = isStudentTrue || isStudentFalse;
+
+                const rawCorrect = q.trueFalseAnswer !== undefined ? (q.trueFalseAnswer ? 'TRUE' : 'FALSE') : (q.correctOption || 'TRUE');
+                const cNorm = String(rawCorrect || '').trim().toUpperCase();
+                const isCorrectTrue = cNorm === 'TRUE' || cNorm === 'BENAR' || cNorm === 'T' || q.trueFalseAnswer === true;
+
+                const isCorrect = isAnswered && ((isStudentTrue && isCorrectTrue) || (isStudentFalse && !isCorrectTrue));
+
+                if (!isAnswered) {
+                  statusBadge = (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-neutral-100 text-neutral-500 border border-neutral-200">
+                      Tidak Dijawab
+                    </span>
+                  );
+                } else if (isCorrect) {
+                  statusBadge = (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1">
+                      <AppIcon name="tick" color="green" size={11} />
+                      <span>BENAR (+{qPoints} Poin)</span>
+                    </span>
+                  );
+                } else {
+                  statusBadge = (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-danger-100 text-danger-800 border border-danger-300 inline-flex items-center gap-1">
+                      <AppIcon name="close-cancel" color="red" size={11} />
+                      <span>SALAH (Kunci: {isCorrectTrue ? 'Benar' : 'Salah'})</span>
+                    </span>
+                  );
+                }
+              } else if (qType === 'MATCHING') {
+                let matchingAns = ans?.matchingAnswers;
+                if (!matchingAns && typeof ans?.selectedOption === 'string' && ans.selectedOption.startsWith('{')) {
+                  try { matchingAns = JSON.parse(ans.selectedOption); } catch (_) {}
+                }
+                if (!matchingAns && typeof ans === 'string' && ans.startsWith('{')) {
+                  try { matchingAns = JSON.parse(ans); } catch (_) {}
+                }
+                matchingAns = matchingAns || {};
+                const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
+                let matchedCorrect = 0;
+                pairs.forEach((p) => {
+                  const studentVal = matchingAns[p.id] ?? matchingAns[String(p.id)] ?? '';
+                  if (studentVal && studentVal.trim().toLowerCase() === (p.right || '').trim().toLowerCase()) {
+                    matchedCorrect++;
+                  }
+                });
+                const earnedPoints = pairs.length > 0 ? Math.round((matchedCorrect / pairs.length) * qPoints) : 0;
+
+                statusBadge = (
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                    earnedPoints === qPoints
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                      : earnedPoints > 0
+                      ? 'bg-amber-100 text-amber-800 border-amber-300'
+                      : 'bg-danger-100 text-danger-800 border-danger-300'
+                  } border inline-flex items-center gap-1`}>
+                    <span>+{earnedPoints} / {qPoints} Poin ({matchedCorrect}/{pairs.length} Cocok)</span>
+                  </span>
+                );
+              } else if (qType === 'ESSAY') {
+                const currentScore = essayScores[q.id];
+                const isScored = currentScore !== undefined && currentScore !== '' && currentScore !== null;
+                statusBadge = (
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                    isScored ? 'bg-purple-100 text-purple-800 border-purple-300' : 'bg-amber-100 text-amber-800 border-amber-300'
+                  } border`}>
+                    {isScored ? `Telah Dinilai (${currentScore}/${qPoints} Poin)` : 'Menunggu Penilaian Guru'}
+                  </span>
+                );
+              }
+
+              return (
+                <div
+                  key={q.id || idx}
+                  className="p-5 rounded-xl border border-neutral-200 bg-white shadow-2xs space-y-4"
+                >
+                  {/* Header Soal */}
+                  <div className="flex items-center justify-between pb-3 border-b border-neutral-100 flex-wrap gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-2.5 py-0.5 rounded-md font-bold text-xs bg-neutral-900 text-white">
+                        Soal #{idx + 1}
+                      </span>
+                      <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold ${typeBadgeClass}`}>
+                        {typeLabel}
+                      </span>
+                      <span className="text-xs font-semibold text-neutral-500">
+                        (Bobot: {qPoints} Poin)
+                      </span>
+                    </div>
+
+                    <div>{statusBadge}</div>
+                  </div>
+
+                  {/* Stimulus Kasus (jika ada) */}
+                  {q.stimulusText && (
+                    <div className="p-3.5 rounded-lg bg-amber-50/70 border border-amber-200 text-amber-950 text-xs sm:text-sm whitespace-pre-wrap leading-relaxed">
+                      <strong className="flex items-center gap-1.5 text-amber-900 mb-1 font-bold">
+                        <AppIcon name="file" color="yellow" size={14} />
+                        <span>Wacana / Stimulus:</span>
+                      </strong>
+                      {q.stimulusText}
+                    </div>
+                  )}
+
+                  {/* Gambar Soal (jika ada) */}
+                  {q.imageUrl && (
+                    <div className="p-3 rounded-lg bg-neutral-50 border border-neutral-200 flex justify-center">
+                      <img
+                        src={q.imageUrl}
+                        alt={`Gambar Soal #${idx + 1}`}
+                        className="max-h-56 w-auto rounded object-contain"
+                      />
+                    </div>
+                  )}
+
+                  {/* Teks Pertanyaan */}
+                  <div className="text-sm sm:text-base font-semibold text-neutral-900 leading-relaxed whitespace-pre-wrap">
+                    {q.questionText}
+                  </div>
+
+                  {/* KONTEN TIPE 1: PILIHAN GANDA (MCQ) */}
+                  {qType === 'MCQ' && (
+                    <div className="space-y-2 pt-1">
+                      <div className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                        Pilihan Jawaban & Hasil:
+                      </div>
+                      <div className="grid grid-cols-1 gap-2">
+                        {q.options?.map((opt) => {
+                          const studentOption = typeof ans === 'string' ? ans : (ans?.selectedOption || ans?.selected_option || '');
+                          const correctOption = q.correctOption || q.correct_option || 'A';
+                          const isStudentPick = studentOption.trim().toUpperCase() === opt.key.toUpperCase();
+                          const isKey = correctOption.trim().toUpperCase() === opt.key.toUpperCase();
+
+                          let cardStyle = 'bg-neutral-50/60 border-neutral-200 text-neutral-700';
+                          if (isKey) {
+                            cardStyle = 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-medium ring-1 ring-emerald-400';
+                          } else if (isStudentPick && !isKey) {
+                            cardStyle = 'bg-danger-50/80 border-danger-400 text-danger-950 font-medium';
+                          }
+
+                          return (
+                            <div
+                              key={opt.key}
+                              className={`p-3 rounded-lg border text-xs sm:text-sm flex items-center justify-between gap-3 ${cardStyle}`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <span
+                                  className={`w-7 h-7 rounded-md flex items-center justify-center font-bold text-xs shrink-0 ${
+                                    isStudentPick
+                                      ? isKey
+                                        ? 'bg-emerald-600 text-white'
+                                        : 'bg-danger-600 text-white'
+                                      : isKey
+                                      ? 'bg-emerald-200 text-emerald-800'
+                                      : 'bg-neutral-200 text-neutral-700'
+                                  }`}
+                                >
+                                  {opt.key}
+                                </span>
+                                <span className="leading-snug">{opt.text}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {isStudentPick && (
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    isKey ? 'bg-emerald-700 text-white' : 'bg-danger-700 text-white'
+                                  }`}>
+                                    {isKey ? 'Pilihan Siswa (Benar)' : 'Pilihan Siswa (Salah)'}
+                                  </span>
+                                )}
+                                {isKey && !isStudentPick && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-700 text-white inline-flex items-center gap-1">
+                                    <AppIcon name="tick" color="white" size={10} />
+                                    <span>Kunci Jawaban</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* KONTEN TIPE 2: PILIHAN GANDA KOMPLEKS (COMPLEX_MCQ) */}
+                  {qType === 'COMPLEX_MCQ' && (
+                    <div className="space-y-2.5 pt-1">
+                      {(() => {
+                        let studentOpts = [];
+                        if (Array.isArray(ans?.selectedOptions)) {
+                          studentOpts = ans.selectedOptions;
+                        } else if (typeof ans?.selectedOption === 'string' && ans.selectedOption) {
+                          studentOpts = ans.selectedOption.split(',').map((s) => s.trim());
+                        } else if (typeof ans === 'string' && ans) {
+                          studentOpts = ans.split(',').map((s) => s.trim());
+                        }
+                        const correctOpts = Array.isArray(q.correctOptions) && q.correctOptions.length > 0
+                          ? q.correctOptions
+                          : (q.correctOption ? [q.correctOption] : ['A']);
+
+                        return (
+                          <>
+                            <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+                              <span className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                                Opsi Jawaban (Multi-Pilihan):
+                              </span>
+                              <div className="text-[11px] text-neutral-600">
+                                Kunci Benar: <strong className="text-emerald-700 font-bold">{correctOpts.join(', ')}</strong> | Dipilih Siswa: <strong className="text-primary-700 font-bold">{studentOpts.length > 0 ? studentOpts.join(', ') : '(Tidak Dijawab)'}</strong>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 gap-2">
+                              {q.options?.map((opt) => {
+                                const isStudentPick = studentOpts.map((s) => s.toUpperCase()).includes(opt.key.toUpperCase());
+                                const isKey = correctOpts.map((k) => k.toUpperCase()).includes(opt.key.toUpperCase());
+
+                                let cardStyle = 'bg-neutral-50/60 border-neutral-200 text-neutral-700';
+                                if (isKey) {
+                                  cardStyle = 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-medium ring-1 ring-emerald-400';
+                                } else if (isStudentPick && !isKey) {
+                                  cardStyle = 'bg-danger-50/80 border-danger-400 text-danger-950 font-medium';
+                                }
+
+                                return (
+                                  <div
+                                    key={opt.key}
+                                    className={`p-3 rounded-lg border text-xs sm:text-sm flex items-center justify-between gap-3 ${cardStyle}`}
+                                  >
+                                    <div className="flex items-center gap-2.5">
+                                      <div
+                                        className={`w-6 h-6 rounded flex items-center justify-center font-bold text-xs border shrink-0 ${
+                                          isStudentPick
+                                            ? 'bg-primary-600 border-primary-700 text-white'
+                                            : 'bg-white border-neutral-300 text-neutral-400'
+                                        }`}
+                                      >
+                                        {isStudentPick ? '✓' : ''}
+                                      </div>
+                                      <span className="font-bold text-neutral-800 shrink-0">{opt.key}.</span>
+                                      <span className="leading-snug">{opt.text}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      {isStudentPick && (
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                          isKey ? 'bg-emerald-700 text-white' : 'bg-danger-700 text-white'
+                                        }`}>
+                                          {isKey ? 'Dipilih Siswa (Benar)' : 'Dipilih Siswa (Salah)'}
+                                        </span>
+                                      )}
+                                      {isKey && !isStudentPick && (
+                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-700 text-white inline-flex items-center gap-1">
+                                          <AppIcon name="tick" color="white" size={10} />
+                                          <span>Kunci Benar</span>
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* KONTEN TIPE 3: BENAR / SALAH (TRUE_FALSE) */}
+                  {qType === 'TRUE_FALSE' && (
+                    <div className="space-y-2.5 pt-1">
+                      {(() => {
+                        const rawStudent = ans?.selectedOption ?? (ans?.trueFalseAnswer !== undefined ? (ans.trueFalseAnswer ? 'TRUE' : 'FALSE') : (typeof ans === 'string' ? ans : ''));
+                        const sNorm = String(rawStudent || '').trim().toUpperCase();
+                        const isStudentTrue = sNorm === 'TRUE' || sNorm === 'BENAR' || sNorm === 'T' || rawStudent === true;
+                        const isStudentFalse = sNorm === 'FALSE' || sNorm === 'SALAH' || sNorm === 'F' || rawStudent === false;
+
+                        const rawCorrect = q.trueFalseAnswer !== undefined ? (q.trueFalseAnswer ? 'TRUE' : 'FALSE') : (q.correctOption || 'TRUE');
+                        const cNorm = String(rawCorrect || '').trim().toUpperCase();
+                        const isCorrectTrue = cNorm === 'TRUE' || cNorm === 'BENAR' || cNorm === 'T' || q.trueFalseAnswer === true;
+
+                        return (
+                          <>
+                            <div className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                              Pernyataan Benar atau Salah:
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {/* Option BENAR */}
+                              <div className={`p-4 rounded-xl border flex items-center justify-between gap-3 ${
+                                isCorrectTrue
+                                  ? 'bg-emerald-50 border-emerald-400 text-emerald-950 ring-1 ring-emerald-400'
+                                  : isStudentTrue
+                                  ? 'bg-danger-50 border-danger-400 text-danger-950'
+                                  : 'bg-neutral-50 border-neutral-200 text-neutral-700'
+                              }`}>
+                                <div className="flex items-center gap-2.5">
+                                  <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                                    isStudentTrue
+                                      ? isCorrectTrue ? 'bg-emerald-600 text-white' : 'bg-danger-600 text-white'
+                                      : isCorrectTrue ? 'bg-emerald-200 text-emerald-900' : 'bg-neutral-200 text-neutral-700'
+                                  }`}>
+                                    B
+                                  </span>
+                                  <div>
+                                    <p className="font-bold text-sm">BENAR</p>
+                                    <p className="text-[11px] text-neutral-500">Pernyataan bernilai benar</p>
+                                  </div>
+                                </div>
+                                <div className="flex flex-col items-end gap-1">
+                                  {isStudentTrue && (
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                      isCorrectTrue ? 'bg-emerald-700 text-white' : 'bg-danger-700 text-white'
+                                    }`}>
+                                      {isCorrectTrue ? 'Pilihan Siswa (Benar)' : 'Pilihan Siswa (Salah)'}
+                                    </span>
+                                  )}
+                                  {isCorrectTrue && !isStudentTrue && (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-700 text-white inline-flex items-center gap-1">
+                                      <AppIcon name="tick" color="white" size={10} />
+                                      <span>Kunci Benar</span>
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Option SALAH */}
+                              <div className={`p-4 rounded-xl border flex items-center justify-between gap-3 ${
+                                !isCorrectTrue
+                                  ? 'bg-emerald-50 border-emerald-400 text-emerald-950 ring-1 ring-emerald-400'
+                                  : isStudentFalse
+                                  ? 'bg-danger-50 border-danger-400 text-danger-950'
+                                  : 'bg-neutral-50 border-neutral-200 text-neutral-700'
+                              }`}>
+                                <div className="flex items-center gap-2.5">
+                                  <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                                    isStudentFalse
+                                      ? !isCorrectTrue ? 'bg-emerald-600 text-white' : 'bg-danger-600 text-white'
+                                      : !isCorrectTrue ? 'bg-emerald-200 text-emerald-900' : 'bg-neutral-200 text-neutral-700'
+                                  }`}>
+                                    S
+                                  </span>
+                                  <div>
+                                    <p className="font-bold text-sm">SALAH</p>
+                                    <p className="text-[11px] text-neutral-500">Pernyataan bernilai salah</p>
+                                  </div>
+                                </div>
+                                <div className="flex flex-col items-end gap-1">
+                                  {isStudentFalse && (
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                      !isCorrectTrue ? 'bg-emerald-700 text-white' : 'bg-danger-700 text-white'
+                                    }`}>
+                                      {!isCorrectTrue ? 'Pilihan Siswa (Benar)' : 'Pilihan Siswa (Salah)'}
+                                    </span>
+                                  )}
+                                  {!isCorrectTrue && !isStudentFalse && (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-700 text-white inline-flex items-center gap-1">
+                                      <AppIcon name="tick" color="white" size={10} />
+                                      <span>Kunci Benar</span>
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* KONTEN TIPE 4: MENJODOHKAN / PENCOCOKAN (MATCHING) */}
+                  {qType === 'MATCHING' && (
+                    <div className="space-y-2.5 pt-1">
+                      {(() => {
+                        let matchingAns = ans?.matchingAnswers;
+                        if (!matchingAns && typeof ans?.selectedOption === 'string' && ans.selectedOption.startsWith('{')) {
+                          try { matchingAns = JSON.parse(ans.selectedOption); } catch (_) {}
+                        }
+                        if (!matchingAns && typeof ans === 'string' && ans.startsWith('{')) {
+                          try { matchingAns = JSON.parse(ans); } catch (_) {}
+                        }
+                        matchingAns = matchingAns || {};
+                        const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
+
+                        return (
+                          <>
+                            <div className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                              Pasangan Menjodohkan / Pencocokan:
+                            </div>
+                            <div className="overflow-x-auto rounded-lg border border-neutral-200">
+                              <table className="w-full text-xs text-left">
+                                <thead className="bg-neutral-50 text-neutral-700 font-bold border-b border-neutral-200">
+                                  <tr>
+                                    <th className="py-2.5 px-3 w-10 text-center">#</th>
+                                    <th className="py-2.5 px-3">Premis / Pernyataan (Kiri)</th>
+                                    <th className="py-2.5 px-3">Jawaban Dipilih Siswa</th>
+                                    <th className="py-2.5 px-3">Kunci Pasangan Seharusnya</th>
+                                    <th className="py-2.5 px-3 w-28 text-center">Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-neutral-200 bg-white">
+                                  {pairs.map((p, pIdx) => {
+                                    const studentVal = matchingAns[p.id] ?? matchingAns[String(p.id)] ?? '';
+                                    const matchOk = Boolean(studentVal && studentVal.trim().toLowerCase() === (p.right || '').trim().toLowerCase());
+
+                                    return (
+                                      <tr key={p.id || pIdx} className={matchOk ? 'bg-emerald-50/40' : 'bg-danger-50/30'}>
+                                        <td className="py-2.5 px-3 text-center font-bold text-neutral-500">{pIdx + 1}</td>
+                                        <td className="py-2.5 px-3 font-semibold text-neutral-900">{p.left}</td>
+                                        <td className="py-2.5 px-3">
+                                          {studentVal ? (
+                                            <span className={`font-semibold ${matchOk ? 'text-emerald-900' : 'text-danger-900'}`}>
+                                              {studentVal}
+                                            </span>
+                                          ) : (
+                                            <span className="text-neutral-400 italic">(Tidak Dijawab)</span>
+                                          )}
+                                        </td>
+                                        <td className="py-2.5 px-3 font-semibold text-emerald-800">{p.right}</td>
+                                        <td className="py-2.5 px-3 text-center">
+                                          {matchOk ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                              <AppIcon name="tick" color="green" size={10} />
+                                              <span>Cocok</span>
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-danger-100 text-danger-800 border border-danger-300">
+                                              <AppIcon name="close-cancel" color="red" size={10} />
+                                              <span>Tidak Cocok</span>
+                                            </span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* KONTEN TIPE 5: URAIAN / ESAI (ESSAY) */}
+                  {qType === 'ESSAY' && (
+                    <div className="space-y-3.5 pt-1">
+                      {(() => {
+                        const essayText = typeof ans === 'string'
+                          ? ans
+                          : (ans?.essayAnswer || ans?.essay_answer || ans?.text || ans?.answer || ans?.content || '');
+
+                        return (
+                          <>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                                <AppIcon name="edit" color="purple" size={14} />
+                                <span>Lembar Jawaban Teks Siswa:</span>
+                              </label>
+                              <div className="p-4 rounded-xl bg-purple-50/60 border border-purple-200 text-xs sm:text-sm text-neutral-900 leading-relaxed font-sans whitespace-pre-wrap min-h-24">
+                                {essayText && essayText.trim() ? (
+                                  essayText.trim()
+                                ) : (
+                                  <span className="text-neutral-400 italic">
+                                    (Siswa tidak/belum menuliskan jawaban untuk butir esai ini)
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Pedoman Acuan Koreksi Guru */}
+                            {q.essayRubric && (
+                              <div className="p-3 rounded-lg bg-neutral-50 border border-neutral-200 text-xs text-neutral-600 space-y-1">
+                                <span className="font-bold text-neutral-700 flex items-center gap-1.5">
+                                  <AppIcon name="document-book" color="grey" size={13} />
+                                  <span>Pedoman / Kunci Acuan Koreksi Guru:</span>
+                                </span>
+                                <p className="whitespace-pre-wrap leading-relaxed">{q.essayRubric}</p>
+                              </div>
+                            )}
+
+                            {/* Form Penilaian Skor Guru */}
+                            <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                              <div>
+                                <label className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                                  <AppIcon name="star" color="yellow" size={14} />
+                                  <span>Beri Skor / Nilai Esai Ini:</span>
+                                </label>
+                                <p className="text-[11px] text-amber-800 mt-0.5">
+                                  Maksimal bobot nilai: <strong>{qPoints} Poin</strong>. Nilai akhir di atas akan otomatis terkalkulasi.
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={qPoints}
+                                  value={essayScores[q.id] !== undefined ? essayScores[q.id] : ''}
+                                  onChange={(e) =>
+                                    setEssayScores({
+                                      ...essayScores,
+                                      [q.id]: Math.min(qPoints, Math.max(0, Number(e.target.value))),
+                                    })
+                                  }
+                                  placeholder="0"
+                                  className="w-24 p-2 text-center text-sm font-bold rounded-lg border border-amber-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                                />
+                                <span className="text-xs font-bold text-amber-950">/ {qPoints} Poin</span>
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Sticky Action Footer */}
+        <div className="sticky bottom-4 z-40 bg-neutral-900/95 backdrop-blur-md text-white p-4 rounded-xl shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-neutral-700 animate-in slide-in-from-bottom-2">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold text-lg">
+              {finalScore}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold tracking-wide uppercase text-neutral-300">
+                  Total Nilai Akhir:
+                </span>
+                <span className="text-sm font-extrabold text-emerald-400">
+                  {finalScore} / 100
+                </span>
+              </div>
+              <p className="text-[11px] text-neutral-400">
+                Poin diperoleh: {totalEarned} dari {totalMax} total bobot soal
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => setActiveStudentAnswers(null)}
+              className="cursor-pointer text-xs font-bold text-white border-neutral-600 hover:bg-neutral-800"
+            >
+              Kembali
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              disabled={savingGrade}
+              onClick={handleSaveEssayScore}
+              className="font-bold cursor-pointer bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 shadow-md"
+            >
+              <AppIcon name="tick" color="white" size={14} />
+              <span>{savingGrade ? 'Menyimpan...' : 'Simpan Koreksi & Nilai Akhir'}</span>
+            </Button>
+          </div>
+        </div>
+
+        {notice && (
+          <div className="fixed bottom-5 right-5 z-50 bg-neutral-900 text-white px-4 py-2.5 rounded-[8px] text-xs font-medium shadow-lg animate-in fade-in">
+            {notice}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
@@ -839,283 +1707,6 @@ export default function LiveProctoringMonitoringPage() {
               className="cursor-pointer"
             >
               Tutup
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* MODAL PERIKSA & KOREKSI JAWABAN SISWA */}
-      <Modal
-        isOpen={Boolean(activeStudentAnswers)}
-        onClose={() => setActiveStudentAnswers(null)}
-        title="Lembar Jawaban & Koreksi Siswa"
-        subtitle={
-          activeStudentAnswers
-            ? `${activeStudentAnswers.studentName} • Kelas ${activeStudentAnswers.className || selectedExam?.className} • Status: ${
-                activeStudentAnswers.status === 'SUBMITTED' ? 'Telah Selesai' : 'Sedang Mengerjakan'
-              }`
-            : ''
-        }
-        size="lg"
-      >
-        <div className="space-y-5 max-h-[75vh] overflow-y-auto pr-1">
-          {/* Info Card */}
-          <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            <div>
-              <p className="text-neutral-500">Mata Pelajaran:</p>
-              <p className="font-bold text-neutral-900">{selectedExam?.subject}</p>
-            </div>
-            <div>
-              <p className="text-neutral-500">Status Pengerjaan:</p>
-              <p className="font-bold text-emerald-700">
-                {activeStudentAnswers?.status === 'SUBMITTED' ? 'Sudah Selesai' : 'Sedang Ujian'}
-              </p>
-            </div>
-            <div>
-              <p className="text-neutral-500">Skor Sementara:</p>
-              <p className="font-bold text-primary-700 text-sm">
-                {activeStudentAnswers?.score !== null && activeStudentAnswers?.score !== undefined
-                  ? `${activeStudentAnswers.score} / 100`
-                  : 'Menunggu Koreksi Guru'}
-              </p>
-            </div>
-            <div>
-              <p className="text-neutral-500">Jumlah Soal:</p>
-              <p className="font-bold text-neutral-900">{examQuestions.length} Butir Soal</p>
-            </div>
-          </div>
-
-          {/* Daftar Butir Soal & Jawaban Siswa */}
-          {examQuestions.length === 0 ? (
-            <div className="py-8 text-center text-xs text-neutral-400">
-              Memuat lembar soal dan jawaban siswa...
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {examQuestions.map((q, idx) => {
-                const ansValues = Object.values(studentAnswers || {});
-                const ans =
-                  studentAnswers[q.id] ||
-                  studentAnswers[String(q.id)] ||
-                  studentAnswers[q.questionNumber] ||
-                  studentAnswers[idx + 1] ||
-                  studentAnswers[String(idx + 1)] ||
-                  studentAnswers[`q-${idx + 1}`] ||
-                  studentAnswers[`q_${idx + 1}`] ||
-                  ansValues.find((a) => a && (a.questionId === q.id || a.question_id === q.id)) ||
-                  ansValues[idx] ||
-                  null;
-
-                const isMcq = q.type === 'MCQ';
-                const studentOption = typeof ans === 'string' ? ans : (ans?.selectedOption || ans?.selected_option || '');
-                const isCorrect = isMcq && studentOption === q.correctOption;
-                const essayText = typeof ans === 'string'
-                  ? ans
-                  : (ans?.essayAnswer || ans?.essay_answer || ans?.text || ans?.answer || ans?.content || '');
-
-                return (
-                  <div
-                    key={q.id || idx}
-                    className="p-4 rounded-xl border border-neutral-200 bg-white shadow-2xs space-y-3"
-                  >
-                    {/* Header Soal */}
-                    <div className="flex items-center justify-between pb-2 border-b border-neutral-100 flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2.5 py-0.5 rounded-md font-bold text-xs bg-neutral-900 text-white">
-                          Soal #{idx + 1}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          isMcq ? 'bg-primary-100 text-primary-800' : 'bg-purple-100 text-purple-800'
-                        }`}>
-                          {isMcq ? 'Pilihan Ganda' : 'Uraian / Esai'}
-                        </span>
-                        <span className="text-[11px] font-semibold text-neutral-500">
-                          (Bobot: {q.points || 10} Poin)
-                        </span>
-                      </div>
-
-                      {isMcq && (
-                        <div>
-                          {ans?.selectedOption ? (
-                            isCorrect ? (
-                              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1">
-                                <AppIcon name="tick" color="green" size={11} />
-                                <span>BENAR (+{q.points || 10} Poin)</span>
-                              </span>
-                            ) : (
-                              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-danger-100 text-danger-800 border border-danger-300 inline-flex items-center gap-1">
-                                <AppIcon name="close-cancel" color="red" size={11} />
-                                <span>SALAH (Kunci: {q.correctOption})</span>
-                              </span>
-                            )
-                          ) : (
-                            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-neutral-100 text-neutral-500 border border-neutral-300">
-                              Tidak Dijawab
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Stimulus Kasus (jika ada) */}
-                    {q.stimulusText && (
-                      <div className="p-3 rounded-lg bg-amber-50/70 border border-amber-200 text-amber-950 text-xs whitespace-pre-wrap leading-relaxed">
-                        <strong className="flex items-center gap-1.5 text-amber-900 mb-1">
-                          <AppIcon name="file" color="yellow" size={13} />
-                          <span>Wacana / Stimulus:</span>
-                        </strong>
-                        {q.stimulusText}
-                      </div>
-                    )}
-
-                    {/* Gambar Soal (jika ada) */}
-                    {q.imageUrl && (
-                      <div className="p-2 rounded-lg bg-neutral-50 border border-neutral-200 flex justify-center">
-                        <img
-                          src={q.imageUrl}
-                          alt={`Gambar Soal #${idx + 1}`}
-                          className="max-h-48 w-auto rounded object-contain"
-                        />
-                      </div>
-                    )}
-
-                    {/* Teks Pertanyaan */}
-                    <div className="text-xs sm:text-sm font-semibold text-neutral-800 leading-relaxed whitespace-pre-wrap">
-                      {q.questionText}
-                    </div>
-
-                    {/* Jika Soal Pilihan Ganda: Tampilkan Opsi & Jawaban Siswa */}
-                    {isMcq && (
-                      <div className="space-y-1.5 pt-1">
-                        {q.options?.map((opt) => {
-                          const isStudentPick = ans?.selectedOption === opt.key;
-                          const isKey = q.correctOption === opt.key;
-
-                          let optClass = 'bg-neutral-50 border-neutral-200 text-neutral-700';
-                          if (isKey) {
-                            optClass = 'bg-emerald-50 border-emerald-400 text-emerald-900 font-semibold ring-1 ring-emerald-400';
-                          } else if (isStudentPick && !isKey) {
-                            optClass = 'bg-danger-50 border-danger-400 text-danger-900 font-semibold';
-                          }
-
-                          return (
-                            <div
-                              key={opt.key}
-                              className={`p-2.5 rounded-lg border text-xs flex items-center justify-between gap-2 ${optClass}`}
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className={`w-6 h-6 rounded flex items-center justify-center font-bold text-xs shrink-0 ${
-                                  isStudentPick ? 'bg-primary-600 text-white' : 'bg-neutral-200 text-neutral-700'
-                                }`}>
-                                  {opt.key}
-                                </span>
-                                <span>{opt.text}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                {isStudentPick && (
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary-600 text-white">
-                                    Pilihan Siswa
-                                  </span>
-                                )}
-                                {isKey && (
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-700 text-white inline-flex items-center gap-1">
-                                    <AppIcon name="tick" color="white" size={10} />
-                                    <span>Kunci Benar</span>
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Jika Soal Esai: Tampilkan Teks Jawaban Siswa & Form Koreksi Nilai Guru */}
-                    {!isMcq && (
-                      <div className="space-y-3 pt-1">
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
-                            <AppIcon name="edit" color="purple" size={14} />
-                            <span>Lembar Jawaban Siswa:</span>
-                          </label>
-                          <div className="p-3.5 rounded-xl bg-purple-50/70 border border-purple-200 text-xs sm:text-sm text-neutral-900 leading-relaxed font-sans whitespace-pre-wrap min-h-20">
-                            {essayText && essayText.trim() ? (
-                              essayText.trim()
-                            ) : (
-                              <span className="text-neutral-400 italic">
-                                (Siswa tidak/belum menuliskan jawaban untuk butir esai ini)
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Pedoman Acuan Penilaian Guru */}
-                        {q.essayRubric && (
-                          <div className="p-2.5 rounded-lg bg-neutral-50 border border-neutral-200 text-xs text-neutral-600 space-y-0.5">
-                            <span className="font-bold text-neutral-700 flex items-center gap-1">
-                              <AppIcon name="document-book" color="grey" size={13} />
-                              <span>Pedoman / Kunci Acuan Koreksi Guru:</span>
-                            </span>
-                            <p className="whitespace-pre-wrap">{q.essayRubric}</p>
-                          </div>
-                        )}
-
-                        {/* Input Penilaian Guru untuk Esai Ini */}
-                        <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                          <div>
-                            <label className="text-xs font-bold text-amber-950">
-                              Beri Skor / Nilai Esai Ini:
-                            </label>
-                            <p className="text-[11px] text-amber-800">
-                              Maksimal bobot nilai: <strong>{q.points || 10} Poin</strong>
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="number"
-                              min="0"
-                              max={q.points || 100}
-                              value={essayScores[q.id] !== undefined ? essayScores[q.id] : ''}
-                              onChange={(e) =>
-                                setEssayScores({
-                                  ...essayScores,
-                                  [q.id]: Math.min(Number(q.points) || 100, Math.max(0, Number(e.target.value))),
-                                })
-                              }
-                              placeholder="0"
-                              className="w-20 p-2 text-center text-xs font-bold rounded-lg border border-amber-300 bg-white"
-                            />
-                            <span className="text-xs font-bold text-amber-900">/ {q.points || 10} Poin</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Action Footer Modal */}
-          <div className="flex items-center justify-between pt-3 border-t border-neutral-200 gap-2">
-            <Button
-              variant="outline"
-              size="md"
-              onClick={() => setActiveStudentAnswers(null)}
-              className="cursor-pointer"
-            >
-              Tutup
-            </Button>
-
-            <Button
-              variant="primary"
-              size="md"
-              disabled={savingGrade}
-              onClick={handleSaveEssayScore}
-              className="font-bold cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"
-            >
-              <AppIcon name="tick" color="white" size={14} />
-              <span>{savingGrade ? 'Menyimpan Nilai...' : 'Simpan Koreksi & Nilai Akhir'}</span>
             </Button>
           </div>
         </div>
