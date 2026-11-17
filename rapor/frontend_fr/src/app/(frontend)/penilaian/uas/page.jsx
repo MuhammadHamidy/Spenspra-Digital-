@@ -7,6 +7,9 @@ import { tokenStorage } from '@/lib/common/tokenStorage';
 import { deadlineApiAdapter } from '@/lib/features/deadlines/infrastructure/deadlineApiAdapter';
 import Pagination from '@/components/Pagination';
 import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
+import { exportToExcelXml } from '@/lib/excelExport';
+import ImportGradesModal from '@/components/ImportGradesModal';
+import { cbtAdapter } from '@/lib/cbtAdapter';
 
 const DEFAULT_DESCRIPTIONS = {
   A: 'Sangat baik dalam memahami materi semester ini dan mampu menerapkannya secara mandiri.',
@@ -49,6 +52,15 @@ export default function PenilaianUASPage() {
   // Filter Tahun Ajaran & Semester sinkron otomatis dengan Super Admin
   const [academicYear, setAcademicYear] = useState(() => getSchoolAcademicPeriod().year);
   const [semester, setSemester] = useState(() => getSchoolAcademicPeriod().semester);
+
+  // CBT Integration States
+  const [availableCbtExams, setAvailableCbtExams] = useState([]);
+  const [selectedExamId, setSelectedExamId] = useState('');
+  const [isSyncingCbt, setIsSyncingCbt] = useState(false);
+  const [cbtNotice, setCbtNotice] = useState(null);
+
+  // Import Excel Modal
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -144,6 +156,7 @@ export default function PenilaianUASPage() {
     return template.replace(/^[A-D]:\s*/i, '').trim();
   }, []);
 
+  // Memuat data siswa & nilai UAS tersimpan di e-Rapor
   const loadStudentsAndGrades = useCallback(async () => {
     setSaved(false);
     setSaveMessage('');
@@ -168,16 +181,37 @@ export default function PenilaianUASPage() {
             return {
               id: g.student_id,
               person_id: g.person_id || null,
-              nisn: g.nisn,
-              name: g.student_name,
-              className: g.class_name,
+              nisn: g.nisn || '-',
+              name: g.student_name || 'Siswa',
+              className: g.class_name || className,
               score: hasScore ? String(g.score) : '',
               description: g.description || defaultDesc,
             };
           })
         );
       } else {
-        setRows([]);
+        // Fallback: Ambil data roster siswa dari SSO jika belum ada nilai
+        try {
+          const { accountApiAdapter } = await import('@/lib/features/auth/infrastructure/accountApiAdapter');
+          const list = await accountApiAdapter.getStudents(className);
+          if (Array.isArray(list) && list.length > 0) {
+            setRows(
+              list.map((s) => ({
+                id: s.id,
+                person_id: s.person_id || null,
+                nisn: s.nisn || s.nim_nip || '-',
+                name: s.full_name || s.fullName || s.name || 'Siswa',
+                className,
+                score: '',
+                description: '',
+              }))
+            );
+          } else {
+            setRows([]);
+          }
+        } catch (_) {
+          setRows([]);
+        }
       }
     } catch (err) {
       console.warn('Gagal memuat nilai UAS dari server:', err);
@@ -189,13 +223,75 @@ export default function PenilaianUASPage() {
     loadStudentsAndGrades();
   }, [loadStudentsAndGrades]);
 
+  // Cari Ujian CBT yang sesuai dengan Mapel dan Kelas/Tingkat yang dipilih
+  useEffect(() => {
+    const fetchMatchingExams = async () => {
+      if (!className || !subject) {
+        setAvailableCbtExams([]);
+        setSelectedExamId('');
+        return;
+      }
+      try {
+        const allExams = await cbtAdapter.getExams();
+        const normalize = (c) => String(c || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+        const cNorm = normalize(className);
+        const gradeDigit = className.match(/\d+/)?.[0] || '';
+        const currentSubjectObj = subjects.find((item) => item.code === subject);
+        const subjectName = (currentSubjectObj?.name || subject || '').toLowerCase();
+
+        const filtered = (allExams || []).filter((ex) => {
+          const exSub = (ex.subject || '').toLowerCase();
+          const exCode = (ex.subjectCode || '').toLowerCase();
+          const matchSub =
+            (exCode && exCode === subject.toLowerCase()) ||
+            exSub.includes(subject.toLowerCase()) ||
+            (subjectName && (exSub.includes(subjectName) || subjectName.includes(exSub)));
+
+          if (!matchSub) return false;
+
+          const matchCls =
+            normalize(ex.className) === cNorm ||
+            (Array.isArray(ex.targetClasses) && ex.targetClasses.some((tc) => normalize(tc) === cNorm)) ||
+            (ex.targetGradeLevel && gradeDigit && String(ex.targetGradeLevel) === gradeDigit) ||
+            (ex.targetGradeLevel && cNorm.startsWith(String(ex.targetGradeLevel)));
+
+          return matchCls;
+        });
+
+        // Urutkan: Ujian UAS / ASAS Semester diutamakan paling atas
+        filtered.sort((a, b) => {
+          const aIsUas = a.examCategory === 'SEMESTER_UAS' || a.isCoordinatorExam || /uas|asas/i.test(a.title);
+          const bIsUas = b.examCategory === 'SEMESTER_UAS' || b.isCoordinatorExam || /uas|asas/i.test(b.title);
+          if (aIsUas && !bIsUas) return -1;
+          if (!aIsUas && bIsUas) return 1;
+          return 0;
+        });
+
+        setAvailableCbtExams(filtered);
+        if (filtered.length > 0) {
+          // Pilih otomatis ujian bertipe UAS / ASAS jika ada
+          const defaultExam = filtered.find((e) => e.examCategory === 'SEMESTER_UAS' || /uas|asas/i.test(e.title)) || filtered[0];
+          setSelectedExamId(defaultExam.id);
+        } else {
+          setSelectedExamId('');
+        }
+      } catch (e) {
+        console.warn('Gagal memuat daftar ujian CBT:', e);
+      }
+    };
+
+    fetchMatchingExams();
+  }, [className, subject, subjects]);
+
   useEffect(() => {
     setCurrentPage(1);
   }, [className, subject, search]);
 
   const visibleRows = rows.filter(
     (row) =>
-      !search || row.name.toLowerCase().includes(search.toLowerCase()) || row.nisn.includes(search)
+      !search ||
+      (row.name && row.name.toLowerCase().includes(search.toLowerCase())) ||
+      (row.nisn && row.nisn.includes(search))
   );
 
   const paginatedRows = useMemo(() => {
@@ -210,7 +306,7 @@ export default function PenilaianUASPage() {
     setRows((current) =>
       current.map((row) =>
         row.id === id
-          ? { ...row, score, description: autoDesc }
+          ? { ...row, score: String(score), description: autoDesc }
           : row
       )
     );
@@ -234,9 +330,147 @@ export default function PenilaianUASPage() {
     setSaved(false);
     const filled = updated.filter((r) => r.score !== '' && r.score !== null).length;
     alert(
-      `Deskripsi berhasil disimpan untuk ${filled} siswa kelas ${className}.\n\n` +
-      'Klik tombol "Simpan Nilai" agar nilai & deskripsi tersimpan ke database e-Rapor.'
+      `Deskripsi capaian rapor berhasil diperbarui untuk ${filled} siswa kelas ${className}.\n\n` +
+      'Klik tombol "Simpan Nilai UAS ke e-Rapor" agar nilai & deskripsi tersimpan permanen.'
     );
+  };
+
+  // =================== TARIK NILAI DARI CBT UAS / ASAS ===================
+  const handleSyncFromCBT = async () => {
+    if (!selectedExamId) {
+      alert('Pilih sesi ujian CBT (UAS / ASAS) yang ingin ditarik nilainya.');
+      return;
+    }
+
+    const chosenExam = availableCbtExams.find((e) => e.id === selectedExamId);
+    if (!chosenExam) {
+      alert('Data ujian CBT yang dipilih tidak ditemukan.');
+      return;
+    }
+
+    setIsSyncingCbt(true);
+    setCbtNotice(null);
+
+    try {
+      const sessions = await cbtAdapter.getExamSessions(chosenExam.id);
+      const studentScoreMap = new Map();
+
+      (sessions || []).forEach((sess) => {
+        const sId = String(sess.studentId || sess.student_id || sess.id || '');
+        const sNisn = String(sess.nisn || '');
+        const sName = String(sess.studentName || sess.student_name || '').toLowerCase().trim();
+        const score = typeof sess.score === 'number' ? sess.score : (sess.score !== undefined && sess.score !== null ? Number(sess.score) : null);
+
+        if (score !== null && !isNaN(score)) {
+          if (sId) studentScoreMap.set(sId, score);
+          if (sNisn && sNisn !== '-') studentScoreMap.set(sNisn, score);
+          if (sName) studentScoreMap.set(sName, score);
+        }
+      });
+
+      let pulledCount = 0;
+      setRows((prev) =>
+        prev.map((r) => {
+          const sId = String(r.id || '');
+          const sNisn = String(r.nisn || '');
+          const sName = String(r.name || '').toLowerCase().trim();
+
+          const score =
+            studentScoreMap.get(sId) ??
+            (sNisn && sNisn !== '-' ? studentScoreMap.get(sNisn) : undefined) ??
+            studentScoreMap.get(sName);
+
+          if (score !== undefined && score !== null && !isNaN(score)) {
+            pulledCount++;
+            const finalScore = Math.min(100, Math.max(0, score));
+            const pred = getPredicate(finalScore);
+            const desc = formatDescription(pred);
+            return {
+              ...r,
+              score: String(finalScore),
+              description: r.description || desc,
+            };
+          }
+          return r;
+        })
+      );
+
+      const isUasName = chosenExam.examCategory === 'SEMESTER_UAS' || /uas|asas/i.test(chosenExam.title);
+      if (pulledCount > 0) {
+        setCbtNotice({
+          type: 'success',
+          message: `Berhasil menarik ${pulledCount} nilai siswa dari ujian CBT "${chosenExam.title}" (${isUasName ? 'Ujian UAS/ASAS Semester' : 'Ujian Reguler'}). Nilai dan predikat rapor telah otomatis diisikan. Klik tombol "Simpan Nilai UAS ke e-Rapor" untuk menyimpan ke database.`,
+        });
+        setSaved(false);
+      } else {
+        setCbtNotice({
+          type: 'warning',
+          message: `Sesi ujian "${chosenExam.title}" ditemukan, namun belum ada siswa dari Kelas ${className} yang telah menyelesaikan ujian (status SUBMITTED) atau memiliki skor tersimpan.`,
+        });
+      }
+    } catch (err) {
+      console.error('Gagal menarik nilai CBT:', err);
+      setCbtNotice({
+        type: 'error',
+        message: `Terjadi kendala saat menyinkronkan data ujian CBT: ${err.message}`,
+      });
+    } finally {
+      setIsSyncingCbt(false);
+    }
+  };
+
+  // =================== UNDUH FORMAT & IMPOR EXCEL ===================
+  const handleDownloadTemplate = () => {
+    const currentSubjectObj = subjects.find((item) => item.code === subject);
+    const subjectName = currentSubjectObj ? currentSubjectObj.name : subject;
+
+    exportToExcelXml({
+      filename: `Format_Nilai_UAS_${className}_${subject}_${academicYear.replace('/', '-')}.xls`,
+      sheetName: `UAS ${className}`,
+      title: 'FORMAT PENGISIAN NILAI ASESMEN SUMATIF AKHIR SEMESTER (UAS / ASAS)',
+      subtitle: `SMP NEGERI 1 PRAMBON • TAHUN AJARAN ${academicYear} SEMESTER ${semester}`,
+      metadata: [
+        { label: 'Kelas / Rombel', value: `Kelas ${className}` },
+        { label: 'Mata Pelajaran', value: `${subject} - ${subjectName}` },
+        { label: 'Guru Pengampu', value: currentUser?.fullName || currentUser?.full_name || 'Guru Pengampu' },
+        { label: 'Panduan', value: 'Isi kolom Nilai UAS dengan angka 0-100. Setelah selesai, impor kembali via sistem.' },
+        { label: 'Tanggal Cetak Format', value: new Date().toLocaleDateString('id-ID', { dateStyle: 'full' }) },
+      ],
+      headers: ['No', 'NISN', 'Nama Siswa', 'Kelas', 'Nilai UAS (0-100)', 'Panduan Predikat', 'Deskripsi Capaian (Opsional)'],
+      rows: rows.map((r, idx) => {
+        const scoreVal = r.score !== '' && r.score !== null && !isNaN(Number(r.score)) ? Number(r.score) : '';
+        return [
+          idx + 1,
+          r.nisn,
+          r.name,
+          `Kelas ${className}`,
+          scoreVal,
+          '>=86 A, >=76 B, >=66 C, <66 D',
+          r.description || '',
+        ];
+      }),
+    });
+  };
+
+  const handleApplyImportedGrades = (updates) => {
+    setRows((prev) => {
+      return prev.map((row) => {
+        const match = updates.find((u) => u.studentId === row.id || (u.nisn && u.nisn === row.nisn));
+        if (match && match.score !== null) {
+          const score = match.score;
+          const pred = getPredicate(score);
+          const autoDesc = formatDescription(pred);
+          return {
+            ...row,
+            score: String(score),
+            description: match.description?.trim() || autoDesc,
+          };
+        }
+        return row;
+      });
+    });
+    setSaved(false);
+    setSaveMessage(`Berhasil mengimpor nilai untuk ${updates.length} siswa. Klik "Simpan Nilai UAS ke e-Rapor" untuk menyimpan permanen.`);
   };
 
   const handleSaveGrades = async () => {
@@ -246,15 +480,14 @@ export default function PenilaianUASPage() {
 
     const currentSubjectObj = subjects.find((item) => item.code === subject);
     const subjectName = currentSubjectObj ? currentSubjectObj.name : subject;
-    const currentUser = tokenStorage.getUser();
 
     const payload = {
       class_name: className,
       subject_code: subject,
       subject_name: subjectName,
       assessment_type: 'PAS',
-      academic_year: '2025/2026',
-      semester: 'GENAP',
+      academic_year: academicYear,
+      semester: semester,
       teacher_id: currentUser?.id || '',
       teacher_name: currentUser?.fullName || currentUser?.full_name || 'Guru Pengampu',
       grades: rows.map((r) => {
@@ -274,7 +507,7 @@ export default function PenilaianUASPage() {
 
     if (payload.grades.length === 0) {
       setIsSaving(false);
-      setSaveMessage('Belum ada siswa di kelas ini.');
+      setSaveMessage('Belum ada data siswa di kelas ini.');
       setSaved(true);
       return;
     }
@@ -294,78 +527,94 @@ export default function PenilaianUASPage() {
     }
   };
 
+  // Statistik Keterisian Nilai
+  const filledCount = rows.filter((r) => r.score !== '' && r.score !== null && !isNaN(Number(r.score))).length;
+  const avgClassScore =
+    filledCount > 0
+      ? Math.round(
+          rows
+            .filter((r) => r.score !== '' && r.score !== null && !isNaN(Number(r.score)))
+            .reduce((acc, curr) => acc + Number(curr.score), 0) / filledCount
+        )
+      : 0;
+
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      {/* Coming Soon Hero Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-slate-900 via-indigo-950 to-blue-900 p-8 sm:p-10 text-white shadow-lg">
+      {/* Hero Banner Header */}
+      <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-slate-900 via-indigo-950 to-blue-900 p-7 sm:p-9 text-white shadow-lg">
         <div className="absolute -right-10 -bottom-10 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative z-10 max-w-3xl">
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
+          <div className="max-w-3xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-200 text-xs font-semibold mb-3">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>e-Rapor Kurikulum Merdeka • Asesmen Akhir Semester</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+              Input Nilai UAS / ASAS (Sumatif Akhir Semester)
+            </h1>
+            <p className="mt-2 text-xs sm:text-sm text-slate-300 leading-relaxed">
+              Penginputan dan pengelolaan nilai akhir semester mata pelajaran. Anda dapat menarik langsung nilai hasil pengerjaan dari <strong>e-Ujian CBT (UAS / ASAS)</strong> sesuai sesi ujian yang dipilih dengan 1 klik.
+            </p>
+          </div>
 
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-            Input Nilai UAS (Sumatif Akhir Semester)
-          </h1>
-          <p className="mt-3 text-sm text-slate-300 leading-relaxed">
-            Modul penginputan nilai UAS / PAS / SAS saat ini <strong>masih dalam tahap persiapan (Coming Soon)</strong> dan belum dibuka untuk penginputan nilai. Saat ini periode akademik berfokus pada <strong>Penilaian Sumatif Tengah Semester (USTS)</strong>.
-          </p>
-
-          <div className="mt-6 flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <a
               href="/penilaian/pts"
-              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md transition-all flex items-center gap-2"
+              className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs border border-white/20 transition-all flex items-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
-              <span>Buka Input Nilai USTS</span>
+              <span>Buka Nilai PTS / STS</span>
             </a>
             <a
-              href="/"
-              className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs border border-white/20 transition-all flex items-center gap-2"
+              href="/wali-kelas"
+              className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs border border-white/20 transition-all flex items-center gap-2"
             >
-              <span>Kembali ke Dashboard</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+              <span>Rekap Wali Kelas</span>
             </a>
           </div>
         </div>
       </div>
 
-      {/* Info Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="p-5 rounded-xl bg-white border border-slate-200 shadow-xs">
-          <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-100 text-[#193D9B] flex items-center justify-center mb-3">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
+      {/* Notice Banner */}
+      {cbtNotice && (
+        <div
+          className={`p-4 rounded-xl border flex items-start gap-3 shadow-xs ${
+            cbtNotice.type === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              : cbtNotice.type === 'error'
+              ? 'bg-rose-50 border-rose-200 text-rose-900'
+              : 'bg-amber-50 border-amber-200 text-amber-900'
+          }`}
+        >
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold bg-white/60">
+            {cbtNotice.type === 'success' ? '✅' : cbtNotice.type === 'error' ? '❌' : '⚠️'}
           </div>
-          <h3 className="text-xs font-bold text-slate-900">Jadwal Pembukaan Portal</h3>
-          <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-            Portal penilaian akhir semester akan dibuka menjelang pelaksanaan pekan Sumatif Akhir Semester (SAS) sesuai kalender akademik resmi SMPN 1 Prambon.
-          </p>
-        </div>
-
-        <div className="p-5 rounded-xl bg-white border border-slate-200 shadow-xs">
-          <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-700 flex items-center justify-center mb-3">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
+          <div className="flex-1">
+            <h4 className="text-xs font-bold">
+              {cbtNotice.type === 'success'
+                ? 'Sinkronisasi Nilai CBT UAS Berhasil'
+                : cbtNotice.type === 'error'
+                ? 'Gagal Sinkronisasi CBT'
+                : 'Pemberitahuan Sinkronisasi Nilai'}
+            </h4>
+            <p className="text-[11px] mt-0.5 leading-relaxed">{cbtNotice.message}</p>
           </div>
-          <h3 className="text-xs font-bold text-slate-900">Persiapan Penilaian USTS</h3>
-          <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-            Bapak/Ibu guru diharapkan melengkapi penginputan nilai harian, tugas, dan nilai Ujian Sumatif Tengah Semester (USTS) pada menu yang telah disediakan.
-          </p>
+          <button
+            type="button"
+            onClick={() => setCbtNotice(null)}
+            className="text-xs font-semibold px-2 py-1 hover:bg-black/5 rounded cursor-pointer"
+          >
+            ✕
+          </button>
         </div>
-
-        <div className="p-5 rounded-xl bg-white border border-slate-200 shadow-xs">
-          <div className="w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-700 flex items-center justify-center mb-3">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-          </div>
-          <h3 className="text-xs font-bold text-slate-900">Kalkulasi Rapor Akhir</h3>
-          <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-            Saat portal UAS dibuka, sistem akan otomatis mengolah rata-rata nilai sumatif materi, asesmen akhir semester, serta generate deskripsi rapor Kurikulum Merdeka.
-          </p>
-        </div>
-      </div>
+      )}
 
       {/* Banner Peringatan Guru Belum Ada Penugasan Mengajar */}
       {isTeacherRole && (classes.length === 0 || subjects.length === 0 || !className || !subject) && (
@@ -379,83 +628,167 @@ export default function PenilaianUASPage() {
             <h4 className="font-bold text-xs text-slate-900">Belum Ditentukan Mata Pelajaran & Kelas Pengampu</h4>
             <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
               Akun Anda belum memiliki mata pelajaran atau rombel yang diatur pada jadwal e-Rapor untuk Tahun Ajaran <strong>{academicYear} ({semester})</strong>.
-              Sistem tidak akan memasukkan data kelas atau mapel secara sembarangan. Silakan hubungi Administrator e-Rapor sekolah untuk mengatur penugasan mengampu di menu <em>Pengampu Mata Pelajaran</em>.
+              Silakan hubungi Administrator e-Rapor sekolah untuk mengatur penugasan mengampu di menu <em>Pengampu Mata Pelajaran</em>.
             </p>
           </div>
         </div>
       )}
 
-      {/* Pratinjau Layout Form UAS (Coming Soon) */}
-      <div className="p-4 rounded-2xl bg-slate-100/70 border border-slate-200">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+      {/* Integrasi Tarik Nilai dari Ujian CBT (UAS / ASAS) */}
+      <div className="p-4 rounded-xl border border-indigo-200 bg-linear-to-r from-indigo-50/90 to-blue-50/90 shadow-xs space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-bold">
-              PRATINJAU FORMAT (COMING SOON)
-            </span>
-            <span className="text-xs text-slate-600 font-semibold">
-              Format Penilaian Akhir Semester (Akan Diaktifkan Sesuai Jadwal)
-            </span>
+            <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold shadow-xs">
+              ⚡
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-indigo-950">
+                Tarik Nilai dari e-Ujian CBT (Integrasi Sesuai Jenis & Nama Ujian)
+              </h3>
+              <p className="text-[11px] text-indigo-700">
+                Pilih sesi ujian CBT (UAS / ASAS Semester atau Reguler) di bawah ini untuk mengisikan otomatis nilai siswa ke format rapor UAS.
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs md:grid-cols-[1.2fr_1fr_1.5fr_auto]">
-          <label className="text-xs font-semibold text-slate-700">
-            Mata Pelajaran
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-center pt-1 border-t border-indigo-200/60">
+          <div>
+            <label className="text-[11px] font-bold text-indigo-900 block mb-1">
+              Pilih Sesi Ujian CBT Sumber:
+            </label>
             <select
-              value={subject}
-              onChange={(event) => setSubject(event.target.value)}
-              className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-blue-600"
+              value={selectedExamId}
+              onChange={(e) => setSelectedExamId(e.target.value)}
+              className="w-full rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
             >
-              {subjects.length === 0 ? (
-                <option value="">— Belum Ada Mapel Diampu —</option>
+              {availableCbtExams.length === 0 ? (
+                <option value="">— Belum ada sesi ujian CBT untuk {subjects.find((s) => s.code === subject)?.name || subject} di Kelas {className} —</option>
               ) : (
-                subjects.map((item) => (
-                  <option key={item.code} value={item.code}>
-                    {item.code} — {item.name}
-                  </option>
-                ))
+                availableCbtExams.map((ex) => {
+                  const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || /uas|asas/i.test(ex.title);
+                  return (
+                    <option key={ex.id} value={ex.id}>
+                      {isUasType ? '⭐ [UAS / ASAS Semester] ' : '📝 [Ujian Reguler] '}
+                      {ex.title} (Mapel: {ex.subject}) — Token: {ex.token || '-'}
+                    </option>
+                  );
+                })
               )}
             </select>
-          </label>
-          <label className="text-xs font-semibold text-slate-700">
-            Rombel
-            <select
-              value={className}
-              onChange={(event) => setClassName(event.target.value)}
-              className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-blue-600"
-            >
-              {classes.length === 0 ? (
-                <option value="">— Belum Ada Kelas —</option>
-              ) : (
-                classes.map((item) => (
-                  <option key={item} value={item}>
-                    Kelas {item}
-                  </option>
-                ))
-              )}
-            </select>
-          </label>
-          <label className="text-xs font-semibold text-slate-700">
-            Cari Siswa
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Cari NISN atau nama lengkap..."
-              className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-normal outline-none focus:border-blue-600"
-            />
-          </label>
+          </div>
+
           <div className="flex items-end">
             <button
               type="button"
-              onClick={() => setShowTemplateConfig(!showTemplateConfig)}
-              className="w-full px-3.5 py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+              onClick={handleSyncFromCBT}
+              disabled={isSyncingCbt || !selectedExamId}
+              className="w-full md:w-auto px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              <svg className={`w-4 h-4 ${isSyncingCbt ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              <span>{showTemplateConfig ? 'Tutup Format' : 'Format Deskripsi'}</span>
+              <span>{isSyncingCbt ? 'Menyinkronkan Nilai...' : '⚡ Tarik Nilai dari Ujian Ini'}</span>
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Toolbar Filter & Aksi Tambahan */}
+      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs md:grid-cols-[1.2fr_1fr_1.5fr_auto]">
+        <label className="text-xs font-semibold text-slate-700">
+          Mata Pelajaran
+          <select
+            value={subject}
+            onChange={(event) => setSubject(event.target.value)}
+            className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+          >
+            {subjects.length === 0 ? (
+              <option value="">— Belum Ada Mapel Diampu —</option>
+            ) : (
+              subjects.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.code} — {item.name}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-slate-700">
+          Rombel Kelas
+          <select
+            value={className}
+            onChange={(event) => setClassName(event.target.value)}
+            className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+          >
+            {classes.length === 0 ? (
+              <option value="">— Belum Ada Kelas —</option>
+            ) : (
+              classes.map((item) => (
+                <option key={item} value={item}>
+                  Kelas {item}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-slate-700">
+          Cari Siswa
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Cari NISN atau nama lengkap..."
+            className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-normal outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+          />
+        </label>
+        <div className="flex items-end">
+          <button
+            type="button"
+            onClick={() => setShowTemplateConfig(!showTemplateConfig)}
+            className="w-full px-3.5 py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            <span>{showTemplateConfig ? 'Tutup Format' : 'Format Deskripsi'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Bar Tombol Tambahan: Unduh Template, Impor Excel */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDownloadTemplate}
+            className="px-3.5 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+            title="Unduh format spreadsheet untuk penilaian offline"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>Unduh Template Penilaian (.xls)</span>
+          </button>
+
+          {!isKepalaSekolah && (
+            <button
+              type="button"
+              onClick={() => setIsImportModalOpen(true)}
+              className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+              title="Impor nilai dari berkas Excel atau salin-tempel"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>Impor Nilai Excel</span>
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 text-xs text-slate-600">
+          <span>Terisi: <strong className="text-slate-900">{filledCount}</strong> / {rows.length} Siswa</span>
+          <span>•</span>
+          <span>Rata-rata: <strong className="text-blue-700">{avgClassScore}</strong></span>
         </div>
       </div>
 
@@ -484,28 +817,27 @@ export default function PenilaianUASPage() {
           </div>
           <div className="flex justify-end pt-2 border-t border-blue-200">
             <button
-              id="btn-simpan-deskripsi-uas"
               type="button"
               onClick={applyTemplateToAllStudents}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
             >
-              <span>Simpan Deskripsi</span>
+              <span>🔄 Terapkan ke Semua Siswa Kelas {className}</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* Tabel Nilai UAS (Pratinjau / Coming Soon) */}
+      {/* Tabel Nilai UAS */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
-        <div className="border-b border-slate-200 bg-amber-50/60 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="border-b border-slate-200 bg-slate-50/80 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
             <span className="text-xs font-bold text-slate-800">
-              Pratinjau Data Siswa ({visibleRows.length} Siswa Terdaftar)
+              Daftar Siswa Kelas {className} ({visibleRows.length} Siswa Terdaftar)
             </span>
           </div>
-          <span className="text-[11px] font-semibold text-amber-800 bg-amber-100/70 border border-amber-200/80 px-2.5 py-0.5 rounded-full">
-            Fitur Input Nilai UAS Sedang Coming Soon
+          <span className="text-[11px] font-semibold text-slate-600">
+            Mata Pelajaran: <span className="text-blue-700 font-bold">{subjects.find((s) => s.code === subject)?.name || subject}</span>
           </span>
         </div>
         <div className="overflow-x-auto">
@@ -514,10 +846,10 @@ export default function PenilaianUASPage() {
               <tr className="border-b border-slate-200 bg-slate-50 font-semibold text-slate-600">
                 <th className="py-2.5 px-3 w-12 text-center">No</th>
                 <th className="py-2.5 px-3 w-28">NISN</th>
-                <th className="py-2.5 px-3">Nama Siswa</th>
+                <th className="py-2.5 px-3 min-w-[160px]">Nama Siswa</th>
                 <th className="py-2.5 px-3 w-24 text-center">Nilai UAS</th>
                 <th className="py-2.5 px-3 w-20 text-center">Predikat</th>
-                <th className="py-2.5 px-3">Deskripsi Capaian Akhir</th>
+                <th className="py-2.5 px-3 min-w-[280px]">Deskripsi Capaian Akhir Semester</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -531,6 +863,17 @@ export default function PenilaianUASPage() {
                 paginatedRows.map((r, index) => {
                   const pred = getPredicate(r.score);
                   const itemNo = (currentPage - 1) * pageSize + index + 1;
+                  const predColor =
+                    pred === 'A'
+                      ? 'bg-emerald-100 text-emerald-800 font-bold'
+                      : pred === 'B'
+                      ? 'bg-blue-100 text-blue-800 font-bold'
+                      : pred === 'C'
+                      ? 'bg-amber-100 text-amber-800 font-bold'
+                      : pred === 'D'
+                      ? 'bg-rose-100 text-rose-800 font-bold'
+                      : 'bg-slate-100 text-slate-400';
+
                   return (
                     <tr key={r.id} className="hover:bg-slate-50/80">
                       <td className="py-2 px-3 text-center text-slate-500">{itemNo}</td>
@@ -539,24 +882,26 @@ export default function PenilaianUASPage() {
                       <td className="py-2 px-3 text-center">
                         <input
                           type="number"
-                          disabled
+                          min="0"
+                          max="100"
                           value={r.score || ''}
+                          onChange={(e) => updateScore(r.id, e.target.value)}
                           placeholder="-"
-                          className="w-16 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-center font-bold text-slate-400 cursor-not-allowed"
+                          className="w-16 rounded border border-slate-300 bg-white px-2 py-1 text-center font-bold text-slate-800 outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-100"
                         />
                       </td>
-                      <td className="py-2 px-3 text-center font-bold">
-                        <span className="inline-block w-6 py-0.5 rounded text-[11px] bg-slate-100 text-slate-500">
+                      <td className="py-2 px-3 text-center">
+                        <span className={`inline-block w-7 py-0.5 rounded text-[11px] ${predColor}`}>
                           {pred}
                         </span>
                       </td>
                       <td className="py-2 px-3">
                         <input
                           type="text"
-                          disabled
                           value={r.description || ''}
-                          placeholder="Deskripsi rapor akan otomatis terisi saat UAS aktif..."
-                          className="w-full rounded border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-400 cursor-not-allowed"
+                          onChange={(e) => updateDescription(r.id, e.target.value)}
+                          placeholder="Deskripsi capaian rapor..."
+                          className="w-full rounded border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 outline-none focus:border-blue-600"
                         />
                       </td>
                     </tr>
@@ -582,20 +927,54 @@ export default function PenilaianUASPage() {
         />
       </div>
 
-      {/* Action Bar (Coming Soon State) */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200">
+      {/* Action Bar Simpan Nilai */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200 shadow-xs">
         <div className="flex items-center gap-2 text-xs text-slate-600">
-          <span className="text-amber-500 text-sm">🔒</span>
-          <span>Penginputan Nilai UAS akan diaktifkan secara serentak menjelang asesmen akhir semester.</span>
+          {saveMessage ? (
+            <span className="font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+              {saveMessage}
+            </span>
+          ) : (
+            <span>Periksa kembali nilai siswa sebelum menyimpan ke database e-Rapor.</span>
+          )}
         </div>
-        <button
-          type="button"
-          disabled
-          className="rounded-xl bg-slate-200 text-slate-400 border border-slate-300 px-5 py-2 text-xs font-bold cursor-not-allowed flex items-center gap-2"
-        >
-          <span>Simpan Nilai UAS (Coming Soon)</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSaveGrades}
+            disabled={isSaving || rows.length === 0}
+            className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 text-xs font-bold transition shadow-sm cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSaving ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span>Menyimpan ke e-Rapor...</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                </svg>
+                <span>Simpan Nilai UAS ke e-Rapor</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
+
+      {/* Modal Impor Nilai Excel */}
+      {isImportModalOpen && (
+        <ImportGradesModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          onApply={handleApplyImportedGrades}
+          students={rows}
+          className={className}
+          subjectCode={subject}
+        />
+      )}
     </div>
   );
 }
