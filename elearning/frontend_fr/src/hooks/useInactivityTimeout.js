@@ -3,9 +3,9 @@
 import { useEffect, useRef } from 'react';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
-// 15 Menit tidak ada interaksi pengguna -> Auto Logout
-const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000;
-const CHECK_INTERVAL_MS = 15 * 1000;
+// Sesi bertahan 8 Jam kerja aktif agar guru & siswa tidak terputus saat mengajar / ujian
+const INACTIVITY_TIMEOUT_MS = 8 * 60 * 60 * 1000;
+const CHECK_INTERVAL_MS = 60 * 1000;
 
 export function useInactivityTimeout(onTimeout) {
   const lastThrottleRef = useRef(0);
@@ -47,10 +47,10 @@ export function useInactivityTimeout(onTimeout) {
           const isSpenspra = typeof window !== 'undefined' && window.location.hostname.includes('spenspra.com');
           const isSch = typeof window !== 'undefined' && window.location.hostname.includes('spenspra.sch.id');
           const loginUrl = isSpenspra
-            ? 'https://sso.spenspra.com/login?reason=inactivity'
+            ? 'https://sso.spenspra.com/login?reason=inactivity&app=belajar'
             : isSch
-            ? 'https://sso.spenspra.sch.id/login?reason=inactivity'
-            : (process.env.NEXT_PUBLIC_SSO_LOGIN_URL ? `${process.env.NEXT_PUBLIC_SSO_LOGIN_URL}?reason=inactivity` : 'http://sso.localhost/login?reason=inactivity');
+            ? 'https://sso.spenspra.sch.id/login?reason=inactivity&app=belajar'
+            : (process.env.NEXT_PUBLIC_SSO_LOGIN_URL ? `${process.env.NEXT_PUBLIC_SSO_LOGIN_URL}?reason=inactivity&app=belajar` : 'http://sso.localhost/login?reason=inactivity&app=belajar');
           window.location.href = loginUrl;
         }
       }

@@ -171,8 +171,13 @@ function LoginForm() {
         }
       }
 
-      // 5. Default Civitas: Hanya jika tidak memilih aplikasi spesifik di awal, buka dashboard SSO
-      window.location.href = '/dashboard';
+      // 5. Default Civitas (Guru / Siswa / Tendik):
+      // Langsung arahkan ke aplikasi utama Spenspra Belajar (LMS & CBT) tanpa perantara dashboard SSO
+      const belajarBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_ELEARNING_URL || process.env.NEXT_PUBLIC_BELAJAR_URL, 'belajar');
+      const belajarRole = isEducator ? 'GURU' : 'SISWA';
+      const bPayload = { ...userPayload, roleName: belajarRole, peran: belajarRole };
+      const bEncoded = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(bPayload)))) : '';
+      window.location.href = `${belajarBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${bEncoded}`;
       return;
     } catch (err) {
       setError(err.message || 'Login gagal. Periksa kembali username/NIP dan kata sandi Anda.');

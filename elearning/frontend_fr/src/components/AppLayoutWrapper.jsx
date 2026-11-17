@@ -7,9 +7,6 @@ import Sidebar from './Sidebar';
 import { useInactivityTimeout } from '@/hooks/useInactivityTimeout';
 
 export default function AppLayoutWrapper({ children }) {
-  // Pantau aktivitas pengguna & auto-logout setelah 15 menit tidak aktif
-  useInactivityTimeout();
-
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const pathname = usePathname() || '';
 

@@ -3,9 +3,9 @@
 import { useEffect, useRef } from 'react';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
-// 15 Menit tidak ada interaksi pengguna -> Auto Logout
-const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000;
-const CHECK_INTERVAL_MS = 15 * 1000;
+// Sesi bertahan 8 Jam kerja aktif agar guru & siswa tidak terputus saat mengajar / ujian
+const INACTIVITY_TIMEOUT_MS = 8 * 60 * 60 * 1000;
+const CHECK_INTERVAL_MS = 60 * 1000;
 
 export function useInactivityTimeout(onTimeout) {
   const lastThrottleRef = useRef(0);

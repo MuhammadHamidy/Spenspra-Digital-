@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/features/auth/presentation/useAuth';
 import { getRole } from '@/lib/access/portalAccess';
 import SuperAdminDashboard from '@/components/SuperAdminDashboard';
-import CivitasDashboard from '@/components/CivitasDashboard';
+import { tokenStorage } from '@/lib/common/tokenStorage';
+import { getDynamicAppUrl } from '@/lib/common/urlHelper';
 
 const publicApplications = [
   {
@@ -218,13 +219,33 @@ export default function MainPage() {
     if (!user) {
       return;
     }
-    const search = typeof window !== 'undefined' ? window.location.search : '';
     if (isSuperAdmin) {
       router.replace('/superadmin');
-    } else {
-      router.replace(`/dashboard${search}`);
+      return;
     }
-  }, [user, loading, isSuperAdmin, router]);
+
+    const token = tokenStorage.getToken() || 'sso-session-token';
+    const isEducator = ['GURU', 'WALI_KELAS', 'PENDIDIK', 'KEPALA_SEKOLAH', 'TENDIK'].includes(role);
+    const isSiswa = role.includes('SISWA');
+    const belajarRole = isSiswa ? 'SISWA' : 'GURU';
+
+    const userPayload = {
+      id: user?.id || user?.person_id || 'user-1',
+      username: user?.username || '',
+      fullName: user?.fullName || user?.full_name || '',
+      roleName: belajarRole,
+      peran: belajarRole,
+      nimNip: user?.nimNip || user?.nip || user?.nisn || '',
+      className: user?.className || user?.kelas || '',
+      courseNames: user?.courseNames || user?.course_names || user?.courses || [],
+      courseIds: user?.courseIds || user?.course_ids || [],
+      classCodes: user?.classCodes || user?.class_codes || user?.classes || [],
+      classIds: user?.classIds || user?.class_ids || [],
+    };
+    const encodedUser = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(userPayload)))) : '';
+    const belajarBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_ELEARNING_URL || process.env.NEXT_PUBLIC_BELAJAR_URL, 'belajar');
+    window.location.replace(`${belajarBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${encodedUser}`);
+  }, [user, loading, isSuperAdmin, role, router]);
 
   if (loading) {
     return (
@@ -241,9 +262,5 @@ export default function MainPage() {
     return <SuperAdminDashboard />;
   }
 
-  if (!user) {
-    return <PublicApplicationPortal />;
-  }
-
-  return <CivitasDashboard />;
+  return <PublicApplicationPortal />;
 }

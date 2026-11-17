@@ -92,16 +92,16 @@ function SidebarContent({ mobileOpen = false, onCloseMobile = () => {} }) {
               <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">Utama</p>
               <div className="space-y-0.5">
                 <Link
-                  href={isSuperAdmin ? "/superadmin" : "/dashboard"}
+                  href={isSuperAdmin ? "/superadmin" : "/"}
                   onClick={onCloseMobile}
                   className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all ${
-                    (pathname === '/superadmin' || pathname === '/dashboard' || pathname === '/')
+                    (pathname === '/superadmin' || pathname === '/')
                       ? 'bg-[#4B3B78] font-semibold text-white shadow-xs'
                       : 'text-slate-600 hover:bg-[#FAF9FD] hover:text-[#3D2E66]'
                   }`}
                 >
                   <span className={`w-4 text-center text-sm ${pathname === '/superadmin' || pathname === '/' ? 'text-white' : 'text-slate-400'}`}>⌂</span>
-                  <span className="truncate">Beranda SSO</span>
+                  <span className="truncate">{isSuperAdmin ? "Beranda Super Admin" : "Beranda Utama"}</span>
                 </Link>
               </div>
             </div>
@@ -211,27 +211,6 @@ function SidebarContent({ mobileOpen = false, onCloseMobile = () => {} }) {
               </div>
             )}
 
-            {!isSuperAdmin && (
-              <div>
-                <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Layanan Civitas
-                </p>
-                <div className="space-y-0.5">
-                  <Link
-                    href="/dashboard"
-                    onClick={onCloseMobile}
-                    className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all ${
-                      pathname === '/dashboard'
-                        ? 'bg-[#4B3B78] font-semibold text-white shadow-xs'
-                        : 'text-slate-600 hover:bg-[#FAF9FD] hover:text-[#3D2E66]'
-                    }`}
-                  >
-                    <span className="w-4 text-center text-sm">🏠</span>
-                    <span className="truncate">Dashboard Utama</span>
-                  </Link>
-                </div>
-              </div>
-            )}
 
             {/* Section: Akun */}
             <div>
