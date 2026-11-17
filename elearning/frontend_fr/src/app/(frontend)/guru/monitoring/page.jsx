@@ -6,6 +6,7 @@ import Button from '@/components/Button';
 import StatusBadge from '@/components/StatusBadge';
 import Modal from '@/components/Modal';
 import ConfirmModal from '@/components/ConfirmModal';
+import AppIcon from '@/components/AppIcon';
 import { elearningApi } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
@@ -216,7 +217,7 @@ export default function LiveProctoringMonitoringPage() {
         } catch (_) {}
       }
 
-      setNotice(`✓ Koreksi nilai akhir (${finalScore}) untuk ${activeStudentAnswers.studentName} berhasil disimpan!`);
+      setNotice(`Koreksi nilai akhir (${finalScore}) untuk ${activeStudentAnswers.studentName} berhasil disimpan!`);
       setTimeout(() => setNotice(null), 4000);
       loadProctoringData();
       setActiveStudentAnswers(null);
@@ -457,7 +458,7 @@ export default function LiveProctoringMonitoringPage() {
         <Card noPadding className="p-4 bg-white border border-neutral-200 rounded-[12px] hover:border-neutral-300 transition-colors">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-semibold text-neutral-500">Total Siswa Kelas</p>
-            <span className="text-base">👥</span>
+            <AppIcon name="student" color="blue" size={18} />
           </div>
           <p className="text-2xl font-bold text-neutral-900 mt-1">{totalStudents}</p>
           <p className="text-[10px] text-neutral-500 mt-0.5">
@@ -479,7 +480,7 @@ export default function LiveProctoringMonitoringPage() {
         <Card noPadding className="p-4 bg-danger-50/50 border border-danger-200 rounded-[12px] hover:border-danger-300 transition-colors">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-semibold text-danger-700">Layar Terkunci</p>
-            <span className="text-base">🔒</span>
+            <AppIcon name="lock" color="red" size={18} />
           </div>
           <p className="text-2xl font-bold text-danger-700 mt-1">{lockedCount}</p>
           <p className="text-[10px] text-danger-600 font-bold mt-0.5">Perlu buka kunci pengawas</p>
@@ -489,7 +490,7 @@ export default function LiveProctoringMonitoringPage() {
         <Card noPadding className="p-4 bg-white border border-success-200 rounded-[12px] hover:border-success-300 transition-colors">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-semibold text-success-700">Telah Selesai</p>
-            <span className="text-base">✓</span>
+            <AppIcon name="circle-tick" color="green" size={18} />
           </div>
           <p className="text-2xl font-bold text-success-700 mt-1">{submittedCount}</p>
           <p className="text-[10px] text-success-600 mt-0.5">Jawaban sudah dikirim</p>
@@ -499,7 +500,7 @@ export default function LiveProctoringMonitoringPage() {
         <Card noPadding className="p-4 bg-amber-50/50 border border-amber-200 rounded-[12px] col-span-2 sm:col-span-1">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-semibold text-amber-800">Total Pelanggaran</p>
-            <span className="text-base">⚠️</span>
+            <AppIcon name="caution" color="yellow" size={18} />
           </div>
           <p className="text-2xl font-bold text-amber-800 mt-1">{totalViolations}</p>
           <p className="text-[10px] text-amber-700 mt-0.5">
@@ -544,8 +545,8 @@ export default function LiveProctoringMonitoringPage() {
         <div className="flex items-center gap-1 px-4 py-2 border-b border-neutral-100 overflow-x-auto text-xs bg-white">
           {[
             { id: 'ALL', label: `Semua Peserta (${totalStudents})` },
-            { id: 'VIOLATION', label: `⚠️ Melanggar (${violatingList.length})`, highlight: violatingList.length > 0 },
-            { id: 'LOCKED', label: `🔒 Layar Terkunci (${lockedCount})`, danger: lockedCount > 0 },
+            { id: 'VIOLATION', label: `Melanggar (${violatingList.length})`, highlight: violatingList.length > 0 },
+            { id: 'LOCKED', label: `Layar Terkunci (${lockedCount})`, danger: lockedCount > 0 },
             { id: 'IN_PROGRESS', label: `Sedang Ujian (${inProgressCount})` },
             { id: 'SUBMITTED', label: `Selesai (${submittedCount})` },
             { id: 'NOT_STARTED', label: `Belum Bergabung (${notStartedCount})` },
@@ -643,15 +644,18 @@ export default function LiveProctoringMonitoringPage() {
                       <td className="py-3 px-4 whitespace-nowrap">
                         {isLocked ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[999px] text-[10px] font-bold bg-danger-100 text-danger-800 border border-danger-300">
-                            🔒 LAYAR TERKUNCI
+                            <AppIcon name="lock" color="red" size={11} />
+                            <span>LAYAR TERKUNCI</span>
                           </span>
                         ) : isSubmitted ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[999px] text-[10px] font-bold bg-success-100 text-success-800 border border-success-300">
-                            ✓ SELESAI {s.score !== null && s.score !== undefined ? `(${s.score})` : ''}
+                            <AppIcon name="tick" color="green" size={11} />
+                            <span>SELESAI {s.score !== null && s.score !== undefined ? `(${s.score})` : ''}</span>
                           </span>
                         ) : isNotStarted ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[999px] text-[10px] font-semibold bg-neutral-100 text-neutral-500 border border-neutral-200">
-                            ⏳ Belum Bergabung
+                            <AppIcon name="timer" color="grey" size={11} />
+                            <span>Belum Bergabung</span>
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[999px] text-[10px] font-bold bg-secondary-100 text-secondary-800 border border-secondary-300">
@@ -702,10 +706,11 @@ export default function LiveProctoringMonitoringPage() {
                               variant="outline"
                               size="xs"
                               onClick={() => handleOpenStudentAnswers(s)}
-                              className="font-bold cursor-pointer text-primary-700 bg-primary-50/70 hover:bg-primary-100 border-primary-200"
+                              className="font-bold cursor-pointer text-primary-700 bg-primary-50/70 hover:bg-primary-100 border-primary-200 flex items-center gap-1"
                               title="Periksa dan koreksi lembar jawaban siswa"
                             >
-                              📝 Periksa Jawaban
+                              <AppIcon name="edit" color="blue" size={13} />
+                              <span>Periksa Jawaban</span>
                             </Button>
                           )}
 
@@ -725,9 +730,10 @@ export default function LiveProctoringMonitoringPage() {
                               variant="accent"
                               size="xs"
                               onClick={() => handleUnlockStudent(s)}
-                              className="font-bold cursor-pointer bg-amber-500 hover:bg-amber-600 text-neutral-900"
+                              className="font-bold cursor-pointer bg-amber-500 hover:bg-amber-600 text-neutral-900 flex items-center gap-1"
                             >
-                              🔓 Buka Kunci
+                              <AppIcon name="unlock" color="grey" size={13} />
+                              <span>Buka Kunci</span>
                             </Button>
                           )}
                         </div>
@@ -791,9 +797,10 @@ export default function LiveProctoringMonitoringPage() {
                   handleUnlockStudent(activeStudentAudit);
                   setActiveStudentAudit(null);
                 }}
-                className="font-bold cursor-pointer"
+                className="font-bold cursor-pointer flex items-center gap-1.5"
               >
-                🔓 Buka Kunci Layar Siswa
+                <AppIcon name="unlock" color="grey" size={14} />
+                <span>Buka Kunci Layar Siswa</span>
               </Button>
             )}
             <Button
@@ -816,7 +823,7 @@ export default function LiveProctoringMonitoringPage() {
         subtitle={
           activeStudentAnswers
             ? `${activeStudentAnswers.studentName} • Kelas ${activeStudentAnswers.className || selectedExam?.className} • Status: ${
-                activeStudentAnswers.status === 'SUBMITTED' ? '✓ Telah Selesai' : '⚡ Sedang Mengerjakan'
+                activeStudentAnswers.status === 'SUBMITTED' ? 'Telah Selesai' : 'Sedang Mengerjakan'
               }`
             : ''
         }
@@ -832,7 +839,7 @@ export default function LiveProctoringMonitoringPage() {
             <div>
               <p className="text-neutral-500">Status Pengerjaan:</p>
               <p className="font-bold text-emerald-700">
-                {activeStudentAnswers?.status === 'SUBMITTED' ? '✓ Sudah Selesai' : 'Sedang Ujian'}
+                {activeStudentAnswers?.status === 'SUBMITTED' ? 'Sudah Selesai' : 'Sedang Ujian'}
               </p>
             </div>
             <div>
@@ -902,12 +909,14 @@ export default function LiveProctoringMonitoringPage() {
                         <div>
                           {ans?.selectedOption ? (
                             isCorrect ? (
-                              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                ✓ BENAR (+{q.points || 10} Poin)
+                              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1">
+                                <AppIcon name="tick" color="green" size={11} />
+                                <span>BENAR (+{q.points || 10} Poin)</span>
                               </span>
                             ) : (
-                              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-danger-100 text-danger-800 border border-danger-300">
-                                ✕ SALAH (Kunci: {q.correctOption})
+                              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-danger-100 text-danger-800 border border-danger-300 inline-flex items-center gap-1">
+                                <AppIcon name="close-cancel" color="red" size={11} />
+                                <span>SALAH (Kunci: {q.correctOption})</span>
                               </span>
                             )
                           ) : (
@@ -922,7 +931,10 @@ export default function LiveProctoringMonitoringPage() {
                     {/* Stimulus Kasus (jika ada) */}
                     {q.stimulusText && (
                       <div className="p-3 rounded-lg bg-amber-50/70 border border-amber-200 text-amber-950 text-xs whitespace-pre-wrap leading-relaxed">
-                        <strong className="block text-amber-900 mb-1">📑 Wacana / Stimulus:</strong>
+                        <strong className="flex items-center gap-1.5 text-amber-900 mb-1">
+                          <AppIcon name="file" color="yellow" size={13} />
+                          <span>Wacana / Stimulus:</span>
+                        </strong>
                         {q.stimulusText}
                       </div>
                     )}
@@ -977,8 +989,9 @@ export default function LiveProctoringMonitoringPage() {
                                   </span>
                                 )}
                                 {isKey && (
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-700 text-white">
-                                    ✓ Kunci Benar
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-700 text-white inline-flex items-center gap-1">
+                                    <AppIcon name="tick" color="white" size={10} />
+                                    <span>Kunci Benar</span>
                                   </span>
                                 )}
                               </div>
@@ -993,7 +1006,7 @@ export default function LiveProctoringMonitoringPage() {
                       <div className="space-y-3 pt-1">
                         <div className="space-y-1">
                           <label className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
-                            <span>✍️</span>
+                            <AppIcon name="edit" color="purple" size={14} />
                             <span>Lembar Jawaban Siswa:</span>
                           </label>
                           <div className="p-3.5 rounded-xl bg-purple-50/70 border border-purple-200 text-xs sm:text-sm text-neutral-900 leading-relaxed font-sans whitespace-pre-wrap min-h-20">
@@ -1010,7 +1023,10 @@ export default function LiveProctoringMonitoringPage() {
                         {/* Pedoman Acuan Penilaian Guru */}
                         {q.essayRubric && (
                           <div className="p-2.5 rounded-lg bg-neutral-50 border border-neutral-200 text-xs text-neutral-600 space-y-0.5">
-                            <span className="font-bold text-neutral-700">📖 Pedoman / Kunci Acuan Koreksi Guru:</span>
+                            <span className="font-bold text-neutral-700 flex items-center gap-1">
+                              <AppIcon name="document-book" color="grey" size={13} />
+                              <span>Pedoman / Kunci Acuan Koreksi Guru:</span>
+                            </span>
                             <p className="whitespace-pre-wrap">{q.essayRubric}</p>
                           </div>
                         )}
@@ -1067,9 +1083,10 @@ export default function LiveProctoringMonitoringPage() {
               size="md"
               disabled={savingGrade}
               onClick={handleSaveEssayScore}
-              className="font-bold cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="font-bold cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"
             >
-              {savingGrade ? 'Menyimpan Nilai...' : '💾 Simpan Koreksi & Nilai Akhir'}
+              <AppIcon name="tick" color="white" size={14} />
+              <span>{savingGrade ? 'Menyimpan Nilai...' : 'Simpan Koreksi & Nilai Akhir'}</span>
             </Button>
           </div>
         </div>

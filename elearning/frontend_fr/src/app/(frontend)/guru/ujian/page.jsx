@@ -8,8 +8,25 @@ import Input from '@/components/Input';
 import Modal from '@/components/Modal';
 import StatusBadge from '@/components/StatusBadge';
 import ConfirmModal from '@/components/ConfirmModal';
+import AppIcon from '@/components/AppIcon';
 import { elearningApi, generateRandomPin } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
+
+const formatDateDisplay = (dateStr) => {
+  if (!dateStr) return 'Sesuai Jadwal';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('id-ID', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  } catch {
+    return dateStr;
+  }
+};
 
 export default function TeacherExamsManagementPage() {
   const router = useRouter();
@@ -555,7 +572,7 @@ export default function TeacherExamsManagementPage() {
       let updated;
       if (editingQuestionId) {
         updated = examQuestions.map((q) => (q.id === editingQuestionId ? { ...q, ...newQ } : q));
-        setSaveSuccessMsg(`✓ Soal #${newQ.questionNumber} berhasil diperbarui!`);
+        setSaveSuccessMsg(`Soal #${newQ.questionNumber} berhasil diperbarui!`);
       } else {
         updated = [...examQuestions, newQ];
         const labels = {
@@ -566,7 +583,7 @@ export default function TeacherExamsManagementPage() {
           ESSAY: 'Esai',
         };
         setSaveSuccessMsg(
-          `✓ Soal #${newQ.questionNumber} (${labels[newQuestionType] || 'Soal'}) tersimpan!`
+          `Soal #${newQ.questionNumber} (${labels[newQuestionType] || 'Soal'}) tersimpan!`
         );
       }
 
@@ -625,7 +642,7 @@ export default function TeacherExamsManagementPage() {
               className="p-2.5 rounded-xl border border-neutral-200 bg-neutral-50 hover:bg-neutral-100 text-neutral-700 font-bold text-xs flex items-center gap-1.5 transition-all hover:-translate-x-0.5 cursor-pointer shrink-0"
               title="Kembali ke Daftar Ujian (Esc)"
             >
-              <span>←</span>
+              <AppIcon name="arrow-left" color="grey" size={14} />
               <span className="hidden sm:inline">Daftar Ujian</span>
             </button>
             <div className="space-y-1">
@@ -644,8 +661,9 @@ export default function TeacherExamsManagementPage() {
                 <span className="bg-amber-50 border border-amber-200 px-2 py-0.5 rounded font-mono font-bold text-amber-800">
                   Token: {activeQuestionEditorExam.token}
                 </span>
-                <span className="text-neutral-500">
-                  ⏱️ {activeQuestionEditorExam.durationMinutes || activeQuestionEditorExam.duration_minutes || 60} Menit
+                <span className="inline-flex items-center gap-1 text-neutral-500">
+                  <AppIcon name="timer" color="grey" size={13} />
+                  {activeQuestionEditorExam.durationMinutes || activeQuestionEditorExam.duration_minutes || 60} Menit
                 </span>
                 <span>•</span>
                 <span className="text-neutral-700 font-semibold">{examQuestions.length} Butir Soal ({mcqCount} Objektif, {essayCount} Esai)</span>
@@ -662,7 +680,7 @@ export default function TeacherExamsManagementPage() {
                   try {
                     setIsSavingQuestion(true);
                     await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, examQuestions);
-                    setSaveSuccessMsg(`✓ Seluruh ${examQuestions.length} butir soal berhasil disimpan ke server!`);
+                    setSaveSuccessMsg(`Seluruh ${examQuestions.length} butir soal berhasil disimpan ke server!`);
                     setTimeout(() => setSaveSuccessMsg(''), 4000);
                   } catch (e) {
                     alert('Gagal sinkronisasi: ' + e.message);
@@ -671,18 +689,20 @@ export default function TeacherExamsManagementPage() {
                   }
                 }}
                 loading={isSavingQuestion}
-                className="cursor-pointer font-bold shadow-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="cursor-pointer font-bold shadow-xs bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"
               >
-                ☁️ Simpan ke Server ({examQuestions.length} Soal)
+                <AppIcon name="sync" color="white" size={14} />
+                <span>Simpan ke Server ({examQuestions.length} Soal)</span>
               </Button>
             )}
             <Button
               variant="outline"
               size="sm"
               onClick={handleCloseQuestionEditor}
-              className="cursor-pointer font-bold"
+              className="cursor-pointer font-bold flex items-center gap-1.5"
             >
-              ✓ Selesai & Kembali
+              <AppIcon name="tick" color="grey" size={14} />
+              <span>Selesai & Kembali</span>
             </Button>
           </div>
         </div>
@@ -697,7 +717,7 @@ export default function TeacherExamsManagementPage() {
                   <span className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${
                     editingQuestionId ? 'bg-amber-600 text-white' : 'bg-primary-600 text-white'
                   }`}>
-                    {editingQuestionId ? '✏️' : `#${examQuestions.length + 1}`}
+                    {editingQuestionId ? <AppIcon name="edit" color="white" size={14} /> : `#${examQuestions.length + 1}`}
                   </span>
                   <div>
                     <h2 className="text-sm sm:text-base font-bold text-neutral-900">
@@ -710,7 +730,8 @@ export default function TeacherExamsManagementPage() {
                 </div>
 
                 {saveSuccessMsg && (
-                  <span className="text-xs font-bold text-success-700 bg-success-50 border border-success-200 px-2.5 py-1 rounded-lg animate-in fade-in">
+                  <span className="text-xs font-bold text-success-700 bg-success-50 border border-success-200 px-2.5 py-1 rounded-lg animate-in fade-in flex items-center gap-1">
+                    <AppIcon name="circle-tick" color="green" size={14} />
                     {saveSuccessMsg}
                   </span>
                 )}
@@ -722,11 +743,11 @@ export default function TeacherExamsManagementPage() {
                   <label className="text-xs font-bold text-neutral-800">Pilih Variasi Tipe Soal:</label>
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
                     {[
-                      { key: 'MCQ', icon: '🔘', badge: 'PG', title: 'Pilihan Ganda', desc: '1 Kunci Benar' },
-                      { key: 'COMPLEX_MCQ', icon: '☑️', badge: 'PGK', title: 'PG Kompleks', desc: 'Banyak Kunci Benar' },
-                      { key: 'TRUE_FALSE', icon: '⚖️', badge: 'B/S', title: 'Benar / Salah', desc: 'Pernyataan Logis' },
-                      { key: 'MATCHING', icon: '🔗', badge: 'Jodoh', title: 'Pencocokan', desc: 'Menjodohkan' },
-                      { key: 'ESSAY', icon: '✍️', badge: 'Esai', title: 'Soal Uraian', desc: 'Jawaban Bebas' },
+                      { key: 'MCQ', iconName: 'radio-button-active', badge: 'PG', title: 'Pilihan Ganda', desc: '1 Kunci Benar' },
+                      { key: 'COMPLEX_MCQ', iconName: 'checkbox', badge: 'PGK', title: 'PG Kompleks', desc: 'Banyak Kunci Benar' },
+                      { key: 'TRUE_FALSE', iconName: 'survey', badge: 'B/S', title: 'Benar / Salah', desc: 'Pernyataan Logis' },
+                      { key: 'MATCHING', iconName: 'link', badge: 'Jodoh', title: 'Pencocokan', desc: 'Menjodohkan' },
+                      { key: 'ESSAY', iconName: 'edit', badge: 'Esai', title: 'Soal Uraian', desc: 'Jawaban Bebas' },
                     ].map((t) => {
                       const isSel = newQuestionType === t.key;
                       return (
@@ -741,7 +762,7 @@ export default function TeacherExamsManagementPage() {
                           }`}
                         >
                           <div className="flex items-center justify-between w-full mb-1">
-                            <span className="text-base">{t.icon}</span>
+                            <AppIcon name={t.iconName} color={isSel ? 'blue' : 'grey'} size={18} />
                             <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
                               isSel ? 'bg-primary-600 text-white' : 'bg-neutral-100 text-neutral-600'
                             }`}>
@@ -771,7 +792,7 @@ export default function TeacherExamsManagementPage() {
                           : 'bg-white text-neutral-600 border-neutral-300 hover:bg-neutral-50'
                       }`}
                     >
-                      <span>📑</span>
+                      <AppIcon name="file" color={isStimulusOpen || stimulusText ? 'yellow' : 'grey'} size={14} />
                       <span>{isStimulusOpen || stimulusText ? 'Wacana / Teks Kasus (Aktif)' : '+ Tambah Wacana / Teks Kasus'}</span>
                     </button>
 
@@ -784,7 +805,7 @@ export default function TeacherExamsManagementPage() {
                           : 'bg-white text-neutral-600 border-neutral-300 hover:bg-neutral-50'
                       }`}
                     >
-                      <span>🖼️</span>
+                      <AppIcon name="camera" color={isImageOpen || imageUrl ? 'blue' : 'grey'} size={14} />
                       <span>{isImageOpen || imageUrl ? 'Gambar Soal (Aktif)' : '+ Tambah Gambar / Diagram'}</span>
                     </button>
                   </div>
@@ -795,7 +816,7 @@ export default function TeacherExamsManagementPage() {
                   <div className="p-3.5 rounded-xl bg-amber-50/60 border border-amber-200/90 space-y-2 animate-in fade-in duration-150">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
-                        <span>📑</span>
+                        <AppIcon name="file" color="yellow" size={14} />
                         <span>Wacana / Stimulus Kasus / Cuplikan Kode / Bacaan</span>
                       </label>
                       <button
@@ -804,9 +825,10 @@ export default function TeacherExamsManagementPage() {
                           setStimulusText('');
                           setIsStimulusOpen(false);
                         }}
-                        className="text-[11px] text-danger-600 hover:text-danger-700 font-bold hover:underline cursor-pointer"
+                        className="text-[11px] text-danger-600 hover:text-danger-700 font-bold hover:underline cursor-pointer flex items-center gap-1"
                       >
-                        ✕ Hapus Wacana
+                        <AppIcon name="close-cancel" color="red" size={12} />
+                        <span>Hapus Wacana</span>
                       </button>
                     </div>
                     <textarea
@@ -827,7 +849,7 @@ export default function TeacherExamsManagementPage() {
                   <div className="p-3.5 rounded-xl bg-sky-50/60 border border-sky-200/90 space-y-2 animate-in fade-in duration-150">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold text-sky-900 flex items-center gap-1.5">
-                        <span>🖼️</span>
+                        <AppIcon name="camera" color="blue" size={14} />
                         <span>Gambar / Diagram / Flowchart Pendukung Soal</span>
                       </label>
                       <button
@@ -836,9 +858,10 @@ export default function TeacherExamsManagementPage() {
                           setImageUrl('');
                           setIsImageOpen(false);
                         }}
-                        className="text-[11px] text-danger-600 hover:text-danger-700 font-bold hover:underline cursor-pointer"
+                        className="text-[11px] text-danger-600 hover:text-danger-700 font-bold hover:underline cursor-pointer flex items-center gap-1"
                       >
-                        ✕ Hapus Gambar
+                        <AppIcon name="close-cancel" color="red" size={12} />
+                        <span>Hapus Gambar</span>
                       </button>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-2">
@@ -951,8 +974,9 @@ export default function TeacherExamsManagementPage() {
                             />
 
                             {isCorrect && (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-success-600 text-white shrink-0 mr-1">
-                                ✓ KUNCI BENAR
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-success-600 text-white shrink-0 mr-1 inline-flex items-center gap-1">
+                                <AppIcon name="tick" color="white" size={10} />
+                                <span>KUNCI BENAR</span>
                               </span>
                             )}
                           </div>
@@ -990,7 +1014,7 @@ export default function TeacherExamsManagementPage() {
                   <div className="p-4 rounded-xl bg-primary-50/40 border border-primary-200 space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                       <label className="text-xs font-bold text-neutral-800 flex items-center gap-1.5">
-                        <span>☑️</span>
+                        <AppIcon name="checkbox" color="blue" size={14} />
                         <span>Opsi Jawaban & Centang Semua Kunci yang Benar (Bisa Lebih Dari 1):</span>
                       </label>
                       <span className="text-[11px] text-primary-700 font-semibold">
@@ -1042,8 +1066,9 @@ export default function TeacherExamsManagementPage() {
                             />
 
                             {isChecked && (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary-600 text-white shrink-0 mr-1">
-                                ✓ KUNCI BENAR
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary-600 text-white shrink-0 mr-1 inline-flex items-center gap-1">
+                                <AppIcon name="tick" color="white" size={10} />
+                                <span>KUNCI BENAR</span>
                               </span>
                             )}
                           </div>
@@ -1081,7 +1106,7 @@ export default function TeacherExamsManagementPage() {
                   <div className="p-4 rounded-xl bg-emerald-50/50 border border-emerald-200 space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                       <label className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
-                        <span>⚖️</span>
+                        <AppIcon name="survey" color="green" size={14} />
                         <span>Tentukan Kunci Kebenaran dari Pernyataan Soal:</span>
                       </label>
                       <span className="text-[11px] text-emerald-800 font-semibold">
@@ -1099,7 +1124,7 @@ export default function TeacherExamsManagementPage() {
                             : 'bg-white border-neutral-300 hover:border-emerald-300 text-neutral-700'
                         }`}
                       >
-                        <span className="text-base font-black">✓</span>
+                        <AppIcon name="tick" color={trueFalseAnswer ? 'white' : 'green'} size={16} />
                         <div className="text-left">
                           <p className="font-bold text-xs sm:text-sm leading-tight">BENAR (TRUE)</p>
                           <p className={`text-[10px] ${trueFalseAnswer ? 'text-emerald-100' : 'text-neutral-500'}`}>Pernyataan di atas bernilai benar</p>
@@ -1115,7 +1140,7 @@ export default function TeacherExamsManagementPage() {
                             : 'bg-white border-neutral-300 hover:border-rose-300 text-neutral-700'
                         }`}
                       >
-                        <span className="text-base font-black">✕</span>
+                        <AppIcon name="close-cancel" color={!trueFalseAnswer ? 'white' : 'red'} size={16} />
                         <div className="text-left">
                           <p className="font-bold text-xs sm:text-sm leading-tight">SALAH (FALSE)</p>
                           <p className={`text-[10px] ${!trueFalseAnswer ? 'text-rose-100' : 'text-neutral-500'}`}>Pernyataan di atas bernilai salah</p>
@@ -1153,7 +1178,7 @@ export default function TeacherExamsManagementPage() {
                   <div className="p-4 rounded-xl bg-violet-50/50 border border-violet-200 space-y-3.5">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                       <label className="text-xs font-bold text-violet-950 flex items-center gap-1.5">
-                        <span>🔗</span>
+                        <AppIcon name="link" color="blue" size={14} />
                         <span>Daftar Pasangan Menjodohkan (Premis Kiri ↔ Pasangan Kanan):</span>
                       </label>
                       <span className="text-[11px] text-violet-800 font-medium">
@@ -1211,10 +1236,10 @@ export default function TeacherExamsManagementPage() {
                               onClick={() => {
                                 setMatchingPairs((prev) => prev.filter((_, i) => i !== idx));
                               }}
-                              className="text-danger-600 hover:text-danger-800 p-1 rounded hover:bg-danger-50 font-bold text-xs shrink-0 cursor-pointer"
+                              className="text-danger-600 hover:text-danger-800 p-1.5 rounded hover:bg-danger-50 font-bold text-xs shrink-0 cursor-pointer flex items-center justify-center"
                               title="Hapus Pasangan Ini"
                             >
-                              ✕
+                              <AppIcon name="close-cancel" color="red" size={12} />
                             </button>
                           )}
                         </div>
@@ -1231,7 +1256,8 @@ export default function TeacherExamsManagementPage() {
                       }}
                       className="text-xs font-bold text-violet-700 hover:text-violet-900 bg-white hover:bg-violet-100 border border-violet-300 px-3 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
                     >
-                      <span>+ Tambah Pasangan Menjodohkan</span>
+                      <AppIcon name="circle-add" color="blue" size={14} />
+                      <span>Tambah Pasangan Menjodohkan</span>
                     </button>
 
                     {/* Bobot Skor */}
@@ -1263,7 +1289,7 @@ export default function TeacherExamsManagementPage() {
                 {newQuestionType === 'ESSAY' && (
                   <div className="p-4 rounded-xl bg-primary-50/60 border border-primary-200 space-y-3.5">
                     <div className="flex items-center gap-2 text-primary-900 font-bold text-xs">
-                      <span>💡</span>
+                      <AppIcon name="caution" color="blue" size={14} />
                       <span>Konfigurasi Jawaban Uraian / Esai</span>
                     </div>
 
@@ -1329,10 +1355,20 @@ export default function TeacherExamsManagementPage() {
                     type="submit"
                     variant={editingQuestionId ? 'secondary' : 'primary'}
                     size="md"
-                    className="font-bold min-h-[42px] cursor-pointer"
+                    className="font-bold min-h-[42px] cursor-pointer flex items-center gap-1.5"
                     loading={isSavingQuestion}
                   >
-                    {editingQuestionId ? '💾 Simpan Perubahan Soal' : `+ Simpan Butir Soal #${examQuestions.length + 1}`}
+                    {editingQuestionId ? (
+                      <>
+                        <AppIcon name="tick" color="white" size={14} />
+                        <span>Simpan Perubahan Soal</span>
+                      </>
+                    ) : (
+                      <>
+                        <AppIcon name="circle-add" color="white" size={14} />
+                        <span>Simpan Butir Soal #{examQuestions.length + 1}</span>
+                      </>
+                    )}
                   </Button>
                 </div>
               </form>
@@ -1357,7 +1393,9 @@ export default function TeacherExamsManagementPage() {
               <div className="space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto pr-1">
                 {examQuestions.length === 0 ? (
                   <div className="p-6 rounded-xl bg-neutral-50 border border-dashed border-neutral-300 text-center space-y-2">
-                    <span className="text-2xl">📋</span>
+                    <div className="flex justify-center">
+                      <AppIcon name="document-book" color="grey" size={32} />
+                    </div>
                     <p className="text-xs font-bold text-neutral-600">Belum Ada Butir Soal</p>
                     <p className="text-[11px] text-neutral-400 leading-relaxed">
                       Silakan isi formulir di sebelah kiri untuk menyusun butir soal ujian ini.
@@ -1446,7 +1484,7 @@ export default function TeacherExamsManagementPage() {
                             className="text-primary-600 hover:text-primary-800 font-bold p-1 hover:bg-primary-50 rounded transition-colors cursor-pointer text-xs"
                             title="Edit Soal Ini"
                           >
-                            ✏️
+                            <AppIcon name="edit" color="blue" size={13} />
                           </button>
                           <button
                             type="button"
@@ -1454,7 +1492,7 @@ export default function TeacherExamsManagementPage() {
                             className="text-danger-600 hover:text-danger-700 font-bold p-1 hover:bg-danger-50 rounded transition-colors cursor-pointer text-xs"
                             title="Hapus Soal"
                           >
-                            ✕
+                            <AppIcon name="close-cancel" color="red" size={13} />
                           </button>
                         </div>
                       </div>
@@ -1519,10 +1557,11 @@ export default function TeacherExamsManagementPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="w-full font-bold cursor-pointer"
+                  className="w-full font-bold cursor-pointer flex items-center justify-center gap-1.5"
                   onClick={handleCloseQuestionEditor}
                 >
-                  ✓ Selesai & Simpan Semua
+                  <AppIcon name="tick" color="grey" size={14} />
+                  <span>Selesai & Simpan Semua</span>
                 </Button>
               </div>
             </Card>
@@ -1554,7 +1593,7 @@ export default function TeacherExamsManagementPage() {
               className="p-2.5 rounded-xl border border-neutral-200 bg-neutral-50 hover:bg-neutral-100 text-neutral-700 font-bold text-xs flex items-center gap-1.5 transition-all hover:-translate-x-0.5 cursor-pointer shrink-0"
               title="Kembali ke Daftar Ujian"
             >
-              <span>←</span>
+              <AppIcon name="arrow-left" color="grey" size={14} />
               <span>Daftar Ujian</span>
             </button>
             <div>
@@ -1603,11 +1642,11 @@ export default function TeacherExamsManagementPage() {
                       : 'border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-600'
                   }`}
                 >
-                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                     examCategory === 'SEMESTER_UAS' ? 'bg-primary-600 text-white shadow-xs' : 'bg-neutral-100 text-neutral-500'
                   }`}>
-                    ASAS
-                  </span>
+                    <AppIcon name="medal" color={examCategory === 'SEMESTER_UAS' ? 'white' : 'blue'} size={18} />
+                  </div>
                   <div className="space-y-0.5 min-w-0">
                     <p className="font-bold text-xs sm:text-sm text-neutral-900">Ujian UAS / ASAS Semester (Koordinator)</p>
                     <p className="text-[11px] text-neutral-500 leading-snug">
@@ -1625,11 +1664,11 @@ export default function TeacherExamsManagementPage() {
                       : 'border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-600'
                   }`}
                 >
-                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0 ${
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                     examCategory === 'REGULAR' ? 'bg-primary-600 text-white shadow-xs' : 'bg-neutral-100 text-neutral-500'
                   }`}>
-                    UH
-                  </span>
+                    <AppIcon name="course" color={examCategory === 'REGULAR' ? 'white' : 'blue'} size={18} />
+                  </div>
                   <div className="space-y-0.5 min-w-0">
                     <p className="font-bold text-xs sm:text-sm text-neutral-900">Ujian Reguler / Harian</p>
                     <p className="text-[11px] text-neutral-500 leading-snug">
@@ -1660,8 +1699,9 @@ export default function TeacherExamsManagementPage() {
                   </span>
                 </div>
                 {subjects.length === 0 ? (
-                  <div className="p-2.5 rounded-[8px] bg-amber-50 border border-amber-200 text-[11px] text-amber-800 leading-snug">
-                    ⚠️ Akun Anda belum memiliki mata pelajaran pengampu yang diatur oleh Administrator di SSO / e-Rapor. Hubungi Administrator untuk mengatur penugasan mapel Anda.
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 leading-snug flex items-start gap-2">
+                    <AppIcon name="caution" color="red" size={16} className="mt-0.5 shrink-0" />
+                    <span>Akun Anda belum memiliki mata pelajaran pengampu yang diatur oleh Administrator di SSO / e-Rapor. Hubungi Administrator untuk mengatur penugasan mapel Anda.</span>
                   </div>
                 ) : (
                   <select
@@ -1731,7 +1771,7 @@ export default function TeacherExamsManagementPage() {
             <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200 space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-neutral-800 flex items-center gap-1.5">
-                  <span>📅</span>
+                  <AppIcon name="schedule" color="blue" size={16} />
                   <span>Waktu Pelaksanaan Ujian:</span>
                 </label>
                 <span className="text-[11px] text-neutral-500 font-medium">Ujian dibuka otomatis pada jadwal ini</span>
@@ -1817,17 +1857,18 @@ export default function TeacherExamsManagementPage() {
             <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs space-y-2">
               <div className="flex items-center justify-between">
                 <p className="font-bold flex items-center gap-1.5 text-emerald-900">
-                  <span>🔐</span>
+                  <AppIcon name="lock" color="green" size={16} />
                   <span>PIN Buka Kunci Pengawas (Acak Dinamis Sistem):</span>
                 </p>
                 {examCategory === 'SEMESTER_UAS' && (
                   <button
                     type="button"
                     onClick={() => setSupervisorPin(generateRandomPin(6))}
-                    className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 underline cursor-pointer"
+                    className="text-xs font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 underline cursor-pointer"
                     title="Buat PIN acak baru"
                   >
-                    🎲 Acak Ulang PIN
+                    <AppIcon name="sync" color="green" size={13} />
+                    <span>Acak Ulang PIN</span>
                   </button>
                 )}
               </div>
@@ -1878,7 +1919,14 @@ export default function TeacherExamsManagementPage() {
                 loading={isSubmitting}
                 disabled={isSubmitting || subjects.length === 0}
               >
-                {editingExamId ? 'Simpan Perubahan Jadwal' : 'Simpan & Lanjut Buat Butir Soal →'}
+                {editingExamId ? (
+                  <span>Simpan Perubahan Jadwal</span>
+                ) : (
+                  <span className="flex items-center gap-1.5">
+                    <span>Simpan & Lanjut Buat Butir Soal</span>
+                    <AppIcon name="arrow-right" color="white" size={14} />
+                  </span>
+                )}
               </Button>
             </div>
           </form>
@@ -1886,6 +1934,16 @@ export default function TeacherExamsManagementPage() {
       </div>
     );
   }
+
+  const uasCount = exams.filter((e) => e.examCategory === 'SEMESTER_UAS' || e.isCoordinatorExam || e.targetGradeLevel).length;
+  const regularCount = exams.filter((e) => e.examCategory !== 'SEMESTER_UAS' && !e.isCoordinatorExam && !e.targetGradeLevel).length;
+
+  const filteredExams = exams.filter((ex) => {
+    const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+    if (examFilterTab === 'SEMESTER_UAS') return isUas;
+    if (examFilterTab === 'REGULAR') return !isUas;
+    return true;
+  });
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
@@ -1904,21 +1962,22 @@ export default function TeacherExamsManagementPage() {
           variant="primary"
           size="md"
           onClick={handleOpenCreateModal}
-          className="shadow-sm cursor-pointer"
+          className="shadow-xs cursor-pointer flex items-center gap-1.5 font-bold"
         >
-          + Buat Jadwal Ujian
+          <AppIcon name="circle-add" color="white" size={16} />
+          <span>Buat Jadwal Ujian</span>
         </Button>
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex items-center gap-2 border-b border-neutral-200 pb-2">
+      <div className="flex items-center gap-2 border-b border-neutral-200 pb-3">
         <button
           type="button"
           onClick={() => setExamFilterTab('ALL')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             examFilterTab === 'ALL'
               ? 'bg-neutral-900 text-white shadow-xs'
-              : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200'
+              : 'bg-white text-neutral-600 hover:bg-neutral-50 border border-neutral-200'
           }`}
         >
           Semua Ujian ({exams.length})
@@ -1926,201 +1985,228 @@ export default function TeacherExamsManagementPage() {
         <button
           type="button"
           onClick={() => setExamFilterTab('SEMESTER_UAS')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
             examFilterTab === 'SEMESTER_UAS'
               ? 'bg-primary-600 text-white shadow-xs'
               : 'bg-white text-primary-700 hover:bg-primary-50 border border-primary-200'
           }`}
         >
-          <span>🏆</span>
-          <span>UAS / ASAS Semester ({exams.filter((e) => e.examCategory === 'SEMESTER_UAS' || e.isCoordinatorExam || e.targetGradeLevel).length})</span>
+          <AppIcon name="medal" color={examFilterTab === 'SEMESTER_UAS' ? 'white' : 'blue'} size={14} />
+          <span>UAS / ASAS Semester ({uasCount})</span>
         </button>
         <button
           type="button"
           onClick={() => setExamFilterTab('REGULAR')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
             examFilterTab === 'REGULAR'
               ? 'bg-neutral-900 text-white shadow-xs'
-              : 'bg-white text-neutral-600 hover:bg-neutral-100 border border-neutral-200'
+              : 'bg-white text-neutral-600 hover:bg-neutral-50 border border-neutral-200'
           }`}
         >
-          Ujian Reguler / Harian ({exams.filter((e) => e.examCategory !== 'SEMESTER_UAS' && !e.isCoordinatorExam && !e.targetGradeLevel).length})
+          <AppIcon name="course" color={examFilterTab === 'REGULAR' ? 'white' : 'grey'} size={14} />
+          <span>Ujian Reguler / Harian ({regularCount})</span>
         </button>
       </div>
 
-      {/* Exam Table */}
-      <Card noPadding className="overflow-hidden border border-neutral-200 bg-white">
+      {/* Spacious 5-Column Exam Table */}
+      <Card noPadding className="overflow-hidden border border-neutral-200 bg-white shadow-xs rounded-2xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-neutral-50 text-neutral-500 font-bold border-b border-neutral-200 uppercase text-[10px] tracking-wider">
-                <th className="py-3 px-4">Nama Sesi Ujian</th>
-                <th className="py-3 px-4">Mapel & Target Kelas</th>
-                <th className="py-3 px-4">Jadwal Pelaksanaan</th>
-                <th className="py-3 px-4 font-mono">Token & PIN Pengawas</th>
-                <th className="py-3 px-4">Durasi</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-right">Aksi</th>
+              <tr className="bg-neutral-50/90 text-neutral-500 font-bold border-b border-neutral-200 uppercase text-[10px] tracking-wider">
+                <th className="py-3.5 px-5 min-w-[280px]">Sesi Ujian & Sasaran</th>
+                <th className="py-3.5 px-5 min-w-[200px]">Jadwal & Waktu</th>
+                <th className="py-3.5 px-5 min-w-[170px]">Akses CBT</th>
+                <th className="py-3.5 px-5 min-w-[150px]">Status</th>
+                <th className="py-3.5 px-5 text-right min-w-[240px]">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-neutral-400">
-                    Memuat daftar ujian...
+                  <td colSpan={5} className="py-12 text-center text-neutral-400">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <AppIcon name="sync" color="grey" size={24} className="animate-spin" />
+                      <p className="text-xs font-medium">Memuat daftar ujian...</p>
+                    </div>
                   </td>
                 </tr>
-              ) : exams.length === 0 ? (
+              ) : filteredExams.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-neutral-400">
-                    Belum ada jadwal ujian CBT yang dibuat. Klik tombol "+ Buat Jadwal Ujian" di atas.
+                  <td colSpan={5} className="py-12 text-center text-neutral-400">
+                    <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
+                      <AppIcon name="document-book" color="grey" size={32} />
+                      <p className="text-xs font-bold text-neutral-700">Belum Ada Jadwal Ujian CBT</p>
+                      <p className="text-[11px] text-neutral-400">
+                        Klik tombol &ldquo;Buat Jadwal Ujian&rdquo; di atas untuk membuat sesi ujian baru.
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (
-                exams
-                  .filter((ex) => {
-                    const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
-                    if (examFilterTab === 'SEMESTER_UAS') return isUas;
-                    if (examFilterTab === 'REGULAR') return !isUas;
-                    return true;
-                  })
-                  .map((ex) => {
+                filteredExams.map((ex) => {
                   const currentStatus = getExamStatus(ex);
                   const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+                  const examDateStr = ex.scheduledDate || (ex.startDateTime ? ex.startDateTime.split('T')[0] : '');
 
                   return (
-                    <tr key={ex.id} className="hover:bg-neutral-50/80 transition-colors">
-                      <td className="py-3 px-4 font-semibold text-neutral-900">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {isUas && (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-primary-100 text-primary-800 border border-primary-200">
-                                🏆 ASAS Tingkat {ex.targetGradeLevel || '7'}
+                    <tr key={ex.id} className="hover:bg-neutral-50/60 transition-colors">
+                      {/* 1. Sesi Ujian & Sasaran */}
+                      <td className="py-4 px-5">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {isUas ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-primary-50 text-primary-700 border border-primary-200">
+                                <AppIcon name="medal" color="blue" size={12} />
+                                ASAS TK. {ex.targetGradeLevel || '7'}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-neutral-100 text-neutral-600 border border-neutral-200">
+                                <AppIcon name="course" color="grey" size={12} />
+                                Reguler
                               </span>
                             )}
-                            <p className="truncate max-w-[220px] font-bold text-neutral-900">{ex.title}</p>
+                            <h3 className="font-bold text-sm text-neutral-900 leading-snug">
+                              {ex.title}
+                            </h3>
                           </div>
-                          <p className="text-[11px] text-neutral-400 truncate max-w-[240px]">{ex.description || 'Ujian CBT Sekolah'}</p>
+
+                          <div className="flex items-center gap-2 text-xs text-neutral-500 font-medium">
+                            <span className="text-primary-700 font-semibold">{ex.subject}</span>
+                            <span className="text-neutral-300">•</span>
+                            <span className="text-neutral-600">
+                              {isUas ? `Serentak Seluruh Rombel Tk. ${ex.targetGradeLevel}` : `Kelas ${ex.className}`}
+                            </span>
+                          </div>
+
+                          {ex.description && (
+                            <p className="text-[11px] text-neutral-400 line-clamp-1">
+                              {ex.description}
+                            </p>
+                          )}
                         </div>
                       </td>
-                      <td className="py-3 px-4">
-                        <div className="space-y-0.5">
-                          <p className="font-bold text-primary-700">{ex.subject}</p>
-                          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                            isUas
-                              ? 'bg-amber-50 text-amber-900 border border-amber-200'
-                              : 'bg-neutral-100 text-neutral-600'
-                          }`}>
-                            {isUas ? `Serentak: ${ex.className}` : `Kelas ${ex.className}`}
-                          </span>
+
+                      {/* 2. Jadwal & Waktu */}
+                      <td className="py-4 px-5">
+                        <div className="space-y-1 text-xs">
+                          <div className="flex items-center gap-1.5 font-semibold text-neutral-800">
+                            <AppIcon name="schedule" color="grey" size={14} />
+                            <span>{formatDateDisplay(examDateStr)}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-neutral-500 font-mono text-[11px]">
+                            <AppIcon name="timer" color="grey" size={14} />
+                            <span>{ex.startTime || '08:00'} - {ex.endTime || '09:30'} WIB</span>
+                            <span className="text-neutral-300">•</span>
+                            <span>{ex.durationMinutes || 90} Mnt</span>
+                          </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-neutral-700">
-                        <div className="space-y-0.5">
-                          <p className="font-semibold text-neutral-800">
-                            📅 {ex.scheduledDate || (ex.startDateTime ? ex.startDateTime.split('T')[0] : 'Sesuai Jadwal')}
-                          </p>
-                          <p className="text-[11px] text-neutral-500 font-mono">
-                            ⏰ {ex.startTime || '08:00'} - {ex.endTime || '09:30'} WIB
-                          </p>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 font-mono font-bold text-neutral-800">
+
+                      {/* 3. Akses CBT */}
+                      <td className="py-4 px-5">
                         <div className="space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] text-neutral-400 font-sans font-medium">Token:</span>
-                            <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">Token</span>
+                            <span className="px-2 py-0.5 rounded-md font-mono font-bold text-xs bg-amber-50 text-amber-900 border border-amber-200">
                               {ex.token}
                             </span>
                           </div>
                           {ex.supervisorPin && (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] text-emerald-700 font-sans font-bold">PIN:</span>
-                              <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-300 text-[11px] tracking-wider">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">PIN</span>
+                              <span className="px-2 py-0.5 rounded-md font-mono font-bold text-[11px] bg-emerald-50 text-emerald-800 border border-emerald-200 tracking-wider">
                                 {ex.supervisorPin}
                               </span>
                             </div>
                           )}
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-neutral-600 font-medium">
-                        {ex.durationMinutes} Menit
-                      </td>
-                      <td className="py-3 px-4">
+
+                      {/* 4. Status */}
+                      <td className="py-4 px-5">
                         {currentStatus === 'ACTIVE' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
                             Sedang Berlangsung
                           </span>
                         ) : currentStatus === 'UPCOMING' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                            ⏳ Akan Datang
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                            <AppIcon name="timer" color="yellow" size={13} />
+                            Akan Datang
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-neutral-100 text-neutral-600 border border-neutral-300">
-                            ✓ Selesai
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-neutral-100 text-neutral-600 border border-neutral-200">
+                            <AppIcon name="tick" color="grey" size={13} />
+                            Selesai
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                          {currentStatus !== 'ACTIVE' && (
-                            <Button
-                              variant="primary"
-                              size="xs"
+
+                      {/* 5. Aksi (Single-Row Horizontal Action Group) */}
+                      <td className="py-4 px-5 text-right">
+                        <div className="inline-flex items-center justify-end gap-1.5">
+                          {currentStatus !== 'ACTIVE' ? (
+                            <button
+                              type="button"
                               onClick={() => handleStartExamNow(ex)}
-                              className="cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                              className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
                               title="Aktifkan & buka sesi ujian sekarang untuk siswa"
                             >
-                              ▶ Aktifkan
-                            </Button>
-                          )}
-                          {currentStatus === 'ACTIVE' && (
-                            <Button
-                              variant="outline"
-                              size="xs"
+                              <AppIcon name="play" color="white" size={12} />
+                              <span>Aktifkan</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
                               onClick={() => handleEndExamNow(ex)}
-                              className="cursor-pointer border-danger-300 text-danger-700 hover:bg-danger-50 font-bold"
+                              className="px-2.5 py-1.5 rounded-lg border border-danger-300 text-danger-700 hover:bg-danger-50 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
                               title="Tutup & selesaikan sesi ujian sekarang"
                             >
-                              ⏹ Tutup
-                            </Button>
+                              <AppIcon name="close-cancel" color="red" size={12} />
+                              <span>Tutup</span>
+                            </button>
                           )}
-                          <Button
-                            variant="primary"
-                            size="xs"
+
+                          <button
+                            type="button"
                             onClick={() => handleOpenQuestionEditor(ex)}
-                            className="cursor-pointer font-bold"
+                            className="px-2.5 py-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                            title="Kelola Butir Soal"
                           >
-                            Kelola Soal
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="xs"
+                            <AppIcon name="edit" color="white" size={13} />
+                            <span>Kelola Soal</span>
+                          </button>
+
+                          <button
+                            type="button"
                             onClick={() => router.push('/guru/monitoring')}
-                            className="cursor-pointer font-bold text-primary-700 bg-primary-50/60 hover:bg-primary-100 border-primary-200"
+                            className="p-2 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 transition-colors cursor-pointer flex items-center justify-center"
                             title="Lihat hasil pengerjaan & lembar jawaban siswa"
                           >
-                            👁️ Hasil & Jawaban
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="xs"
+                            <AppIcon name="survey" color="blue" size={15} />
+                          </button>
+
+                          <button
+                            type="button"
                             onClick={() => handleOpenEditModal(ex)}
-                            className="cursor-pointer"
+                            className="p-2 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 transition-colors cursor-pointer flex items-center justify-center"
                             title="Edit Jadwal & Konfigurasi"
                           >
-                            ✏️
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="xs"
+                            <AppIcon name="edit" color="grey" size={15} />
+                          </button>
+
+                          <button
+                            type="button"
                             onClick={() => handleDeleteExam(ex.id, ex.title)}
-                            className="cursor-pointer border-danger-200 text-danger-600 hover:bg-danger-50"
+                            className="p-2 rounded-lg border border-danger-200 bg-white hover:bg-danger-50 text-danger-600 transition-colors cursor-pointer flex items-center justify-center"
                             title="Hapus Ujian"
                           >
-                            🗑️
-                          </Button>
+                            <AppIcon name="delete" color="red" size={15} />
+                          </button>
                         </div>
                       </td>
                     </tr>

@@ -9,11 +9,17 @@ const ICON_REGISTRY = {
   attendance: { folder: 'presence', prefix: '' },
   scan: { folder: 'presence', prefix: '' },
   camera: { folder: 'presence', prefix: '' },
+  image: { folder: 'presence', prefix: '' },
   schedule: { folder: 'schedule', prefix: '' },
+  calendar: { folder: 'schedule', prefix: '' },
   sessions: { folder: 'schedule', prefix: '' },
   rekap: { folder: 'survey', prefix: '' },
   survey: { folder: 'survey', prefix: '' },
   edit: { folder: 'edit', prefix: '' },
+  pencil: { folder: 'edit', prefix: '' },
+  delete: { folder: 'delete', prefix: '' },
+  trash: { folder: 'delete', prefix: '' },
+  remove: { folder: 'delete', prefix: '' },
   profile: { folder: 'profile', prefix: 'secondary-' },
   user: { folder: 'profile', prefix: 'secondary-' },
   course: { folder: 'course', prefix: 'outline-' },
@@ -44,11 +50,49 @@ const ICON_REGISTRY = {
   search: { folder: 'search', prefix: '' },
   setting: { folder: 'setting', prefix: '' },
   timer: { folder: 'timer', prefix: '' },
+  clock: { folder: 'timer', prefix: '' },
   notification: { folder: 'notification', prefix: '' },
+  lock: { folder: 'lock', prefix: '' },
+  unlock: { folder: 'unlock', prefix: '' },
+  link: { folder: 'link', prefix: '' },
+  copy: { folder: 'copy', prefix: '' },
+  file: { folder: 'file', prefix: '' },
+  document: { folder: 'file', prefix: '' },
+  'document-book': { folder: 'document-book', prefix: '' },
+  medal: { folder: 'medal', prefix: '' },
+  star: { folder: 'star', prefix: 'outline-' },
+  trophy: { folder: 'medal', prefix: '' },
+  award: { folder: 'medal', prefix: '' },
+  sync: { folder: 'sync', prefix: '' },
+  refresh: { folder: 'sync', prefix: '' },
+  dice: { folder: 'sync', prefix: '' },
+  'arrow-left': { folder: 'arrow-left', prefix: '' },
+  'arrow-right': { folder: 'arrow-right', prefix: '' },
+  'arrow-back': { folder: 'arrow-back', prefix: '' },
+  tick: { folder: 'tick', prefix: '' },
+  check: { folder: 'tick', prefix: '' },
+  'circle-tick': { folder: 'circle-tick', prefix: '' },
+  'circle-add': { folder: 'circle-add', prefix: '' },
+  add: { folder: 'circle-add', prefix: '' },
+  plus: { folder: 'circle-add', prefix: '' },
+  'close-cancel': { folder: 'close-cancel', prefix: '' },
+  close: { folder: 'close-cancel', prefix: '' },
+  cancel: { folder: 'close-cancel', prefix: '' },
+  caution: { folder: 'caution', prefix: '' },
+  warning: { folder: 'caution', prefix: '' },
+  checkbox: { folder: 'checkbox', prefix: 'outline-' },
+  'radio-button-active': { folder: 'radio-button-active', prefix: '' },
+  'radio-button-inactive': { folder: 'radio-button-active', prefix: '' },
+  radio: { folder: 'radio-button-active', prefix: '' },
+  more: { folder: 'more', prefix: '' },
+  play: { folder: 'open', prefix: '' },
+  open: { folder: 'open', prefix: '' },
+  graduation: { folder: 'graduation', prefix: '' },
+  building: { folder: 'building', prefix: '' },
 };
 
 const VALID_SIZES = [12, 16, 20, 24, 32];
-const VALID_COLORS = ['black', 'blue', 'green', 'grey', 'red', 'white'];
+const VALID_COLORS = ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'];
 
 function getClosestSize(size) {
   if (!size || size <= 14) return 12;
@@ -62,6 +106,9 @@ function normalizeColor(color) {
   if (!color) return 'blue';
   const c = String(color).toLowerCase();
   if (c === 'gray') return 'grey';
+  if (c === 'emerald') return 'green';
+  if (c === 'indigo' || c === 'purple' || c === 'violet') return 'blue';
+  if (c === 'amber' || c === 'gold') return 'yellow';
   if (VALID_COLORS.includes(c)) return c;
   return 'blue';
 }
