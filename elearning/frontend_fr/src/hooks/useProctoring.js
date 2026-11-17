@@ -341,7 +341,7 @@ export function useProctoring({
       if (document.hidden) {
         triggerViolation(
           'TAB_SWITCH',
-          'Terdeteksi beralih aplikasi, membuka tab baru, atau meminimalkan layar ujian.'
+          'Terdeteksi membuka tab baru di browser atau berpindah ke jendela lain.'
         );
       }
     };
@@ -360,7 +360,7 @@ export function useProctoring({
       // Pada HP Android/iOS, menekan tombol Home atau menarik notifikasi langsung memicu event window blur
       triggerViolation(
         'WINDOW_BLUR',
-        'Fokus layar ujian hilang! Terdeteksi menekan tombol Home, menarik bilah notifikasi, atau berpindah aplikasi.'
+        'Layar ujian tertutup sementara karena muncul notifikasi lain, menarik menu atas HP, menekan tombol Home, atau berpindah aplikasi.'
       );
     };
 
@@ -387,7 +387,7 @@ export function useProctoring({
       } else if (hasEnteredFullscreenRef.current && isEnabledRef.current && !isLockedRef.current) {
         triggerViolation(
           'FULLSCREEN_EXIT',
-          'Terdeteksi keluar dari mode Layar Penuh (Fullscreen).'
+          'Keluar dari mode layar penuh (fullscreen) aplikasi ujian.'
         );
       }
     };

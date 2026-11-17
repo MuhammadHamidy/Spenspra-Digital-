@@ -1364,28 +1364,47 @@ export const elearningApi = {
 
     const vType = violation.type || violation.violation_type || 'WINDOW_BLUR';
     let vDesc = violation.description || violation.message || '';
-    if (!vDesc || (typeof vDesc === 'string' && vDesc.trim().startsWith('{'))) {
-      if (vType === 'WINDOW_BLUR') vDesc = 'Fokus layar ujian hilang: Menekan tombol Home, menarik status bar notifikasi, atau berpindah aplikasi.';
-      else if (vType === 'TAB_SWITCH') vDesc = 'Terdeteksi beralih aplikasi, membuka tab baru, atau meminimalkan browser ujian.';
-      else if (vType === 'FULLSCREEN_EXIT') vDesc = 'Terdeteksi keluar dari mode Layar Penuh (Fullscreen).';
-      else if (vType === 'INSPECT_ATTEMPT') vDesc = 'Mencoba membuka inspect element / shortcut pengembang.';
-      else if (vType === 'SUPERVISOR_UNLOCK') vDesc = 'Layar ujian berhasil dibuka kembali oleh Pengawas.';
-      else vDesc = 'Terdeteksi beraktivitas di luar lingkungan ujian CBT.';
+    if (!vDesc || (typeof vDesc === 'string' && (vDesc.trim().startsWith('{') || vDesc.includes('visibilityState')))) {
+      if (vType === 'WINDOW_BLUR') vDesc = 'Layar ujian tertutup sementara karena muncul notifikasi lain, menarik bilah atas HP, atau berpindah aplikasi.';
+      else if (vType === 'TAB_SWITCH') vDesc = 'Membuka tab baru di browser atau beralih ke jendela browser lain.';
+      else if (vType === 'FULLSCREEN_EXIT') vDesc = 'Keluar dari mode layar penuh (fullscreen) ujian.';
+      else if (vType === 'PAGE_HIDE') vDesc = 'Aplikasi ujian disembunyikan atau diminimalkan ke latar belakang.';
+      else if (vType === 'INSPECT_ATTEMPT') vDesc = 'Mencoba membuka inspect element atau menu pengembang peramban.';
+      else if (vType === 'SUPERVISOR_UNLOCK') vDesc = 'Kunci ujian berhasil dibuka kembali oleh pengawas dengan token / PIN resmi.';
+      else if (vType === 'MAX_VIOLATIONS_REACHED') vDesc = 'Layar ujian terkunci otomatis karena terdeteksi keluar dari layar ujian.';
+      else vDesc = 'Terdeteksi keluar dari layar ujian CBT.';
     }
     const timestamp = violation.timestamp || new Date().toISOString();
 
-    session.violationsCount = (session.violationsCount || 0) + 1;
-    session.violations = session.violations || [];
-    session.violations.push({
-      id: `viol-${Date.now()}`,
-      type: vType,
-      violation_type: vType,
-      description: vDesc,
-      details: violation.details || vDesc,
-      timestamp,
-    });
+    const isActualCheatingViolation = ['WINDOW_BLUR', 'TAB_SWITCH', 'FULLSCREEN_EXIT', 'INSPECT_ATTEMPT', 'PAGE_HIDE'].includes(vType);
 
-    if (session.violationsCount >= (session.maxViolations || 3)) {
+    // HANYA tambah hitungan pelanggaran jika benar-benar pelanggaran kecurangan siswa (Bukan Buka Kunci Pengawas / Auto-Lock sistem)
+    if (isActualCheatingViolation) {
+      session.violationsCount = (session.violationsCount || 0) + 1;
+    }
+
+    // Jika buka kunci pengawas, pastikan status sesi kembali aktif (IN_PROGRESS)
+    if (vType === 'SUPERVISOR_UNLOCK') {
+      session.status = 'IN_PROGRESS';
+    }
+
+    session.violations = session.violations || [];
+
+    // Hindari duplikasi jika event MAX_VIOLATIONS_REACHED dipicu berbarengan dengan event pelanggaran terakhir
+    const isRedundantMaxViolation = vType === 'MAX_VIOLATIONS_REACHED' && session.violations.some((v) => v.type === 'MAX_VIOLATIONS_REACHED');
+    if (!isRedundantMaxViolation) {
+      session.violations.push({
+        id: `viol-${Date.now()}`,
+        type: vType,
+        violation_type: vType,
+        category: isActualCheatingViolation ? 'VIOLATION' : (vType === 'SUPERVISOR_UNLOCK' ? 'SUPERVISOR_ACTION' : 'SYSTEM_LOG'),
+        description: vDesc,
+        details: violation.details || vDesc,
+        timestamp,
+      });
+    }
+
+    if (session.violationsCount >= (session.maxViolations || 3) && vType !== 'SUPERVISOR_UNLOCK') {
       session.status = 'LOCKED';
     }
 

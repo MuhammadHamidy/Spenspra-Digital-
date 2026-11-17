@@ -10,31 +10,54 @@ import AppIcon from '@/components/AppIcon';
 import { elearningApi } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
+// Pemeriksaan apakah sebuah event benar-benar merupakan pelanggaran kecurangan siswa
+const isActualCheatingViolation = (type) => {
+  const t = String(type || '').toUpperCase();
+  return ['WINDOW_BLUR', 'TAB_SWITCH', 'FULLSCREEN_EXIT', 'INSPECT_ATTEMPT', 'PAGE_HIDE'].includes(t);
+};
+
 const formatViolationTypeLabel = (type) => {
   switch (type) {
     case 'WINDOW_BLUR':
-      return 'Fokus Hilang';
+      return 'Muncul Notifikasi / Buka Aplikasi Lain';
     case 'TAB_SWITCH':
-      return 'Pindah Tab / Minimize';
+      return 'Membuka Tab Lain';
     case 'FULLSCREEN_EXIT':
-      return 'Keluar Layar Penuh';
+      return 'Keluar Layar Penuh Ujian';
+    case 'PAGE_HIDE':
+      return 'Menutup / Meminimalkan Ujian';
     case 'INSPECT_ATTEMPT':
-      return 'Membuka DevTools';
+      return 'Membuka Menu Pengembang';
     case 'SUPERVISOR_UNLOCK':
       return 'Buka Kunci Pengawas';
+    case 'MAX_VIOLATIONS_REACHED':
+      return 'Layar Terkunci Otomatis';
     default:
-      return type || 'Pelanggaran';
+      return type || 'Pelanggaran Layar';
   }
 };
 
 const formatViolationDesc = (desc, type) => {
-  if (!desc || (typeof desc === 'string' && desc.trim().startsWith('{'))) {
-    if (type === 'WINDOW_BLUR') return 'Menekan tombol Home, menarik status bar notifikasi, atau berpindah aplikasi.';
-    if (type === 'TAB_SWITCH') return 'Membuka tab baru atau meminimalkan browser ujian.';
-    if (type === 'FULLSCREEN_EXIT') return 'Keluar dari mode layar penuh (fullscreen).';
-    if (type === 'INSPECT_ATTEMPT') return 'Mencoba membuka inspect element / shortcut pengembang.';
-    if (type === 'SUPERVISOR_UNLOCK') return 'Layar ujian berhasil dibuka kembali oleh Pengawas.';
-    return 'Terdeteksi keluar dari lingkungan ujian CBT.';
+  if (!desc || (typeof desc === 'string' && (desc.trim().startsWith('{') || desc.includes('visibilityState')))) {
+    if (type === 'WINDOW_BLUR') return 'Layar ujian tertutup sementara karena muncul notifikasi lain, menarik menu atas HP, menekan tombol Home, atau berpindah aplikasi.';
+    if (type === 'TAB_SWITCH') return 'Membuka tab baru di browser atau beralih ke jendela browser lain saat ujian.';
+    if (type === 'FULLSCREEN_EXIT') return 'Keluar dari mode layar penuh (fullscreen) saat mengerjakan ujian.';
+    if (type === 'PAGE_HIDE') return 'Aplikasi ujian disembunyikan atau diminimalkan ke latar belakang.';
+    if (type === 'INSPECT_ATTEMPT') return 'Mencoba membuka inspect element atau menu pengembang peramban.';
+    if (type === 'SUPERVISOR_UNLOCK') return 'Layar ujian yang terkunci berhasil dibuka kembali oleh pengawas menggunakan token / PIN resmi.';
+    if (type === 'MAX_VIOLATIONS_REACHED') return 'Sesi ujian otomatis terkunci karena terdeteksi keluar dari layar ujian.';
+    return 'Terdeteksi keluar dari tampilan lembar ujian CBT.';
+  }
+  if (typeof desc === 'string') {
+    if (desc.includes('Fokus') || desc.includes('WINDOW_BLUR')) {
+      return 'Layar ujian tertutup sementara karena muncul notifikasi lain, menarik menu atas HP, menekan tombol Home, atau berpindah aplikasi.';
+    }
+    if (desc.includes('beralih aplikasi') || desc.includes('TAB_SWITCH')) {
+      return 'Membuka tab baru di browser atau beralih ke jendela browser lain saat ujian.';
+    }
+    if (desc.includes('Layar Penuh') || desc.includes('FULLSCREEN_EXIT')) {
+      return 'Keluar dari mode layar penuh (fullscreen) saat mengerjakan ujian.';
+    }
   }
   return desc;
 };
@@ -451,6 +474,10 @@ export default function LiveProctoringMonitoringPage() {
         matchedSessionKeys.add(String(liveSession.sessionId || liveSession.id || ''));
         matchedStudentIds.add(String(liveSession.studentId || liveSession.student_id || ''));
 
+        const vList = liveSession.violations || [];
+        const actualViolCount = vList.filter((v) => isActualCheatingViolation(v.type)).length;
+        const finalViolCount = actualViolCount > 0 ? actualViolCount : (vList.length === 0 ? Number(liveSession.violationsCount ?? liveSession.violation_count ?? 0) : 0);
+
         return {
           ...liveSession,
           sessionId: liveSession.sessionId || liveSession.id,
@@ -459,8 +486,8 @@ export default function LiveProctoringMonitoringPage() {
           studentName: st.fullName || st.full_name || liveSession.studentName,
           className: stClass,
           status: liveSession.status || 'IN_PROGRESS',
-          violationsCount: Number(liveSession.violationsCount ?? liveSession.violation_count ?? 0),
-          violations: liveSession.violations || [],
+          violationsCount: finalViolCount,
+          violations: vList,
         };
       }
 
@@ -474,6 +501,10 @@ export default function LiveProctoringMonitoringPage() {
       }
 
       if (localSavedSession) {
+        const vList = localSavedSession.violations || [];
+        const actualViolCount = vList.filter((v) => isActualCheatingViolation(v.type)).length;
+        const finalViolCount = actualViolCount > 0 ? actualViolCount : (vList.length === 0 ? Number(localSavedSession.violationsCount || 0) : 0);
+
         return {
           sessionId: localSavedSession.id || `session-${stId}`,
           studentId: stId,
@@ -482,8 +513,8 @@ export default function LiveProctoringMonitoringPage() {
           className: stClass,
           status: localSavedSession.status || 'SUBMITTED',
           score: localSavedSession.score,
-          violationsCount: localSavedSession.violationsCount || 0,
-          violations: localSavedSession.violations || [],
+          violationsCount: finalViolCount,
+          violations: vList,
           answers: localSavedSession.answers || {},
         };
       }
@@ -508,6 +539,10 @@ export default function LiveProctoringMonitoringPage() {
       const sKey = String(s.sessionId || s.id || '');
       const sId = String(s.studentId || s.student_id || '');
       if (!matchedSessionKeys.has(sKey) && (!sId || !matchedStudentIds.has(sId))) {
+        const vList = s.violations || [];
+        const actualViolCount = vList.filter((v) => isActualCheatingViolation(v.type)).length;
+        const finalViolCount = actualViolCount > 0 ? actualViolCount : (vList.length === 0 ? Number(s.violationsCount ?? s.violation_count ?? 0) : 0);
+
         roster.unshift({
           ...s,
           sessionId: sKey || `ses-${Date.now()}`,
@@ -517,8 +552,8 @@ export default function LiveProctoringMonitoringPage() {
           className: s.className || s.class_code || selectedExam?.className || '-',
           status: s.status || 'IN_PROGRESS',
           score: s.score,
-          violationsCount: Number(s.violationsCount ?? s.violation_count ?? 0),
-          violations: s.violations || [],
+          violationsCount: finalViolCount,
+          violations: vList,
         });
       }
     });
@@ -623,7 +658,9 @@ export default function LiveProctoringMonitoringPage() {
             <p className="text-base font-bold text-emerald-700">
               {activeStudentAnswers.status === 'SUBMITTED' ? 'Sudah Selesai' : 'Sedang Ujian'}
             </p>
-            <p className="text-[10px] text-neutral-400">Pelanggaran: {activeStudentAnswers.violationsCount || 0}x</p>
+            <p className="text-[10px] text-neutral-400">
+              Pelanggaran: {((activeStudentAnswers.violations || []).filter((v) => isActualCheatingViolation(v.type)).length) || activeStudentAnswers.violationsCount || 0}x
+            </p>
           </div>
           <div className="p-4 bg-white rounded-xl border border-neutral-200 space-y-1">
             <p className="text-[11px] font-semibold text-neutral-500">Jawaban Objektif Benar</p>
@@ -1499,13 +1536,19 @@ export default function LiveProctoringMonitoringPage() {
                   const isSubmitted = s.status === 'SUBMITTED';
                   const isNotStarted = s.status === 'NOT_STARTED';
                   const violations = s.violations || [];
-                  const lastViolation = violations.length > 0 ? violations[violations.length - 1] : null;
+                  const actualViolations = violations.filter((v) => isActualCheatingViolation(v.type));
+                  const lastViolation = actualViolations.length > 0
+                    ? actualViolations[actualViolations.length - 1]
+                    : (violations.length > 0 ? violations[violations.length - 1] : null);
+                  const realViolCount = actualViolations.length > 0
+                    ? actualViolations.length
+                    : (violations.length === 0 ? Number(s.violationsCount || 0) : 0);
 
                   return (
                     <tr
                       key={s.sessionId || s.studentId}
                       className={`hover:bg-neutral-50/80 transition-colors ${
-                        isLocked ? 'bg-danger-50/40' : s.violationsCount > 0 ? 'bg-amber-50/20' : ''
+                        isLocked ? 'bg-danger-50/40' : realViolCount > 0 ? 'bg-amber-50/20' : ''
                       }`}
                     >
                       <td className="py-3 px-4 font-semibold text-neutral-900">
@@ -1565,14 +1608,14 @@ export default function LiveProctoringMonitoringPage() {
                       <td className="py-3 px-4 text-center">
                         <span
                           className={`inline-flex items-center justify-center min-w-7 h-6 px-2 rounded-[999px] text-xs font-bold ${
-                            s.violationsCount >= (selectedExam?.maxViolations || 3)
+                            realViolCount >= (selectedExam?.maxViolations || 3)
                               ? 'bg-danger-600 text-white animate-bounce'
-                              : s.violationsCount > 0
+                              : realViolCount > 0
                               ? 'bg-amber-100 text-amber-900 border border-amber-300'
                               : 'bg-neutral-100 text-neutral-500'
                           }`}
                         >
-                          {s.violationsCount || 0}x
+                          {realViolCount}x
                         </span>
                       </td>
 
@@ -1648,7 +1691,7 @@ export default function LiveProctoringMonitoringPage() {
       <Modal
         isOpen={Boolean(activeStudentAudit)}
         onClose={() => setActiveStudentAudit(null)}
-        title="Riwayat Audit Pelanggaran Anti-Cheat"
+        title="Riwayat Audit Aktivitas & Pelanggaran Layar"
         subtitle={
           activeStudentAudit
             ? `${activeStudentAudit.studentName} (Kelas ${activeStudentAudit.className || selectedExam?.className})`
@@ -1657,33 +1700,85 @@ export default function LiveProctoringMonitoringPage() {
         size="md"
       >
         <div className="space-y-4">
-          <div className="p-3 rounded-[8px] bg-danger-50 border border-danger-200 text-xs flex items-center justify-between">
-            <span className="font-medium text-danger-900">Total Pelanggaran Terdeteksi:</span>
-            <span className="font-bold text-danger-700 text-sm">
-              {activeStudentAudit?.violations?.length || 0} Kali Kejadian
-            </span>
-          </div>
+          {(() => {
+            const rawViolations = activeStudentAudit?.violations || [];
+            const actualViolations = rawViolations.filter((v) => isActualCheatingViolation(v.type));
+            const totalActual = actualViolations.length > 0 ? actualViolations.length : (rawViolations.length === 0 ? Number(activeStudentAudit?.violationsCount || 0) : 0);
+            let violIndexCounter = 0;
 
-          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-            {activeStudentAudit?.violations?.map((v, i) => (
-              <div
-                key={i}
-                className="p-3 rounded-[8px] border border-neutral-200 bg-neutral-50/70 space-y-1 text-xs"
-              >
-                <div className="flex items-center justify-between font-bold text-neutral-800">
-                  <span className="text-[10px] text-danger-700 uppercase bg-danger-100 px-1.5 py-0.5 rounded">
-                    Kejadian #{i + 1}: {formatViolationTypeLabel(v.type)}
-                  </span>
-                  <span className="text-[10px] text-neutral-400 font-mono">
-                    {new Date(v.timestamp).toLocaleTimeString('id-ID')} WIB
+            return (
+              <>
+                <div className={`p-3.5 rounded-xl border text-xs flex items-center justify-between ${
+                  totalActual > 0
+                    ? 'bg-danger-50 border-danger-200 text-danger-900'
+                    : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                }`}>
+                  <div className="space-y-0.5">
+                    <span className="font-bold text-xs">Total Pelanggaran Siswa:</span>
+                    <p className="text-[11px] text-neutral-500">
+                      (Membuka tab baru, muncul notifikasi/keluar aplikasi, keluar fullscreen)
+                    </p>
+                  </div>
+                  <span className={`font-black text-sm px-3 py-1 rounded-full shrink-0 ${
+                    totalActual > 0 ? 'bg-danger-200 text-danger-900' : 'bg-emerald-200 text-emerald-900'
+                  }`}>
+                    {totalActual} Kali Kejadian
                   </span>
                 </div>
-                <p className="text-[11px] text-neutral-700 leading-relaxed pt-0.5">
-                  {formatViolationDesc(v.description, v.type)}
-                </p>
-              </div>
-            ))}
-          </div>
+
+                <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                  {rawViolations.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-neutral-400">
+                      Belum ada catatan aktivitas atau pelanggaran untuk siswa ini.
+                    </div>
+                  ) : (
+                    rawViolations.map((v, i) => {
+                      const isCheating = isActualCheatingViolation(v.type);
+                      const isUnlock = v.type === 'SUPERVISOR_UNLOCK';
+
+                      let badgeClass = 'bg-neutral-100 text-neutral-700 border-neutral-200';
+                      let cardClass = 'bg-neutral-50/70 border-neutral-200';
+                      let tagLabel = 'Catatan Sistem';
+
+                      if (isCheating) {
+                        violIndexCounter++;
+                        badgeClass = 'bg-danger-100 text-danger-800 border-danger-300';
+                        cardClass = 'bg-danger-50/40 border-danger-200';
+                        tagLabel = `Pelanggaran #${violIndexCounter}`;
+                      } else if (isUnlock) {
+                        badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+                        cardClass = 'bg-emerald-50/50 border-emerald-200';
+                        tagLabel = 'Tindakan Pengawas';
+                      } else {
+                        badgeClass = 'bg-amber-100 text-amber-800 border-amber-300';
+                        cardClass = 'bg-amber-50/50 border-amber-200';
+                        tagLabel = 'Status Sistem';
+                      }
+
+                      return (
+                        <div
+                          key={i}
+                          className={`p-3.5 rounded-xl border space-y-1.5 text-xs ${cardClass}`}
+                        >
+                          <div className="flex items-center justify-between font-bold flex-wrap gap-1">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${badgeClass}`}>
+                              {tagLabel}: {formatViolationTypeLabel(v.type)}
+                            </span>
+                            <span className="text-[10px] text-neutral-400 font-mono">
+                              {new Date(v.timestamp).toLocaleTimeString('id-ID')} WIB
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-neutral-700 leading-relaxed pt-0.5">
+                            {formatViolationDesc(v.description, v.type)}
+                          </p>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            );
+          })()}
 
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-100">
             {activeStudentAudit?.status === 'LOCKED' && (
@@ -1694,7 +1789,7 @@ export default function LiveProctoringMonitoringPage() {
                   handleUnlockStudent(activeStudentAudit);
                   setActiveStudentAudit(null);
                 }}
-                className="font-bold cursor-pointer flex items-center gap-1.5"
+                className="font-bold cursor-pointer flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-neutral-900"
               >
                 <AppIcon name="unlock" color="grey" size={14} />
                 <span>Buka Kunci Layar Siswa</span>

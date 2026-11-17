@@ -98,14 +98,9 @@ export default function CBTExamRunnerPage({ params }) {
 
   // Anti-Cheat Engine callback: auto submit or lock
   const handleLockSession = useCallback(async () => {
-    if (session && user) {
-      await elearningApi.recordViolationLog(session.sessionId, examId, user.id, {
-        type: 'MAX_VIOLATIONS_REACHED',
-        description: 'Sesi ujian otomatis terkunci karena melampaui batas pelanggaran layar.',
-        timestamp: new Date().toISOString(),
-      });
-    }
-  }, [session, examId, user]);
+    // Sesi ujian terkunci otomatis dicatat langsung bersamaan dengan event pelanggaran terakhir (WINDOW_BLUR, TAB_SWITCH, dll.)
+    // Tidak perlu merekam log pelanggaran ganda agar riwayat tetap bersih dan akurat
+  }, []);
 
   // Violation recorder
   const handleViolationRecorded = useCallback((violation) => {
