@@ -1,6 +1,8 @@
 package http
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -328,34 +330,54 @@ func formatExamForFrontend(e domain.CBTExam) fiber.Map {
 		eTime = e.EndTime.Format("15:04")
 	}
 
+	showScore := true
+	if strings.Contains(e.Description, "[SCORE:0]") {
+		showScore = false
+	}
+	showAnswers := false
+	if strings.Contains(e.Description, "[ANSWERS:1]") {
+		showAnswers = true
+	}
+
+	cleanDesc := e.Description
+	for _, tag := range []string{"[SCORE:0]", "[SCORE:1]", "[ANSWERS:0]", "[ANSWERS:1]"} {
+		cleanDesc = strings.ReplaceAll(cleanDesc, tag, "")
+	}
+	cleanDesc = strings.TrimSpace(cleanDesc)
+
 	return fiber.Map{
-		"id":               e.ID,
-		"title":            e.Title,
-		"class_code":       e.ClassCode,
-		"className":        e.ClassCode,
-		"course_name":      e.CourseName,
-		"subject":          e.CourseName,
-		"course_id":        e.CourseID,
-		"subjectCode":      e.CourseID,
-		"teacher_name":     e.TeacherName,
-		"teacherName":      e.TeacherName,
-		"teacher_id":       e.TeacherID,
-		"token":            e.Token,
-		"duration_minutes": e.DurationMinutes,
-		"durationMinutes":  e.DurationMinutes,
-		"max_violations":   e.MaxViolations,
-		"maxViolations":    e.MaxViolations,
-		"scheduledDate":    sDate,
-		"startTime":        sTime,
-		"endTime":          eTime,
-		"startDateTime":    sDateTime,
-		"endDateTime":      eDateTime,
-		"start_time":       sDateTime,
-		"end_time":         eDateTime,
-		"description":      e.Description,
-		"status":           e.Status,
-		"created_at":       e.CreatedAt,
-		"updated_at":       e.UpdatedAt,
+		"id":                      e.ID,
+		"title":                   e.Title,
+		"class_code":              e.ClassCode,
+		"className":               e.ClassCode,
+		"course_name":             e.CourseName,
+		"subject":                 e.CourseName,
+		"course_id":               e.CourseID,
+		"subjectCode":             e.CourseID,
+		"teacher_name":            e.TeacherName,
+		"teacherName":             e.TeacherName,
+		"teacher_id":              e.TeacherID,
+		"token":                   e.Token,
+		"duration_minutes":        e.DurationMinutes,
+		"durationMinutes":         e.DurationMinutes,
+		"max_violations":          e.MaxViolations,
+		"maxViolations":           e.MaxViolations,
+		"scheduledDate":           sDate,
+		"startTime":               sTime,
+		"endTime":                 eTime,
+		"startDateTime":           sDateTime,
+		"endDateTime":             eDateTime,
+		"start_time":              sDateTime,
+		"end_time":                eDateTime,
+		"description":             cleanDesc,
+		"rawDescription":          e.Description,
+		"showScoreToStudent":      showScore,
+		"show_score_to_student":   showScore,
+		"showAnswersToStudent":    showAnswers,
+		"show_answers_to_student": showAnswers,
+		"status":                  e.Status,
+		"created_at":              e.CreatedAt,
+		"updated_at":              e.UpdatedAt,
 	}
 }
 
@@ -589,6 +611,12 @@ type CBTQuestionOptionInput struct {
 	Text string `json:"text"`
 }
 
+type CBTMatchingPairInput struct {
+	ID    interface{} `json:"id"`
+	Left  string      `json:"left"`
+	Right string      `json:"right"`
+}
+
 type CBTQuestionInput struct {
 	ID                  string                   `json:"id"`
 	QuestionNumber      int                      `json:"questionNumber"`
@@ -608,8 +636,22 @@ type CBTQuestionInput struct {
 	OptionE             string                   `json:"option_e"`
 	CorrectOption       string                   `json:"correctOption"`
 	CorrectAnswer       string                   `json:"correct_answer"`
+	CorrectOptions      []string                 `json:"correctOptions"`
+	TrueFalseAnswer     *bool                    `json:"trueFalseAnswer"`
+	MatchingPairs       []CBTMatchingPairInput   `json:"matchingPairs"`
+	EssayRubric         string                   `json:"essayRubric"`
 	Points              float64                  `json:"points"`
 	ScoreWeight         float64                  `json:"score_weight"`
+}
+
+type CBTQuestionMeta struct {
+	Type            string                   `json:"type,omitempty"`
+	StimulusText    string                   `json:"stimulusText,omitempty"`
+	CorrectOptions  []string                 `json:"correctOptions,omitempty"`
+	TrueFalseAnswer *bool                    `json:"trueFalseAnswer,omitempty"`
+	MatchingPairs   []CBTMatchingPairInput   `json:"matchingPairs,omitempty"`
+	EssayRubric     string                   `json:"essayRubric,omitempty"`
+	Points          float64                  `json:"points,omitempty"`
 }
 
 func (in *CBTQuestionInput) ToDomain(examID string, index int) domain.CBTQuestion {
@@ -665,7 +707,7 @@ func (in *CBTQuestionInput) ToDomain(examID string, index int) domain.CBTQuestio
 	if corr == "" {
 		corr = strings.ToUpper(strings.TrimSpace(in.CorrectAnswer))
 	}
-	if corr == "" && qType != "ESSAY" {
+	if corr == "" && qType != "ESSAY" && qType != "MATCHING" {
 		corr = "A"
 	}
 	if corr == "" {
@@ -677,7 +719,23 @@ func (in *CBTQuestionInput) ToDomain(examID string, index int) domain.CBTQuestio
 		pts = in.ScoreWeight
 	}
 	if pts <= 0 {
-		pts = 1.0
+		pts = 10.0
+	}
+
+	// Persist rich metadata into question_text comment
+	meta := CBTQuestionMeta{
+		Type:            qType,
+		StimulusText:    strings.TrimSpace(in.StimulusText),
+		CorrectOptions:  in.CorrectOptions,
+		TrueFalseAnswer: in.TrueFalseAnswer,
+		MatchingPairs:   in.MatchingPairs,
+		EssayRubric:     strings.TrimSpace(in.EssayRubric),
+		Points:          pts,
+	}
+	metaBytes, err := json.Marshal(meta)
+	fullText := qText
+	if err == nil && len(metaBytes) > 2 {
+		fullText = fmt.Sprintf("%s<!--SPENSPRA_META:%s-->", qText, string(metaBytes))
 	}
 
 	return domain.CBTQuestion{
@@ -685,7 +743,7 @@ func (in *CBTQuestionInput) ToDomain(examID string, index int) domain.CBTQuestio
 		ExamID:         examID,
 		QuestionNumber: qNum,
 		QuestionType:   qType,
-		QuestionText:   qText,
+		QuestionText:   fullText,
 		ImageURL:       img,
 		OptionA:        optA,
 		OptionB:        optB,
@@ -698,6 +756,17 @@ func (in *CBTQuestionInput) ToDomain(examID string, index int) domain.CBTQuestio
 }
 
 func formatQuestionForFrontend(q domain.CBTQuestion) fiber.Map {
+	qText := q.QuestionText
+	var meta CBTQuestionMeta
+	if idx := strings.Index(qText, "<!--SPENSPRA_META:"); idx != -1 {
+		endIdx := strings.Index(qText[idx:], "-->")
+		if endIdx != -1 {
+			metaRaw := qText[idx+len("<!--SPENSPRA_META:") : idx+endIdx]
+			_ = json.Unmarshal([]byte(metaRaw), &meta)
+			qText = strings.TrimSpace(qText[:idx])
+		}
+	}
+
 	opts := []fiber.Map{}
 	if q.OptionA != "" {
 		opts = append(opts, fiber.Map{"key": "A", "text": q.OptionA})
@@ -716,8 +785,25 @@ func formatQuestionForFrontend(q domain.CBTQuestion) fiber.Map {
 	}
 
 	qType := q.QuestionType
-	if qType == "PILIHAN_GANDA" {
+	if meta.Type != "" {
+		qType = meta.Type
+	} else if qType == "PILIHAN_GANDA" || qType == "" {
 		qType = "MCQ"
+	}
+
+	pts := q.ScoreWeight
+	if meta.Points > 0 {
+		pts = meta.Points
+	}
+
+	matchingPairs := meta.MatchingPairs
+	if matchingPairs == nil {
+		matchingPairs = []CBTMatchingPairInput{}
+	}
+
+	correctOptions := meta.CorrectOptions
+	if correctOptions == nil {
+		correctOptions = []string{}
 	}
 
 	return fiber.Map{
@@ -727,9 +813,10 @@ func formatQuestionForFrontend(q domain.CBTQuestion) fiber.Map {
 		"questionNumber":  q.QuestionNumber,
 		"question_number": q.QuestionNumber,
 		"type":            qType,
-		"question_type":   q.QuestionType,
-		"questionText":    q.QuestionText,
-		"question_text":   q.QuestionText,
+		"question_type":   qType,
+		"questionText":    qText,
+		"question_text":   qText,
+		"stimulusText":    meta.StimulusText,
 		"imageUrl":        q.ImageURL,
 		"image_url":       q.ImageURL,
 		"options":         opts,
@@ -740,8 +827,12 @@ func formatQuestionForFrontend(q domain.CBTQuestion) fiber.Map {
 		"option_e":        q.OptionE,
 		"correctOption":   q.CorrectAnswer,
 		"correct_answer":  q.CorrectAnswer,
-		"points":          q.ScoreWeight,
-		"score_weight":    q.ScoreWeight,
+		"correctOptions":  correctOptions,
+		"trueFalseAnswer": meta.TrueFalseAnswer,
+		"matchingPairs":   matchingPairs,
+		"essayRubric":     meta.EssayRubric,
+		"points":          pts,
+		"score_weight":    pts,
 		"created_at":      q.CreatedAt,
 	}
 }
@@ -767,6 +858,13 @@ func (h *ELearningHandler) GetExamQuestions(c *fiber.Ctx) error {
 	formatted := make([]fiber.Map, len(questions))
 	for i, q := range questions {
 		formatted[i] = formatQuestionForFrontend(q)
+		if !isTeacher {
+			formatted[i]["correctOption"] = ""
+			formatted[i]["correct_answer"] = ""
+			formatted[i]["correctOptions"] = []string{}
+			formatted[i]["trueFalseAnswer"] = nil
+			formatted[i]["essayRubric"] = ""
+		}
 	}
 
 	return c.Status(http.StatusOK).JSON(responses.Success(formatted, "Daftar butir soal dimuat"))

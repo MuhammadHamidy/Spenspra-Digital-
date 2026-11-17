@@ -7,6 +7,7 @@ import { tokenStorage } from '@/lib/common/tokenStorage';
 import { useProctoring } from '@/hooks/useProctoring';
 import Button from '@/components/Button';
 import Modal from '@/components/Modal';
+import AppIcon from '@/components/AppIcon';
 
 export default function CBTExamRunnerPage({ params }) {
   const router = useRouter();
@@ -30,6 +31,7 @@ export default function CBTExamRunnerPage({ params }) {
   const [showConfirmFinish, setShowConfirmFinish] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
   const [finishResult, setFinishResult] = useState(null);
+  const [showReviewSheet, setShowReviewSheet] = useState(false);
 
   // Solusi 2: Supervisor Unlock PIN State
   const [supervisorPinInput, setSupervisorPinInput] = useState('');
@@ -316,7 +318,7 @@ export default function CBTExamRunnerPage({ params }) {
     if (!currentQ || isLocked) return;
     const isCurrentDoubtful = doubtfuls[currentQ.id] || false;
     const prevMatching = answers[currentQ.id]?.matchingAnswers || {};
-    const nextMatching = { ...prevMatching, [pairId]: rightVal };
+    const nextMatching = { ...prevMatching, [pairId]: rightVal, [String(pairId)]: rightVal };
 
     const newAnswers = {
       ...answers,
@@ -441,9 +443,12 @@ export default function CBTExamRunnerPage({ params }) {
 
   // Result state
   if (finishResult) {
+    const isScoreVisible = exam?.showScoreToStudent !== false;
+    const canReviewAnswers = Boolean(exam?.showAnswersToStudent);
+
     return (
       <div className="min-h-screen bg-neutral-100 flex items-center justify-center p-4 select-none">
-        <div className="max-w-md w-full bg-white rounded-[16px] p-6 sm:p-8 shadow-xl text-center space-y-6 animate-in zoom-in-95">
+        <div className={`w-full bg-white rounded-[16px] p-6 sm:p-8 shadow-xl text-center space-y-6 animate-in zoom-in-95 transition-all ${showReviewSheet ? 'max-w-2xl' : 'max-w-md'}`}>
           <div className="w-16 h-16 rounded-full bg-success-100 text-success-600 mx-auto flex items-center justify-center">
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
@@ -467,8 +472,21 @@ export default function CBTExamRunnerPage({ params }) {
               <span className="font-bold text-primary-500">{exam?.subject}</span>
             </div>
 
-            {/* Jika Ujian Murni Esai / Tidak Ada Soal PG */}
-            {finishResult.totalMcq === 0 ? (
+            {/* Skenario 1: Guru Menyembunyikan Nilai Siswa */}
+            {!isScoreVisible ? (
+              <div className="pt-2 border-t border-neutral-200 text-left">
+                <div className="p-3 rounded-lg bg-neutral-100/90 border border-neutral-200 text-neutral-600 space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-neutral-800">
+                    <AppIcon name="lock" color="grey" size={14} />
+                    <span>Nilai Disembunyikan oleh Guru</span>
+                  </div>
+                  <p className="text-[11px] text-neutral-500 leading-relaxed">
+                    Skor dan hasil evaluasi ujian tidak dipublikasikan secara langsung ke siswa. Silakan hubungi guru pengampu untuk informasi nilai akhir.
+                  </p>
+                </div>
+              </div>
+            ) : finishResult.totalMcq === 0 ? (
+              /* Skenario 2: Ujian Murni Esai */
               <div className="pt-2 border-t border-neutral-200 space-y-2 text-left">
                 <div className="flex items-center justify-between text-xs text-neutral-600">
                   <span>Tipe Ujian:</span>
@@ -487,10 +505,10 @@ export default function CBTExamRunnerPage({ params }) {
                 </div>
               </div>
             ) : (
-              /* Jika Ada Soal Pilihan Ganda (PG) */
+              /* Skenario 3: Ada Soal Objektif / PG & Nilai Ditampilkan */
               <>
                 <div className="flex items-center justify-between text-xs text-neutral-600">
-                  <span>Jawaban Benar (PG):</span>
+                  <span>Jawaban Benar (Objektif):</span>
                   <span className="font-bold text-success-600">
                     {finishResult.correctCount} / {finishResult.totalMcq} Soal
                   </span>
@@ -507,11 +525,74 @@ export default function CBTExamRunnerPage({ params }) {
 
                 <div className="pt-2 border-t border-neutral-200 flex items-center justify-between text-sm">
                   <span className="font-bold text-neutral-800">
-                    {finishResult.totalEssay > 0 ? 'Skor Sementara (PG):' : 'Skor Pilihan Ganda:'}
+                    {finishResult.totalEssay > 0 ? 'Skor Sementara (Objektif):' : 'Skor Akhir Ujian:'}
                   </span>
                   <span className="text-2xl font-black text-primary-500">{finishResult.score}</span>
                 </div>
               </>
+            )}
+
+            {/* Opsi Buka Lembar Jawaban & Pembahasan */}
+            {canReviewAnswers && isScoreVisible && (
+              <div className="pt-2 border-t border-neutral-200 text-left">
+                <button
+                  type="button"
+                  onClick={() => setShowReviewSheet(!showReviewSheet)}
+                  className="w-full py-2.5 px-3.5 rounded-xl border border-primary-300 bg-primary-50 hover:bg-primary-100 text-primary-900 font-bold text-xs flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <AppIcon name="file" color="purple" size={15} />
+                    <span>{showReviewSheet ? 'Sembunyikan Lembar Jawaban' : 'Lihat Lembar Jawaban & Pembahasan'}</span>
+                  </span>
+                  <span className="text-xs font-bold text-primary-700">{showReviewSheet ? '▲ Tutup' : '▼ Buka'}</span>
+                </button>
+
+                {showReviewSheet && (
+                  <div className="mt-3 max-h-80 overflow-y-auto space-y-3 pr-1 text-xs">
+                    {(finishResult.reviewItems || []).length === 0 ? (
+                      <p className="text-center text-neutral-500 py-3">Tidak ada data pembahasan untuk ditampilkan.</p>
+                    ) : (
+                      finishResult.reviewItems.map((item, idx) => {
+                        const isCorrect = item.isCorrect;
+                        const isEssay = item.type === 'ESSAY';
+                        const badgeBg = isEssay
+                          ? 'bg-blue-50 text-blue-800 border-blue-200'
+                          : isCorrect
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : 'bg-rose-50 text-rose-800 border-rose-200';
+                        const badgeText = isEssay ? 'Uraian / Esai' : isCorrect ? 'Benar (+10)' : 'Salah (0)';
+
+                        return (
+                          <div key={item.questionId || idx} className="p-3.5 rounded-xl border border-neutral-200 bg-white space-y-2 shadow-2xs">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-neutral-800">Soal No. {item.questionNumber || (idx + 1)}</span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeBg}`}>
+                                {badgeText}
+                              </span>
+                            </div>
+                            <p className="text-neutral-700 leading-relaxed font-medium">{item.questionText}</p>
+
+                            <div className="p-2.5 rounded-lg bg-neutral-50 border border-neutral-200 space-y-1.5 text-[11px]">
+                              <div className="flex items-start gap-1">
+                                <span className="text-neutral-500 font-semibold w-24 shrink-0">Jawaban Kamu:</span>
+                                <span className={`font-bold flex-1 whitespace-pre-line ${isCorrect ? 'text-emerald-700' : isEssay ? 'text-blue-700' : 'text-rose-600'}`}>
+                                  {item.studentAnswerDisplay || '-'}
+                                </span>
+                              </div>
+                              <div className="flex items-start gap-1 pt-1.5 border-t border-neutral-200">
+                                <span className="text-neutral-500 font-semibold w-24 shrink-0">Kunci Jawaban:</span>
+                                <span className="font-bold text-neutral-900 flex-1 whitespace-pre-line">
+                                  {item.correctAnswerDisplay || '-'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
@@ -542,7 +623,7 @@ export default function CBTExamRunnerPage({ params }) {
     if (q.type === 'MATCHING') {
       const mAns = ans.matchingAnswers || {};
       const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
-      return pairs.length > 0 && pairs.every((p) => Boolean(mAns[p.id]));
+      return pairs.length > 0 && pairs.every((p) => Boolean(mAns[p.id] || mAns[String(p.id)]));
     }
     if (q.type === 'ESSAY') {
       return Boolean(ans.essayAnswer && String(ans.essayAnswer).trim() !== '');
@@ -578,7 +659,7 @@ export default function CBTExamRunnerPage({ params }) {
 
             <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-left text-xs space-y-2 text-amber-950">
               <p className="font-bold flex items-center gap-1.5 text-amber-900">
-                <span>🛡️</span>
+                <AppIcon name="lock" color="yellow" size={16} />
                 <span>Protokol Pengawasan Anti-Cheat Aktif:</span>
               </p>
               <ul className="list-disc pl-4 space-y-1 text-[11px] text-amber-800 leading-relaxed">
@@ -591,13 +672,14 @@ export default function CBTExamRunnerPage({ params }) {
             <Button
               variant="accent"
               size="lg"
-              className="w-full font-bold shadow-md min-h-[48px] text-sm bg-gradient-to-r from-[#F2C94C] to-[#E8A020] hover:brightness-105 text-neutral-950"
+              className="w-full font-bold shadow-md min-h-[48px] text-sm bg-gradient-to-r from-[#F2C94C] to-[#E8A020] hover:brightness-105 text-neutral-950 flex items-center justify-center gap-2"
               onClick={() => {
                 requestFullscreen();
                 setHasStartedExam(true);
               }}
             >
-              🔒 Kunci Layar Penuh & Mulai Ujian
+              <AppIcon name="lock" color="black" size={16} />
+              <span>Kunci Layar Penuh & Mulai Ujian</span>
             </Button>
 
             <p className="text-[11px] text-neutral-400">
@@ -793,7 +875,7 @@ export default function CBTExamRunnerPage({ params }) {
               {currentQ?.stimulusText && (
                 <div className="p-4 sm:p-5 rounded-xl bg-amber-50/70 border border-amber-200 text-amber-950 space-y-2">
                   <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-900 border-b border-amber-200 pb-2">
-                    <span>📑</span>
+                    <AppIcon name="file" color="yellow" size={15} />
                     <span>Wacana / Stimulus Kasus</span>
                   </div>
                   <div className="text-xs sm:text-sm font-sans whitespace-pre-wrap leading-relaxed text-amber-950">
@@ -842,14 +924,14 @@ export default function CBTExamRunnerPage({ params }) {
 
               {currentQ?.type === 'TRUE_FALSE' && (
                 <div className="flex items-start gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs">
-                  <span className="text-sm">⚖️</span>
+                  <AppIcon name="survey" color="green" size={16} />
                   <span><strong>Benar / Salah:</strong> Tentukan apakah pernyataan di atas bernilai BENAR atau SALAH dengan menekan salah satu tombol pilihan di bawah.</span>
                 </div>
               )}
 
               {currentQ?.type === 'MATCHING' && (
                 <div className="flex items-start gap-2 p-3 rounded-lg bg-violet-50 border border-violet-200 text-violet-950 text-xs">
-                  <span className="text-sm">🔗</span>
+                  <AppIcon name="link" color="purple" size={16} />
                   <span><strong>Pencocokan / Menjodohkan:</strong> Pasangkan setiap premis di kolom kiri dengan pilihan jawaban yang cocok pada kolom kanan.</span>
                 </div>
               )}
@@ -990,8 +1072,16 @@ export default function CBTExamRunnerPage({ params }) {
                     const pairs = Array.isArray(currentQ?.matchingPairs) ? currentQ.matchingPairs : [];
                     const allRightOptions = Array.from(new Set(pairs.map((p) => p.right))).filter(Boolean);
 
+                    if (pairs.length === 0) {
+                      return (
+                        <div className="p-4 rounded-xl border border-dashed border-neutral-300 text-center text-xs text-neutral-500">
+                          Belum ada item pencocokan untuk butir soal ini.
+                        </div>
+                      );
+                    }
+
                     return pairs.map((pair, pIdx) => {
-                      const selectedRight = answers[currentQ.id]?.matchingAnswers?.[pair.id] || '';
+                      const selectedRight = answers[currentQ.id]?.matchingAnswers?.[pair.id] ?? answers[currentQ.id]?.matchingAnswers?.[String(pair.id)] ?? '';
 
                       return (
                         <div
@@ -1140,7 +1230,8 @@ export default function CBTExamRunnerPage({ params }) {
             <div className="space-y-2">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-100 text-red-800 text-[11px] font-bold uppercase tracking-wider border border-red-300 animate-pulse">
                 <span className="w-2 h-2 rounded-full bg-red-600 animate-ping"></span>
-                <span>🔊 ALARM & SIRENE AKTIF!</span>
+                <AppIcon name="notification" color="red" size={14} />
+                <span>ALARM & SIRENE AKTIF!</span>
               </div>
               <h3 className="text-xl font-black text-neutral-900 tracking-tight">
                 Lembar Ujian Terkunci!
@@ -1153,8 +1244,8 @@ export default function CBTExamRunnerPage({ params }) {
             {/* Kotak Pengawas Ruangan */}
             <form onSubmit={handleSupervisorUnlockSubmit} className="pt-2 border-t border-neutral-100 space-y-3 text-left">
               <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] space-y-1">
-                <p className="font-bold flex items-center gap-1">
-                  <span>👨‍🏫</span>
+                <p className="font-bold flex items-center gap-1.5">
+                  <AppIcon name="profile" color="yellow" size={15} />
                   <span>Petunjuk Pengawas Ruangan:</span>
                 </p>
                 <p className="text-amber-800 leading-relaxed">
@@ -1187,9 +1278,10 @@ export default function CBTExamRunnerPage({ params }) {
                 variant="accent"
                 size="md"
                 loading={isUnlocking}
-                className="w-full font-bold shadow-xs min-h-[44px]"
+                className="w-full font-bold shadow-xs min-h-[44px] flex items-center justify-center gap-2"
               >
-                🔓 Matikan Alarm & Buka Kunci Ujian
+                <AppIcon name="unlock" color="black" size={16} />
+                <span>Matikan Alarm & Buka Kunci Ujian</span>
               </Button>
             </form>
           </div>

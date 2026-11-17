@@ -226,6 +226,112 @@ function setLocal(key, value) {
   } catch {}
 }
 
+export function mapExamItem(e) {
+  if (!e) return null;
+  const className = e.className || e.class_code || e.classCode || '';
+  const startDT = e.startDateTime || e.start_time || '';
+  const endDT = e.endDateTime || e.end_time || '';
+  let sDate = e.scheduledDate || '';
+  let sTime = e.startTime || '';
+  let eTime = e.endTime || '';
+  if (!sDate && startDT) sDate = startDT.split('T')[0];
+  if (!sTime && startDT && startDT.includes('T')) sTime = startDT.split('T')[1].slice(0, 5);
+  if (!eTime && endDT && endDT.includes('T')) eTime = endDT.split('T')[1].slice(0, 5);
+
+  const token = (e.token || '').toUpperCase();
+  const rawDesc = String(e.description || e.rawDescription || '');
+  const title = String(e.title || '');
+
+  // Check description tags [ASAS:x], [PIN:xxxx], [SCORE:0/1], [ANSWERS:0/1]
+  const asasTagMatch = rawDesc.match(/\[ASAS:(\d+)\]/i);
+  const pinTagMatch = rawDesc.match(/\[PIN:([A-Z0-9]+)\]/i);
+  const scoreTagMatch = rawDesc.match(/\[SCORE:([01])\]/i);
+  const answersTagMatch = rawDesc.match(/\[ANSWERS:([01])\]/i);
+
+  // Detect whether it's UAS / ASAS Semester
+  const isAsasByToken = token.startsWith('ASAS');
+  const isAsasByClass = /tingkat|semua rombel|semua kelas/i.test(className);
+  const isAsasByTitle = /asas|asesmen akhir|sumatif akhir|semester/i.test(title);
+  const isUas = Boolean(
+    asasTagMatch ||
+    e.examCategory === 'SEMESTER_UAS' ||
+    e.exam_category === 'SEMESTER_UAS' ||
+    e.isUAS ||
+    e.targetGradeLevel ||
+    e.target_grade_level ||
+    isAsasByToken ||
+    isAsasByClass ||
+    (isAsasByTitle && !className.match(/^[789][A-H]$/i))
+  );
+
+  // Determine targetGradeLevel (7, 8, or 9)
+  let gradeLevel = '';
+  if (asasTagMatch) {
+    gradeLevel = asasTagMatch[1];
+  } else if (e.targetGradeLevel || e.target_grade_level) {
+    gradeLevel = String(e.targetGradeLevel || e.target_grade_level);
+  } else {
+    const gradeMatch = className.match(/(?:tingkat|tk\.?|kelas)\s*([789])/i) || title.match(/(?:tingkat|tk\.?|kelas)\s*([789])/i);
+    if (gradeMatch) {
+      gradeLevel = gradeMatch[1];
+    } else if (isUas) {
+      gradeLevel = '7';
+    }
+  }
+
+  // Determine supervisor PIN
+  let pin = (e.supervisorPin || e.supervisor_pin || '').toUpperCase();
+  if (!pin && pinTagMatch) {
+    pin = pinTagMatch[1].toUpperCase();
+  }
+
+  // Determine publication settings
+  const showScoreToStudent = scoreTagMatch
+    ? scoreTagMatch[1] === '1'
+    : (e.showScoreToStudent !== undefined ? Boolean(e.showScoreToStudent) : true);
+
+  const showAnswersToStudent = answersTagMatch
+    ? answersTagMatch[1] === '1'
+    : (e.showAnswersToStudent !== undefined ? Boolean(e.showAnswersToStudent) : false);
+
+  // Clean description without tags for display
+  const cleanDesc = rawDesc
+    .replace(/\[ASAS:\d+\]/gi, '')
+    .replace(/\[PIN:[A-Z0-9]+\]/gi, '')
+    .replace(/\[SCORE:[01]\]/gi, '')
+    .replace(/\[ANSWERS:[01]\]/gi, '')
+    .trim();
+
+  return {
+    ...e,
+    className,
+    class_code: className,
+    subject: e.subject || e.course_name || e.courseName || '',
+    subjectCode: e.subjectCode || e.course_id || e.courseId || 'MAPEL',
+    durationMinutes: Number(e.durationMinutes || e.duration_minutes || 60),
+    teacherName: e.teacherName || e.teacher_name || 'Bapak/Ibu Guru',
+    token,
+    startDateTime: startDT,
+    endDateTime: endDT,
+    scheduledDate: sDate || new Date().toISOString().split('T')[0],
+    startTime: sTime || '08:00',
+    endTime: eTime || '09:30',
+    maxViolations: Number(e.maxViolations || e.max_violations || 3),
+    status: e.status || 'UPCOMING',
+    description: cleanDesc || rawDesc,
+    rawDescription: rawDesc,
+    examCategory: isUas ? 'SEMESTER_UAS' : 'REGULAR',
+    targetGradeLevel: isUas ? (gradeLevel || '7') : '',
+    targetClasses: Array.isArray(e.targetClasses) ? e.targetClasses : (Array.isArray(e.target_classes) ? e.target_classes : []),
+    isCoordinatorExam: isUas,
+    supervisorPin: pin,
+    showScoreToStudent,
+    show_score_to_student: showScoreToStudent,
+    showAnswersToStudent,
+    show_answers_to_student: showAnswersToStudent,
+  };
+}
+
 export const elearningApi = {
   // =================== MATERI ===================
   getMaterials: async (params = {}) => {
@@ -393,91 +499,6 @@ export const elearningApi = {
   getExams: async (params = {}) => {
     const query = params.className ? `?class_name=${encodeURIComponent(params.className)}` : '';
     const res = await fetchJson(`/exams${query}`);
-    const mapExamItem = (e) => {
-      if (!e) return null;
-      const className = e.className || e.class_code || e.classCode || '';
-      const startDT = e.startDateTime || e.start_time || '';
-      const endDT = e.endDateTime || e.end_time || '';
-      let sDate = e.scheduledDate || '';
-      let sTime = e.startTime || '';
-      let eTime = e.endTime || '';
-      if (!sDate && startDT) sDate = startDT.split('T')[0];
-      if (!sTime && startDT && startDT.includes('T')) sTime = startDT.split('T')[1].slice(0, 5);
-      if (!eTime && endDT && endDT.includes('T')) eTime = endDT.split('T')[1].slice(0, 5);
-
-      const token = (e.token || '').toUpperCase();
-      const rawDesc = String(e.description || '');
-      const title = String(e.title || '');
-
-      // Check description tags [ASAS:x] and [PIN:xxxx]
-      const asasTagMatch = rawDesc.match(/\[ASAS:(\d+)\]/i);
-      const pinTagMatch = rawDesc.match(/\[PIN:([A-Z0-9]+)\]/i);
-
-      // Detect whether it's UAS / ASAS Semester
-      const isAsasByToken = token.startsWith('ASAS');
-      const isAsasByClass = /tingkat|semua rombel|semua kelas/i.test(className);
-      const isAsasByTitle = /asas|asesmen akhir|sumatif akhir|semester/i.test(title);
-      const isUas = Boolean(
-        asasTagMatch ||
-        e.examCategory === 'SEMESTER_UAS' ||
-        e.exam_category === 'SEMESTER_UAS' ||
-        e.isUAS ||
-        e.targetGradeLevel ||
-        e.target_grade_level ||
-        isAsasByToken ||
-        isAsasByClass ||
-        (isAsasByTitle && !className.match(/^[789][A-H]$/i))
-      );
-
-      // Determine targetGradeLevel (7, 8, or 9)
-      let gradeLevel = '';
-      if (asasTagMatch) {
-        gradeLevel = asasTagMatch[1];
-      } else if (e.targetGradeLevel || e.target_grade_level) {
-        gradeLevel = String(e.targetGradeLevel || e.target_grade_level);
-      } else {
-        const gradeMatch = className.match(/(?:tingkat|tk\.?|kelas)\s*([789])/i) || title.match(/(?:tingkat|tk\.?|kelas)\s*([789])/i);
-        if (gradeMatch) {
-          gradeLevel = gradeMatch[1];
-        } else if (isUas) {
-          gradeLevel = '7';
-        }
-      }
-
-      // Determine supervisor PIN
-      let pin = (e.supervisorPin || e.supervisor_pin || '').toUpperCase();
-      if (!pin && pinTagMatch) {
-        pin = pinTagMatch[1].toUpperCase();
-      }
-
-      // Clean description without tags for display
-      const cleanDesc = rawDesc.replace(/\[ASAS:\d+\]/gi, '').replace(/\[PIN:[A-Z0-9]+\]/gi, '').trim();
-
-      return {
-        ...e,
-        className,
-        class_code: className,
-        subject: e.subject || e.course_name || e.courseName || '',
-        subjectCode: e.subjectCode || e.course_id || e.courseId || 'MAPEL',
-        durationMinutes: Number(e.durationMinutes || e.duration_minutes || 60),
-        teacherName: e.teacherName || e.teacher_name || 'Bapak/Ibu Guru',
-        token,
-        startDateTime: startDT,
-        endDateTime: endDT,
-        scheduledDate: sDate || new Date().toISOString().split('T')[0],
-        startTime: sTime || '08:00',
-        endTime: eTime || '09:30',
-        maxViolations: Number(e.maxViolations || e.max_violations || 3),
-        status: e.status || 'UPCOMING',
-        description: cleanDesc || rawDesc,
-        rawDescription: rawDesc,
-        examCategory: isUas ? 'SEMESTER_UAS' : 'REGULAR',
-        targetGradeLevel: isUas ? (gradeLevel || '7') : '',
-        targetClasses: Array.isArray(e.targetClasses) ? e.targetClasses : (Array.isArray(e.target_classes) ? e.target_classes : []),
-        isCoordinatorExam: isUas,
-        supervisorPin: pin,
-      };
-    };
 
     if (res.success && Array.isArray(res.data)) {
       return res.data.map(mapExamItem).filter(Boolean);
@@ -495,95 +516,29 @@ export const elearningApi = {
     const local = getLocal('exams', INITIAL_EXAMS);
     const rawExam = (res.success && res.data) ? res.data : local.find((e) => e.id === id);
     if (!rawExam) return null;
-
-    const className = rawExam.className || rawExam.class_code || rawExam.classCode || '';
-    const startDT = rawExam.startDateTime || rawExam.start_time || '';
-    const endDT = rawExam.endDateTime || rawExam.end_time || '';
-    let sDate = rawExam.scheduledDate || '';
-    let sTime = rawExam.startTime || '';
-    let eTime = rawExam.endTime || '';
-    if (!sDate && startDT) sDate = startDT.split('T')[0];
-    if (!sTime && startDT && startDT.includes('T')) sTime = startDT.split('T')[1].slice(0, 5);
-    if (!eTime && endDT && endDT.includes('T')) eTime = endDT.split('T')[1].slice(0, 5);
-
-    const token = (rawExam.token || '').toUpperCase();
-    const rawDesc = String(rawExam.description || '');
-    const title = String(rawExam.title || '');
-
-    const asasTagMatch = rawDesc.match(/\[ASAS:(\d+)\]/i);
-    const pinTagMatch = rawDesc.match(/\[PIN:([A-Z0-9]+)\]/i);
-
-    const isAsasByToken = token.startsWith('ASAS');
-    const isAsasByClass = /tingkat|semua rombel|semua kelas/i.test(className);
-    const isAsasByTitle = /asas|asesmen akhir|sumatif akhir|semester/i.test(title);
-    const isUas = Boolean(
-      asasTagMatch ||
-      rawExam.examCategory === 'SEMESTER_UAS' ||
-      rawExam.exam_category === 'SEMESTER_UAS' ||
-      rawExam.isUAS ||
-      rawExam.targetGradeLevel ||
-      rawExam.target_grade_level ||
-      isAsasByToken ||
-      isAsasByClass ||
-      (isAsasByTitle && !className.match(/^[789][A-H]$/i))
-    );
-
-    let gradeLevel = '';
-    if (asasTagMatch) {
-      gradeLevel = asasTagMatch[1];
-    } else if (rawExam.targetGradeLevel || rawExam.target_grade_level) {
-      gradeLevel = String(rawExam.targetGradeLevel || rawExam.target_grade_level);
-    } else {
-      const gradeMatch = className.match(/(?:tingkat|tk\.?|kelas)\s*([789])/i) || title.match(/(?:tingkat|tk\.?|kelas)\s*([789])/i);
-      if (gradeMatch) {
-        gradeLevel = gradeMatch[1];
-      } else if (isUas) {
-        gradeLevel = '7';
-      }
-    }
-
-    let pin = (rawExam.supervisorPin || rawExam.supervisor_pin || '').toUpperCase();
-    if (!pin && pinTagMatch) {
-      pin = pinTagMatch[1].toUpperCase();
-    }
-
-    const cleanDesc = rawDesc.replace(/\[ASAS:\d+\]/gi, '').replace(/\[PIN:[A-Z0-9]+\]/gi, '').trim();
-
-    return {
-      ...rawExam,
-      className,
-      class_code: className,
-      subject: rawExam.subject || rawExam.course_name || rawExam.courseName || '',
-      subjectCode: rawExam.subjectCode || rawExam.course_id || rawExam.courseId || 'MAPEL',
-      durationMinutes: Number(rawExam.durationMinutes || rawExam.duration_minutes || 60),
-      teacherName: rawExam.teacherName || rawExam.teacher_name || 'Bapak/Ibu Guru',
-      token,
-      startDateTime: startDT,
-      endDateTime: endDT,
-      scheduledDate: sDate || new Date().toISOString().split('T')[0],
-      startTime: sTime || '08:00',
-      endTime: eTime || '09:30',
-      maxViolations: Number(rawExam.maxViolations || rawExam.max_violations || 3),
-      status: rawExam.status || 'UPCOMING',
-      description: cleanDesc || rawDesc,
-      rawDescription: rawDesc,
-      examCategory: isUas ? 'SEMESTER_UAS' : 'REGULAR',
-      targetGradeLevel: isUas ? (gradeLevel || '7') : '',
-      targetClasses: Array.isArray(rawExam.targetClasses) ? rawExam.targetClasses : (Array.isArray(rawExam.target_classes) ? rawExam.target_classes : []),
-      isCoordinatorExam: isUas,
-      supervisorPin: pin,
-    };
+    return mapExamItem(rawExam);
   },
 
   createExam: async (payload) => {
     const isUas = payload.examCategory === 'SEMESTER_UAS' || Boolean(payload.targetGradeLevel) || Boolean(payload.isCoordinatorExam);
     const generatedPin = payload.supervisorPin || (isUas ? generateRandomPin(6) : '');
+    const showScore = payload.showScoreToStudent !== false ? 1 : 0;
+    const showAnswers = payload.showAnswersToStudent ? 1 : 0;
+
     let desc = payload.description || '';
+    desc = desc
+      .replace(/\[ASAS:\d+\]/gi, '')
+      .replace(/\[PIN:[A-Z0-9]+\]/gi, '')
+      .replace(/\[SCORE:[01]\]/gi, '')
+      .replace(/\[ANSWERS:[01]\]/gi, '')
+      .trim();
+
+    let tags = `[SCORE:${showScore}][ANSWERS:${showAnswers}]`;
     if (isUas) {
       const lvl = payload.targetGradeLevel || '7';
-      desc = desc.replace(/\[ASAS:\d+\]/gi, '').replace(/\[PIN:[A-Z0-9]+\]/gi, '').trim();
-      desc = `[ASAS:${lvl}]${generatedPin ? `[PIN:${generatedPin}]` : ''} ${desc}`.trim();
+      tags = `[ASAS:${lvl}]${generatedPin ? `[PIN:${generatedPin}]` : ''}${tags}`;
     }
+    desc = `${tags} ${desc}`.trim();
 
     const enhancedPayload = {
       ...payload,
@@ -600,6 +555,10 @@ export const elearningApi = {
       is_coordinator_exam: isUas,
       supervisor_pin: generatedPin.toUpperCase(),
       supervisorPin: generatedPin.toUpperCase(),
+      showScoreToStudent: showScore === 1,
+      show_score_to_student: showScore === 1,
+      showAnswersToStudent: showAnswers === 1,
+      show_answers_to_student: showAnswers === 1,
     };
     const res = await fetchJson('/exams', {
       method: 'POST',
@@ -619,23 +578,38 @@ export const elearningApi = {
       supervisorPin: enhancedPayload.supervisor_pin,
     };
     setLocal('exams', [newExam, ...local]);
-    return res.success && res.data ? res.data : newExam;
+    return res.success && res.data ? mapExamItem(res.data) : mapExamItem(newExam);
   },
 
   updateExam: async (id, payload) => {
     const isUas = payload.examCategory === 'SEMESTER_UAS' || Boolean(payload.targetGradeLevel) || Boolean(payload.isCoordinatorExam);
+    const showScore = payload.showScoreToStudent !== undefined ? (payload.showScoreToStudent ? 1 : 0) : 1;
+    const showAnswers = payload.showAnswersToStudent !== undefined ? (payload.showAnswersToStudent ? 1 : 0) : 0;
+
     let desc = payload.description || '';
+    desc = desc
+      .replace(/\[ASAS:\d+\]/gi, '')
+      .replace(/\[PIN:[A-Z0-9]+\]/gi, '')
+      .replace(/\[SCORE:[01]\]/gi, '')
+      .replace(/\[ANSWERS:[01]\]/gi, '')
+      .trim();
+
+    let tags = `[SCORE:${showScore}][ANSWERS:${showAnswers}]`;
     if (isUas) {
       const lvl = payload.targetGradeLevel || '7';
       const pin = payload.supervisorPin || '';
-      desc = desc.replace(/\[ASAS:\d+\]/gi, '').replace(/\[PIN:[A-Z0-9]+\]/gi, '').trim();
-      desc = `[ASAS:${lvl}]${pin ? `[PIN:${pin}]` : ''} ${desc}`.trim();
+      tags = `[ASAS:${lvl}]${pin ? `[PIN:${pin}]` : ''}${tags}`;
     }
+    desc = `${tags} ${desc}`.trim();
 
     const enhancedPayload = {
       ...payload,
       id,
       description: desc,
+      showScoreToStudent: showScore === 1,
+      show_score_to_student: showScore === 1,
+      showAnswersToStudent: showAnswers === 1,
+      show_answers_to_student: showAnswers === 1,
       ...(payload.className ? { class_code: payload.className } : {}),
       ...(payload.subject ? { course_name: payload.subject } : {}),
       ...(payload.subjectCode ? { course_id: payload.subjectCode } : {}),
@@ -671,6 +645,10 @@ export const elearningApi = {
           examCategory: isUas ? 'SEMESTER_UAS' : (payload.examCategory || e.examCategory),
           targetGradeLevel: payload.targetGradeLevel || e.targetGradeLevel,
           supervisorPin: payload.supervisorPin || e.supervisorPin,
+          showScoreToStudent: showScore === 1,
+          show_score_to_student: showScore === 1,
+          showAnswersToStudent: showAnswers === 1,
+          show_answers_to_student: showAnswers === 1,
         };
       }
       return e;
@@ -680,7 +658,8 @@ export const elearningApi = {
     if (!res.success && res.error) {
       console.warn(`[updateExam] PUT /exams/${id} error:`, res.error);
     }
-    return res?.data || updated.find((e) => e.id === id) || null;
+    const finalResult = res?.data || updated.find((e) => e.id === id) || null;
+    return mapExamItem(finalResult);
   },
 
   deleteExam: async (id) => {
@@ -729,17 +708,37 @@ export const elearningApi = {
   },
 
   getExamQuestions: async (examId) => {
+    const allQuestions = getLocal('questions', INITIAL_QUESTIONS);
+    const localList = allQuestions[examId] || [];
+
     const res = await fetchJson(`/exams/${examId}/questions`);
     let rawList = [];
-    if (res.success && Array.isArray(res.data)) {
+    if (res.success && Array.isArray(res.data) && res.data.length > 0) {
       rawList = res.data;
     } else {
-      const allQuestions = getLocal('questions', INITIAL_QUESTIONS);
-      rawList = allQuestions[examId] || [];
+      rawList = localList;
     }
 
+    const extractSpenspraMeta = (text) => {
+      if (!text || typeof text !== 'string') return { cleanText: text || '', meta: null };
+      const match = text.match(/<!--SPENSPRA_META:([\s\S]*?)-->/);
+      if (!match) return { cleanText: text, meta: null };
+      try {
+        const meta = JSON.parse(match[1]);
+        const cleanText = text.replace(/<!--SPENSPRA_META:[\s\S]*?-->/, '').trim();
+        return { cleanText, meta };
+      } catch {
+        return { cleanText: text, meta: null };
+      }
+    };
+
     return rawList.map((q, idx) => {
-      const qType = q.type || (q.question_type === 'PILIHAN_GANDA' ? 'MCQ' : q.question_type) || 'MCQ';
+      const localQ = localList[idx] || localList.find((lq) => lq.id === q.id) || {};
+      const rawText = q.questionText || q.question_text || '';
+      const { cleanText, meta } = extractSpenspraMeta(rawText);
+
+      const qType = meta?.type || q.type || (q.question_type === 'PILIHAN_GANDA' ? 'MCQ' : q.question_type) || localQ.type || 'MCQ';
+
       let options = q.options;
       if (!Array.isArray(options) || options.length === 0) {
         options = [];
@@ -749,22 +748,49 @@ export const elearningApi = {
         if (q.option_d) options.push({ key: 'D', text: q.option_d });
         if (q.option_e) options.push({ key: 'E', text: q.option_e });
       }
+      if (options.length === 0 && Array.isArray(localQ.options)) {
+        options = localQ.options;
+      }
+
+      const matchingPairs = (meta?.matchingPairs && meta.matchingPairs.length > 0)
+        ? meta.matchingPairs
+        : ((Array.isArray(q.matchingPairs) && q.matchingPairs.length > 0)
+            ? q.matchingPairs
+            : (Array.isArray(localQ.matchingPairs) ? localQ.matchingPairs : []));
+
+      const correctOptions = (meta?.correctOptions && meta.correctOptions.length > 0)
+        ? meta.correctOptions
+        : ((Array.isArray(q.correctOptions) && q.correctOptions.length > 0)
+            ? q.correctOptions
+            : (Array.isArray(localQ.correctOptions) ? localQ.correctOptions : []));
+
+      const trueFalseAnswer = meta?.trueFalseAnswer !== undefined
+        ? meta.trueFalseAnswer
+        : (q.trueFalseAnswer !== undefined
+            ? q.trueFalseAnswer
+            : (localQ.trueFalseAnswer !== undefined
+                ? localQ.trueFalseAnswer
+                : (q.correctOption === 'TRUE' || q.correctOption === 'BENAR' || q.correct_answer === 'TRUE' || q.correct_answer === 'BENAR')));
+
+      const correctOption = q.correctOption || q.correct_answer || localQ.correctOption || 'A';
+      const stimulusText = meta?.stimulusText || q.stimulusText || localQ.stimulusText || '';
+      const essayRubric = meta?.essayRubric || q.essayRubric || q.essay_rubric || localQ.essayRubric || '';
 
       return {
-        id: q.id || `q-${idx + 1}`,
+        id: q.id || localQ.id || `q-${idx + 1}`,
         examId: q.examId || q.exam_id || examId,
         questionNumber: q.questionNumber || q.question_number || idx + 1,
         type: qType,
-        questionText: q.questionText || q.question_text || '',
-        stimulusText: q.stimulusText || '',
-        imageUrl: q.imageUrl || q.image_url || '',
-        options: options,
-        correctOption: q.correctOption || q.correct_answer || 'A',
-        correctOptions: Array.isArray(q.correctOptions) ? q.correctOptions : (q.correct_answers || []),
-        trueFalseAnswer: q.trueFalseAnswer !== undefined ? q.trueFalseAnswer : (q.correctOption === 'TRUE' || q.correctOption === 'BENAR' ? true : false),
-        matchingPairs: Array.isArray(q.matchingPairs) ? q.matchingPairs : (q.matching_pairs || []),
-        essayRubric: q.essayRubric || q.essay_rubric || '',
-        points: Number(q.points || q.score_weight || 10),
+        questionText: cleanText || localQ.questionText || '',
+        stimulusText,
+        imageUrl: q.imageUrl || q.image_url || localQ.imageUrl || '',
+        options,
+        correctOption,
+        correctOptions,
+        trueFalseAnswer,
+        matchingPairs,
+        essayRubric,
+        points: Number(q.points || q.score_weight || localQ.points || 10),
       };
     });
   },
@@ -787,7 +813,16 @@ export const elearningApi = {
         body: JSON.stringify({ questions }),
       });
       if (res?.success && Array.isArray(res?.data)) {
-        allQuestions[examId] = res.data;
+        // Merge server IDs without discarding client rich question structure
+        const merged = questions.map((origQ, i) => {
+          const srvQ = res.data[i] || res.data.find((sq) => sq.id === origQ.id) || {};
+          return {
+            ...origQ,
+            id: srvQ.id || origQ.id,
+            questionNumber: origQ.questionNumber || i + 1,
+          };
+        });
+        allQuestions[examId] = merged;
         setLocal('questions', allQuestions);
       }
     } catch (err) {
@@ -1413,54 +1448,95 @@ export const elearningApi = {
     let totalAutoPoints = 0;
     let earnedAutoPoints = 0;
 
-    questions.forEach((q) => {
+    const reviewItems = questions.map((q, idx) => {
       const qPoints = Number(q.points) > 0 ? Number(q.points) : 10;
+      const ans = mergedAnswers[q.id] || {};
+      let isCorrect = false;
+      let studentAnswerDisplay = '-';
+      let correctAnswerDisplay = '-';
+
       if (q.type === 'MCQ') {
         totalAutoGraded += 1;
         totalAutoPoints += qPoints;
-        const answer = mergedAnswers[q.id];
-        if (answer && answer.selectedOption === q.correctOption) {
+        const studentOptKey = ans.selectedOption || '';
+        const correctOptKey = q.correctOption || '';
+        isCorrect = Boolean(studentOptKey && studentOptKey === correctOptKey);
+        if (isCorrect) {
           correctCount += 1;
           earnedAutoPoints += qPoints;
         }
+        const sOpt = (q.options || []).find((o) => o.key === studentOptKey);
+        const cOpt = (q.options || []).find((o) => o.key === correctOptKey);
+        studentAnswerDisplay = studentOptKey ? `${studentOptKey}. ${sOpt?.text || ''}` : 'Tidak dijawab';
+        correctAnswerDisplay = correctOptKey ? `${correctOptKey}. ${cOpt?.text || ''}` : '-';
       } else if (q.type === 'COMPLEX_MCQ') {
         totalAutoGraded += 1;
         totalAutoPoints += qPoints;
-        const answer = mergedAnswers[q.id];
-        const selected = Array.isArray(answer?.selectedOptions) ? [...answer.selectedOptions].sort().join(',') : '';
-        const expected = Array.isArray(q.correctOptions) ? [...q.correctOptions].sort().join(',') : (q.correctOption || '');
-        if (selected && selected === expected) {
+        const studentOpts = Array.isArray(ans.selectedOptions) ? ans.selectedOptions : [];
+        const correctOpts = Array.isArray(q.correctOptions) ? q.correctOptions : (q.correctOption ? [q.correctOption] : []);
+        const sortedStudent = [...studentOpts].sort().join(',');
+        const sortedCorrect = [...correctOpts].sort().join(',');
+        isCorrect = Boolean(sortedStudent && sortedStudent === sortedCorrect);
+        if (isCorrect) {
           correctCount += 1;
           earnedAutoPoints += qPoints;
         }
+        studentAnswerDisplay = studentOpts.length > 0 ? studentOpts.join(', ') : 'Tidak dijawab';
+        correctAnswerDisplay = correctOpts.length > 0 ? correctOpts.join(', ') : '-';
       } else if (q.type === 'TRUE_FALSE') {
         totalAutoGraded += 1;
         totalAutoPoints += qPoints;
-        const answer = mergedAnswers[q.id];
-        const studentAns = String(answer?.selectedOption || (answer?.trueFalseAnswer !== undefined ? (answer.trueFalseAnswer ? 'TRUE' : 'FALSE') : '')).toUpperCase();
+        const studentAns = String(ans.selectedOption || (ans.trueFalseAnswer !== undefined ? (ans.trueFalseAnswer ? 'TRUE' : 'FALSE') : '')).toUpperCase();
         const expected = String(q.trueFalseAnswer !== undefined ? (q.trueFalseAnswer ? 'TRUE' : 'FALSE') : (q.correctOption || 'TRUE')).toUpperCase();
-        if (studentAns && (studentAns === expected || (studentAns === 'TRUE' && expected === 'BENAR') || (studentAns === 'FALSE' && expected === 'SALAH'))) {
+        isCorrect = Boolean(studentAns && (studentAns === expected || (studentAns === 'TRUE' && expected === 'BENAR') || (studentAns === 'FALSE' && expected === 'SALAH')));
+        if (isCorrect) {
           correctCount += 1;
           earnedAutoPoints += qPoints;
         }
+        studentAnswerDisplay = (studentAns === 'TRUE' || studentAns === 'BENAR') ? 'Benar' : (studentAns === 'FALSE' || studentAns === 'SALAH') ? 'Salah' : 'Tidak dijawab';
+        correctAnswerDisplay = (expected === 'TRUE' || expected === 'BENAR') ? 'Benar' : 'Salah';
       } else if (q.type === 'MATCHING') {
         totalAutoGraded += 1;
         totalAutoPoints += qPoints;
-        const answer = mergedAnswers[q.id];
-        const matchingAns = answer?.matchingAnswers || {};
+        const matchingAns = ans.matchingAnswers || {};
         const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
-        if (pairs.length > 0) {
-          let matchedCorrect = 0;
-          pairs.forEach((p) => {
-            if (matchingAns[p.id] === p.right) matchedCorrect++;
-          });
-          const ratio = matchedCorrect / pairs.length;
-          earnedAutoPoints += Math.round(ratio * qPoints);
-          if (ratio === 1) correctCount += 1;
+        let matchedCorrect = 0;
+        const pairDetails = pairs.map((p) => {
+          const studentVal = matchingAns[p.id] ?? matchingAns[String(p.id)] ?? '';
+          const matchOk = Boolean(studentVal && studentVal.trim().toLowerCase() === (p.right || '').trim().toLowerCase());
+          if (matchOk) matchedCorrect++;
+          return `${p.left} ➔ ${studentVal || '(Kosong)'}${matchOk ? ' (✓)' : ' (✗)'}`;
+        });
+        const ratio = pairs.length > 0 ? matchedCorrect / pairs.length : 0;
+        earnedAutoPoints += Math.round(ratio * qPoints);
+        if (ratio === 1) {
+          correctCount += 1;
+          isCorrect = true;
+        } else {
+          isCorrect = false;
         }
+        studentAnswerDisplay = pairDetails.length > 0 ? pairDetails.join('\n') : 'Tidak dijawab';
+        correctAnswerDisplay = pairs.map((p) => `${p.left} ➔ ${p.right}`).join('\n');
       } else if (q.type === 'ESSAY') {
         totalEssay += 1;
+        studentAnswerDisplay = ans.essayAnswer || 'Tidak dijawab';
+        correctAnswerDisplay = q.essayRubric ? `Rubrik: ${q.essayRubric}` : 'Menunggu koreksi guru';
+        isCorrect = null;
       }
+
+      return {
+        questionId: q.id,
+        questionNumber: q.questionNumber || (idx + 1),
+        type: q.type,
+        questionText: q.questionText,
+        stimulusText: q.stimulusText,
+        imageUrl: q.imageUrl,
+        options: q.options,
+        isCorrect,
+        studentAnswerDisplay,
+        correctAnswerDisplay,
+        points: qPoints,
+      };
     });
 
     const score = totalAutoGraded > 0
@@ -1478,6 +1554,7 @@ export const elearningApi = {
       session.earnedMcqPoints = earnedAutoPoints;
       session.isEssayOnly = totalAutoGraded === 0 && totalEssay > 0;
       session.answers = mergedAnswers;
+      session.reviewItems = reviewItems;
       setLocal(`exam_session_${examId}_${sId}`, session);
 
       // Update teacher monitor
@@ -1505,7 +1582,7 @@ export const elearningApi = {
       });
     }
 
-    return session || { status: 'SUBMITTED', score, answers: mergedAnswers };
+    return session || { status: 'SUBMITTED', score, answers: mergedAnswers, reviewItems, correctCount, totalMcq: totalAutoGraded, totalEssay };
   },
 
   getSessionAnswers: async (sessionId) => {

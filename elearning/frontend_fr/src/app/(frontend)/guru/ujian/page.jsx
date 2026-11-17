@@ -65,6 +65,8 @@ export default function TeacherExamsManagementPage() {
   const [endTime, setEndTime] = useState('09:30');
   const [durationMinutes, setDurationMinutes] = useState(60);
   const [maxViolations, setMaxViolations] = useState(1);
+  const [showScoreToStudent, setShowScoreToStudent] = useState(true);
+  const [showAnswersToStudent, setShowAnswersToStudent] = useState(false);
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activatingExamId, setActivatingExamId] = useState(null);
@@ -192,6 +194,8 @@ export default function TeacherExamsManagementPage() {
     setEndTime(endStr);
     setDurationMinutes(90);
     setMaxViolations(1);
+    setShowScoreToStudent(true);
+    setShowAnswersToStudent(false);
     setDescription('');
     setIsCreateModalOpen(true);
   };
@@ -209,6 +213,8 @@ export default function TeacherExamsManagementPage() {
     setToken(ex.token || '');
     setDurationMinutes(ex.durationMinutes || 60);
     setMaxViolations(ex.maxViolations || 1);
+    setShowScoreToStudent(ex.showScoreToStudent !== false);
+    setShowAnswersToStudent(Boolean(ex.showAnswersToStudent));
     if (ex.startDateTime) {
       const [d, t] = ex.startDateTime.split('T');
       setExamDate(d || new Date().toISOString().split('T')[0]);
@@ -273,6 +279,10 @@ export default function TeacherExamsManagementPage() {
         token: token.trim().toUpperCase(),
         durationMinutes: Number(durationMinutes) || 60,
         maxViolations: Number(maxViolations) || 3,
+        showScoreToStudent,
+        show_score_to_student: showScoreToStudent,
+        showAnswersToStudent: showScoreToStudent ? showAnswersToStudent : false,
+        show_answers_to_student: showScoreToStudent ? showAnswersToStudent : false,
         scheduledDate: examDate,
         startTime,
         endTime,
@@ -1914,6 +1924,55 @@ export default function TeacherExamsManagementPage() {
                 <p className="text-[11px] text-emerald-800 leading-snug">
                   PIN ini seragam satu sekolah untuk seluruh ruang ujian pada sesi ini. Pengawas dapat membukanya langsung di HP siswa tanpa perlu kata sandi statis.
                 </p>
+              </div>
+            </div>
+
+            {/* Opsi Publikasi Skor & Lembar Jawaban ke Siswa */}
+            <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200 space-y-3">
+              <label className="text-xs font-bold text-neutral-800 flex items-center gap-1.5">
+                <AppIcon name="survey" color="purple" size={16} />
+                <span>Publikasi Nilai & Pembahasan ke Siswa:</span>
+              </label>
+
+              <div className="space-y-2.5">
+                <label className="flex items-start gap-3 p-2.5 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50/80 cursor-pointer transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={showScoreToStudent}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setShowScoreToStudent(checked);
+                      if (!checked) setShowAnswersToStudent(false);
+                    }}
+                    className="mt-0.5 w-4 h-4 rounded text-primary-600 focus:ring-primary-500 border-neutral-300 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <p className="text-xs font-bold text-neutral-800">Tampilkan Skor / Nilai Akhir ke Siswa</p>
+                    <p className="text-[11px] text-neutral-500">
+                      Jika dicentang, siswa akan langsung melihat jumlah soal benar dan skor akhir setelah menekan tombol Selesai Ujian.
+                    </p>
+                  </div>
+                </label>
+
+                <label className={`flex items-start gap-3 p-2.5 rounded-lg border transition-colors ${
+                  showScoreToStudent
+                    ? 'border-neutral-200 bg-white hover:bg-neutral-50/80 cursor-pointer'
+                    : 'border-neutral-100 bg-neutral-100/60 opacity-60 cursor-not-allowed'
+                }`}>
+                  <input
+                    type="checkbox"
+                    disabled={!showScoreToStudent}
+                    checked={showScoreToStudent && showAnswersToStudent}
+                    onChange={(e) => setShowAnswersToStudent(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded text-primary-600 focus:ring-primary-500 border-neutral-300 cursor-pointer disabled:cursor-not-allowed"
+                  />
+                  <div className="flex-1">
+                    <p className="text-xs font-bold text-neutral-800">Buka Lembar Jawaban & Pembahasan</p>
+                    <p className="text-[11px] text-neutral-500">
+                      Jika dicentang, siswa dapat meninjau butir soal, jawaban yang telah dipilih, serta kunci jawaban yang benar setelah ujian selesai.
+                    </p>
+                  </div>
+                </label>
               </div>
             </div>
 
