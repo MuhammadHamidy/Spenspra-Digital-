@@ -67,6 +67,7 @@ export default function TeacherExamsManagementPage() {
   const [maxViolations, setMaxViolations] = useState(1);
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activatingExamId, setActivatingExamId] = useState(null);
 
   // Question Editor State
   const [examQuestions, setExamQuestions] = useState([]);
@@ -198,7 +199,8 @@ export default function TeacherExamsManagementPage() {
   const handleOpenEditModal = (ex) => {
     setEditingExamId(ex.id);
     setTitle(ex.title || '');
-    setExamCategory(ex.examCategory || (ex.targetGradeLevel ? 'SEMESTER_UAS' : 'REGULAR'));
+    const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+    setExamCategory(isUas ? 'SEMESTER_UAS' : 'REGULAR');
     setTargetGradeLevel(ex.targetGradeLevel || '7');
     setSupervisorPin(ex.supervisorPin || generateRandomPin(6));
     setSubject(ex.subject || subjects[0]?.name || 'Matematika');
@@ -321,6 +323,8 @@ export default function TeacherExamsManagementPage() {
   };
 
   const handleStartExamNow = async (exam) => {
+    if (activatingExamId) return;
+    setActivatingExamId(exam.id);
     try {
       const now = new Date();
       const pad = (n) => String(n).padStart(2, '0');
@@ -328,22 +332,47 @@ export default function TeacherExamsManagementPage() {
       const endObj = new Date(now.getTime() + (Number(exam.durationMinutes) || 90) * 60 * 1000);
       const endStr = `${pad(endObj.getHours())}:${pad(endObj.getMinutes())}`;
       const todayDate = now.toISOString().split('T')[0];
+      const startDT = `${todayDate}T${startStr}:00`;
+      const endDT = `${todayDate}T${endStr}:00`;
 
+      // 1. Optimistic update local state immediately so UI changes to ACTIVE instantly
+      setExams((prev) =>
+        prev.map((item) =>
+          item.id === exam.id
+            ? {
+                ...item,
+                status: 'ACTIVE',
+                scheduledDate: todayDate,
+                startTime: startStr,
+                endTime: endStr,
+                startDateTime: startDT,
+                endDateTime: endDT,
+              }
+            : item
+        )
+      );
+
+      // 2. Persist update to backend
       await elearningApi.updateExam(exam.id, {
+        ...exam,
         status: 'ACTIVE',
         scheduledDate: todayDate,
         startTime: startStr,
         endTime: endStr,
-        startDateTime: `${todayDate}T${startStr}:00`,
-        endDateTime: `${todayDate}T${endStr}:00`,
+        startDateTime: startDT,
+        endDateTime: endDT,
         subject: exam.subject || exam.course_name,
         className: exam.className || exam.class_code,
         teacherName: exam.teacherName || exam.teacher_name,
       });
-      loadExams();
+
+      await loadExams();
     } catch (err) {
       console.error(err);
       alert('Gagal mengaktifkan ujian: ' + err.message);
+      await loadExams();
+    } finally {
+      setActivatingExamId(null);
     }
   };
 
@@ -1634,7 +1663,9 @@ export default function TeacherExamsManagementPage() {
                   onClick={() => {
                     setExamCategory('SEMESTER_UAS');
                     if (!supervisorPin) setSupervisorPin(generateRandomPin(6));
-                    if (!token.startsWith('ASAS')) setToken(`ASAS${Math.random().toString(36).substring(2, 6).toUpperCase()}`);
+                    if (!editingExamId && !token) {
+                      setToken(`ASAS${Math.random().toString(36).substring(2, 6).toUpperCase()}`);
+                    }
                   }}
                   className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
                     examCategory === 'SEMESTER_UAS'
@@ -2152,12 +2183,22 @@ export default function TeacherExamsManagementPage() {
                           {currentStatus !== 'ACTIVE' ? (
                             <button
                               type="button"
+                              disabled={activatingExamId === ex.id}
                               onClick={() => handleStartExamNow(ex)}
-                              className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                              className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
                               title="Aktifkan & buka sesi ujian sekarang untuk siswa"
                             >
-                              <AppIcon name="play" color="white" size={12} />
-                              <span>Aktifkan</span>
+                              {activatingExamId === ex.id ? (
+                                <>
+                                  <AppIcon name="sync" color="white" size={12} className="animate-spin" />
+                                  <span>Mengaktifkan...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <AppIcon name="play" color="white" size={12} />
+                                  <span>Aktifkan</span>
+                                </>
+                              )}
                             </button>
                           ) : (
                             <button

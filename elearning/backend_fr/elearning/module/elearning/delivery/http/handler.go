@@ -22,8 +22,14 @@ func actorRole(c *fiber.Ctx) string {
 	return strings.ToUpper(strings.TrimSpace(c.Get("X-User-Role")))
 }
 
+func isTeacherRole(role string) bool {
+	r := strings.ToUpper(strings.TrimSpace(role))
+	return r == "GURU" || r == "TEACHER" || r == "PENDIDIK" || r == "WALI_KELAS" || r == "KOORDINATOR"
+}
+
 func canManageAll(role string) bool {
-	return role == "ADMIN" || role == "SUPER_ADMIN" || role == "ADMIN_ELEARNING"
+	r := strings.ToUpper(strings.TrimSpace(role))
+	return r == "ADMIN" || r == "SUPER_ADMIN" || r == "ADMIN_ELEARNING"
 }
 
 func (h *ELearningHandler) requireExamOwner(c *fiber.Ctx, exam *domain.CBTExam) *fiber.Error {
@@ -31,12 +37,8 @@ func (h *ELearningHandler) requireExamOwner(c *fiber.Ctx, exam *domain.CBTExam) 
 	if canManageAll(role) {
 		return nil
 	}
-	if role != "GURU" {
-		return fiber.NewError(http.StatusForbidden, "hanya guru pengampu yang dapat mengelola ujian")
-	}
-	userID := actorID(c)
-	if userID == "" || exam.TeacherID == "" || exam.TeacherID != userID {
-		return fiber.NewError(http.StatusForbidden, "ujian hanya dapat dikelola oleh guru pembuatnya")
+	if role != "" && !isTeacherRole(role) {
+		return fiber.NewError(http.StatusForbidden, "hanya guru atau staf pengajar yang dapat mengelola ujian")
 	}
 	return nil
 }
@@ -367,10 +369,16 @@ func (h *ELearningHandler) ListExams(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
 	}
-	if actorRole(c) == "GURU" && actorID(c) != "" {
+	role := actorRole(c)
+	if isTeacherRole(role) && actorID(c) != "" {
 		filtered := list[:0]
 		for _, exam := range list {
-			if exam.TeacherID == actorID(c) {
+			isUAS := strings.Contains(strings.ToLower(exam.ClassCode), "tingkat") ||
+				strings.Contains(strings.ToLower(exam.ClassCode), "semua") ||
+				strings.HasPrefix(strings.ToUpper(exam.Token), "ASAS") ||
+				strings.Contains(strings.ToUpper(exam.Title), "ASAS") ||
+				strings.Contains(strings.ToUpper(exam.Title), "UAS")
+			if exam.TeacherID == "" || exam.TeacherID == actorID(c) || isUAS || canManageAll(role) {
 				filtered = append(filtered, exam)
 			}
 		}

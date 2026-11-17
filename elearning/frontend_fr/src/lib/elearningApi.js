@@ -22,12 +22,16 @@ async function fetchJson(endpoint, options = {}) {
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = `${baseUrl}${cleanEndpoint}`;
   const currentUser = tokenStorage.getUser();
-  const userId = currentUser?.id || 'user-elearning-default';
+  const userId = currentUser?.id || currentUser?.nimNip || currentUser?.nip || currentUser?.username || 'user-elearning-default';
+  const userRole = (currentUser?.role || currentUser?.roleName || currentUser?.role_name || 'GURU').toUpperCase();
+  const userName = currentUser?.fullName || currentUser?.full_name || currentUser?.name || 'Bapak/Ibu Guru';
   const token = tokenStorage.getToken();
 
   const headers = {
     'Content-Type': 'application/json',
     'X-User-Id': userId,
+    'X-User-Role': userRole,
+    'X-User-Name': userName,
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers || {}),
   };
@@ -390,6 +394,7 @@ export const elearningApi = {
     const query = params.className ? `?class_name=${encodeURIComponent(params.className)}` : '';
     const res = await fetchJson(`/exams${query}`);
     const mapExamItem = (e) => {
+      if (!e) return null;
       const className = e.className || e.class_code || e.classCode || '';
       const startDT = e.startDateTime || e.start_time || '';
       const endDT = e.endDateTime || e.end_time || '';
@@ -400,6 +405,54 @@ export const elearningApi = {
       if (!sTime && startDT && startDT.includes('T')) sTime = startDT.split('T')[1].slice(0, 5);
       if (!eTime && endDT && endDT.includes('T')) eTime = endDT.split('T')[1].slice(0, 5);
 
+      const token = (e.token || '').toUpperCase();
+      const rawDesc = String(e.description || '');
+      const title = String(e.title || '');
+
+      // Check description tags [ASAS:x] and [PIN:xxxx]
+      const asasTagMatch = rawDesc.match(/\[ASAS:(\d+)\]/i);
+      const pinTagMatch = rawDesc.match(/\[PIN:([A-Z0-9]+)\]/i);
+
+      // Detect whether it's UAS / ASAS Semester
+      const isAsasByToken = token.startsWith('ASAS');
+      const isAsasByClass = /tingkat|semua rombel|semua kelas/i.test(className);
+      const isAsasByTitle = /asas|asesmen akhir|sumatif akhir|semester/i.test(title);
+      const isUas = Boolean(
+        asasTagMatch ||
+        e.examCategory === 'SEMESTER_UAS' ||
+        e.exam_category === 'SEMESTER_UAS' ||
+        e.isUAS ||
+        e.targetGradeLevel ||
+        e.target_grade_level ||
+        isAsasByToken ||
+        isAsasByClass ||
+        (isAsasByTitle && !className.match(/^[789][A-H]$/i))
+      );
+
+      // Determine targetGradeLevel (7, 8, or 9)
+      let gradeLevel = '';
+      if (asasTagMatch) {
+        gradeLevel = asasTagMatch[1];
+      } else if (e.targetGradeLevel || e.target_grade_level) {
+        gradeLevel = String(e.targetGradeLevel || e.target_grade_level);
+      } else {
+        const gradeMatch = className.match(/(?:tingkat|tk\.?|kelas)\s*([789])/i) || title.match(/(?:tingkat|tk\.?|kelas)\s*([789])/i);
+        if (gradeMatch) {
+          gradeLevel = gradeMatch[1];
+        } else if (isUas) {
+          gradeLevel = '7';
+        }
+      }
+
+      // Determine supervisor PIN
+      let pin = (e.supervisorPin || e.supervisor_pin || '').toUpperCase();
+      if (!pin && pinTagMatch) {
+        pin = pinTagMatch[1].toUpperCase();
+      }
+
+      // Clean description without tags for display
+      const cleanDesc = rawDesc.replace(/\[ASAS:\d+\]/gi, '').replace(/\[PIN:[A-Z0-9]+\]/gi, '').trim();
+
       return {
         ...e,
         className,
@@ -408,7 +461,7 @@ export const elearningApi = {
         subjectCode: e.subjectCode || e.course_id || e.courseId || 'MAPEL',
         durationMinutes: Number(e.durationMinutes || e.duration_minutes || 60),
         teacherName: e.teacherName || e.teacher_name || 'Bapak/Ibu Guru',
-        token: (e.token || '').toUpperCase(),
+        token,
         startDateTime: startDT,
         endDateTime: endDT,
         scheduledDate: sDate || new Date().toISOString().split('T')[0],
@@ -416,19 +469,21 @@ export const elearningApi = {
         endTime: eTime || '09:30',
         maxViolations: Number(e.maxViolations || e.max_violations || 3),
         status: e.status || 'UPCOMING',
-        examCategory: e.examCategory || e.exam_category || (e.isUAS || e.targetGradeLevel || e.target_grade_level ? 'SEMESTER_UAS' : 'REGULAR'),
-        targetGradeLevel: e.targetGradeLevel || e.target_grade_level || '',
+        description: cleanDesc || rawDesc,
+        rawDescription: rawDesc,
+        examCategory: isUas ? 'SEMESTER_UAS' : 'REGULAR',
+        targetGradeLevel: isUas ? (gradeLevel || '7') : '',
         targetClasses: Array.isArray(e.targetClasses) ? e.targetClasses : (Array.isArray(e.target_classes) ? e.target_classes : []),
-        isCoordinatorExam: Boolean(e.isCoordinatorExam || e.is_coordinator_exam || e.targetGradeLevel || e.target_grade_level),
-        supervisorPin: (e.supervisorPin || e.supervisor_pin || '').toUpperCase(),
+        isCoordinatorExam: isUas,
+        supervisorPin: pin,
       };
     };
 
     if (res.success && Array.isArray(res.data)) {
-      return res.data.map(mapExamItem);
+      return res.data.map(mapExamItem).filter(Boolean);
     }
     const local = getLocal('exams', INITIAL_EXAMS);
-    const mappedLocal = local.map(mapExamItem);
+    const mappedLocal = local.map(mapExamItem).filter(Boolean);
     if (params.className) {
       return mappedLocal.filter((e) => e.className === params.className);
     }
@@ -437,52 +492,112 @@ export const elearningApi = {
 
   getExamById: async (id) => {
     const res = await fetchJson(`/exams/${id}`);
-    if (res.success && res.data) {
-      const e = res.data;
-      const className = e.className || e.class_code || e.classCode || '';
-      return {
-        ...e,
-        className,
-        class_code: className,
-        subject: e.subject || e.course_name || e.courseName || '',
-        subjectCode: e.subjectCode || e.course_id || e.courseId || 'MAPEL',
-        durationMinutes: Number(e.durationMinutes || e.duration_minutes || 60),
-        teacherName: e.teacherName || e.teacher_name || 'Bapak/Ibu Guru',
-        token: (e.token || '').toUpperCase(),
-        startDateTime: e.startDateTime || e.start_time || '',
-        endDateTime: e.endDateTime || e.end_time || '',
-        scheduledDate: e.scheduledDate || (e.startDateTime ? e.startDateTime.split('T')[0] : (e.start_time ? String(e.start_time).split('T')[0] : '')),
-        startTime: e.startTime || (e.startDateTime ? e.startDateTime.split('T')[1]?.slice(0, 5) : '08:00'),
-        endTime: e.endTime || (e.endDateTime ? e.endDateTime.split('T')[1]?.slice(0, 5) : '09:30'),
-        maxViolations: Number(e.maxViolations || e.max_violations || 3),
-        status: e.status || 'UPCOMING',
-      };
-    }
     const local = getLocal('exams', INITIAL_EXAMS);
-    const found = local.find((e) => e.id === id);
-    if (!found) return null;
+    const rawExam = (res.success && res.data) ? res.data : local.find((e) => e.id === id);
+    if (!rawExam) return null;
+
+    const className = rawExam.className || rawExam.class_code || rawExam.classCode || '';
+    const startDT = rawExam.startDateTime || rawExam.start_time || '';
+    const endDT = rawExam.endDateTime || rawExam.end_time || '';
+    let sDate = rawExam.scheduledDate || '';
+    let sTime = rawExam.startTime || '';
+    let eTime = rawExam.endTime || '';
+    if (!sDate && startDT) sDate = startDT.split('T')[0];
+    if (!sTime && startDT && startDT.includes('T')) sTime = startDT.split('T')[1].slice(0, 5);
+    if (!eTime && endDT && endDT.includes('T')) eTime = endDT.split('T')[1].slice(0, 5);
+
+    const token = (rawExam.token || '').toUpperCase();
+    const rawDesc = String(rawExam.description || '');
+    const title = String(rawExam.title || '');
+
+    const asasTagMatch = rawDesc.match(/\[ASAS:(\d+)\]/i);
+    const pinTagMatch = rawDesc.match(/\[PIN:([A-Z0-9]+)\]/i);
+
+    const isAsasByToken = token.startsWith('ASAS');
+    const isAsasByClass = /tingkat|semua rombel|semua kelas/i.test(className);
+    const isAsasByTitle = /asas|asesmen akhir|sumatif akhir|semester/i.test(title);
+    const isUas = Boolean(
+      asasTagMatch ||
+      rawExam.examCategory === 'SEMESTER_UAS' ||
+      rawExam.exam_category === 'SEMESTER_UAS' ||
+      rawExam.isUAS ||
+      rawExam.targetGradeLevel ||
+      rawExam.target_grade_level ||
+      isAsasByToken ||
+      isAsasByClass ||
+      (isAsasByTitle && !className.match(/^[789][A-H]$/i))
+    );
+
+    let gradeLevel = '';
+    if (asasTagMatch) {
+      gradeLevel = asasTagMatch[1];
+    } else if (rawExam.targetGradeLevel || rawExam.target_grade_level) {
+      gradeLevel = String(rawExam.targetGradeLevel || rawExam.target_grade_level);
+    } else {
+      const gradeMatch = className.match(/(?:tingkat|tk\.?|kelas)\s*([789])/i) || title.match(/(?:tingkat|tk\.?|kelas)\s*([789])/i);
+      if (gradeMatch) {
+        gradeLevel = gradeMatch[1];
+      } else if (isUas) {
+        gradeLevel = '7';
+      }
+    }
+
+    let pin = (rawExam.supervisorPin || rawExam.supervisor_pin || '').toUpperCase();
+    if (!pin && pinTagMatch) {
+      pin = pinTagMatch[1].toUpperCase();
+    }
+
+    const cleanDesc = rawDesc.replace(/\[ASAS:\d+\]/gi, '').replace(/\[PIN:[A-Z0-9]+\]/gi, '').trim();
+
     return {
-      ...found,
-      className: found.className || found.class_code || found.classCode || '',
-      subject: found.subject || found.course_name || found.courseName || '',
-      durationMinutes: Number(found.durationMinutes || found.duration_minutes || 60),
+      ...rawExam,
+      className,
+      class_code: className,
+      subject: rawExam.subject || rawExam.course_name || rawExam.courseName || '',
+      subjectCode: rawExam.subjectCode || rawExam.course_id || rawExam.courseId || 'MAPEL',
+      durationMinutes: Number(rawExam.durationMinutes || rawExam.duration_minutes || 60),
+      teacherName: rawExam.teacherName || rawExam.teacher_name || 'Bapak/Ibu Guru',
+      token,
+      startDateTime: startDT,
+      endDateTime: endDT,
+      scheduledDate: sDate || new Date().toISOString().split('T')[0],
+      startTime: sTime || '08:00',
+      endTime: eTime || '09:30',
+      maxViolations: Number(rawExam.maxViolations || rawExam.max_violations || 3),
+      status: rawExam.status || 'UPCOMING',
+      description: cleanDesc || rawDesc,
+      rawDescription: rawDesc,
+      examCategory: isUas ? 'SEMESTER_UAS' : 'REGULAR',
+      targetGradeLevel: isUas ? (gradeLevel || '7') : '',
+      targetClasses: Array.isArray(rawExam.targetClasses) ? rawExam.targetClasses : (Array.isArray(rawExam.target_classes) ? rawExam.target_classes : []),
+      isCoordinatorExam: isUas,
+      supervisorPin: pin,
     };
   },
 
   createExam: async (payload) => {
-    const generatedPin = payload.supervisorPin || (payload.examCategory === 'SEMESTER_UAS' || payload.targetGradeLevel ? generateRandomPin(6) : '');
+    const isUas = payload.examCategory === 'SEMESTER_UAS' || Boolean(payload.targetGradeLevel) || Boolean(payload.isCoordinatorExam);
+    const generatedPin = payload.supervisorPin || (isUas ? generateRandomPin(6) : '');
+    let desc = payload.description || '';
+    if (isUas) {
+      const lvl = payload.targetGradeLevel || '7';
+      desc = desc.replace(/\[ASAS:\d+\]/gi, '').replace(/\[PIN:[A-Z0-9]+\]/gi, '').trim();
+      desc = `[ASAS:${lvl}]${generatedPin ? `[PIN:${generatedPin}]` : ''} ${desc}`.trim();
+    }
+
     const enhancedPayload = {
       ...payload,
+      description: desc,
       class_code: payload.className || payload.class_code,
       course_name: payload.subject || payload.course_name,
       course_id: payload.subjectCode || payload.course_id || 'MAPEL',
       duration_minutes: Number(payload.durationMinutes || payload.duration_minutes || 60),
       teacher_name: payload.teacherName || payload.teacher_name || 'Bapak/Ibu Guru',
       token: (payload.token || '').toUpperCase(),
-      exam_category: payload.examCategory || (payload.targetGradeLevel ? 'SEMESTER_UAS' : 'REGULAR'),
-      target_grade_level: payload.targetGradeLevel || '',
+      exam_category: isUas ? 'SEMESTER_UAS' : 'REGULAR',
+      target_grade_level: isUas ? (payload.targetGradeLevel || '7') : '',
       target_classes: payload.targetClasses || [],
-      is_coordinator_exam: Boolean(payload.targetGradeLevel || payload.isCoordinatorExam),
+      is_coordinator_exam: isUas,
       supervisor_pin: generatedPin.toUpperCase(),
       supervisorPin: generatedPin.toUpperCase(),
     };
@@ -508,21 +623,38 @@ export const elearningApi = {
   },
 
   updateExam: async (id, payload) => {
+    const isUas = payload.examCategory === 'SEMESTER_UAS' || Boolean(payload.targetGradeLevel) || Boolean(payload.isCoordinatorExam);
+    let desc = payload.description || '';
+    if (isUas) {
+      const lvl = payload.targetGradeLevel || '7';
+      const pin = payload.supervisorPin || '';
+      desc = desc.replace(/\[ASAS:\d+\]/gi, '').replace(/\[PIN:[A-Z0-9]+\]/gi, '').trim();
+      desc = `[ASAS:${lvl}]${pin ? `[PIN:${pin}]` : ''} ${desc}`.trim();
+    }
+
     const enhancedPayload = {
       ...payload,
       id,
+      description: desc,
       ...(payload.className ? { class_code: payload.className } : {}),
       ...(payload.subject ? { course_name: payload.subject } : {}),
       ...(payload.subjectCode ? { course_id: payload.subjectCode } : {}),
       ...(payload.durationMinutes ? { duration_minutes: Number(payload.durationMinutes) } : {}),
       ...(payload.teacherName ? { teacher_name: payload.teacherName } : {}),
       ...(payload.teacherId ? { teacher_id: payload.teacherId } : {}),
+      ...(payload.token ? { token: payload.token.toUpperCase() } : {}),
+      ...(payload.status ? { status: payload.status } : {}),
+      ...(payload.startDateTime ? { startDateTime: payload.startDateTime, start_time: payload.startDateTime } : {}),
+      ...(payload.endDateTime ? { endDateTime: payload.endDateTime, end_time: payload.endDateTime } : {}),
+      ...(payload.scheduledDate ? { scheduledDate: payload.scheduledDate } : {}),
+      ...(payload.startTime ? { startTime: payload.startTime } : {}),
+      ...(payload.endTime ? { endTime: payload.endTime } : {}),
     };
 
     const res = await fetchJson(`/exams/${id}`, {
       method: 'PUT',
       body: JSON.stringify(enhancedPayload),
-    }).catch(() => null);
+    });
 
     const local = getLocal('exams', INITIAL_EXAMS);
     const updated = local.map((e) => {
@@ -530,15 +662,24 @@ export const elearningApi = {
         return {
           ...e,
           ...enhancedPayload,
+          status: payload.status || e.status,
           className: enhancedPayload.class_code || payload.className || e.className,
           subject: enhancedPayload.course_name || payload.subject || e.subject,
           subjectCode: enhancedPayload.course_id || payload.subjectCode || e.subjectCode,
           teacherName: enhancedPayload.teacher_name || payload.teacherName || e.teacherName,
+          token: (enhancedPayload.token || e.token || '').toUpperCase(),
+          examCategory: isUas ? 'SEMESTER_UAS' : (payload.examCategory || e.examCategory),
+          targetGradeLevel: payload.targetGradeLevel || e.targetGradeLevel,
+          supervisorPin: payload.supervisorPin || e.supervisorPin,
         };
       }
       return e;
     });
     setLocal('exams', updated);
+
+    if (!res.success && res.error) {
+      console.warn(`[updateExam] PUT /exams/${id} error:`, res.error);
+    }
     return res?.data || updated.find((e) => e.id === id) || null;
   },
 
