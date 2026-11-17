@@ -64,7 +64,15 @@ export default function TeacherExamsManagementPage() {
   const [optB, setOptB] = useState('');
   const [optC, setOptC] = useState('');
   const [optD, setOptD] = useState('');
+  const [optE, setOptE] = useState('');
   const [correctOption, setCorrectOption] = useState('A');
+  const [correctOptions, setCorrectOptions] = useState(['A']); // Untuk Pilihan Ganda Kompleks (Multi-Select)
+  const [trueFalseAnswer, setTrueFalseAnswer] = useState(true); // Untuk Benar / Salah
+  const [matchingPairs, setMatchingPairs] = useState([
+    { id: 1, left: '', right: '' },
+    { id: 2, left: '', right: '' },
+    { id: 3, left: '', right: '' },
+  ]); // Untuk Menjodohkan / Pencocokan
   const [mcqPoints, setMcqPoints] = useState(10);
   const [essayPoints, setEssayPoints] = useState(10);
   const [essayRubric, setEssayRubric] = useState('');
@@ -395,7 +403,15 @@ export default function TeacherExamsManagementPage() {
     setOptB('');
     setOptC('');
     setOptD('');
+    setOptE('');
     setCorrectOption('A');
+    setCorrectOptions(['A']);
+    setTrueFalseAnswer(true);
+    setMatchingPairs([
+      { id: 1, left: '', right: '' },
+      { id: 2, left: '', right: '' },
+      { id: 3, left: '', right: '' },
+    ]);
     setMcqPoints(10);
     setEssayPoints(10);
     setEssayRubric('');
@@ -417,22 +433,38 @@ export default function TeacherExamsManagementPage() {
 
   const handleEditQuestion = (q) => {
     setEditingQuestionId(q.id);
-    setNewQuestionType(q.type || 'MCQ');
+    const type = q.type || 'MCQ';
+    setNewQuestionType(type);
     setNewQuestionText(q.questionText || '');
     setStimulusText(q.stimulusText || '');
     setIsStimulusOpen(Boolean(q.stimulusText));
     setImageUrl(q.imageUrl || '');
     setIsImageOpen(Boolean(q.imageUrl));
-    if (q.type === 'MCQ') {
+    setMcqPoints(q.points || 10);
+    setEssayPoints(q.points || 10);
+
+    if (type === 'MCQ' || type === 'COMPLEX_MCQ') {
       const optMap = (q.options || []).reduce((acc, curr) => ({ ...acc, [curr.key]: curr.text }), {});
       setOptA(optMap['A'] || '');
       setOptB(optMap['B'] || '');
       setOptC(optMap['C'] || '');
       setOptD(optMap['D'] || '');
+      setOptE(optMap['E'] || '');
       setCorrectOption(q.correctOption || 'A');
-      setMcqPoints(q.points || 10);
+      setCorrectOptions(Array.isArray(q.correctOptions) && q.correctOptions.length > 0 ? q.correctOptions : [q.correctOption || 'A']);
+    } else if (type === 'TRUE_FALSE') {
+      setTrueFalseAnswer(q.trueFalseAnswer !== undefined ? q.trueFalseAnswer : (q.correctOption === 'TRUE' || q.correctOption === 'BENAR'));
+    } else if (type === 'MATCHING') {
+      if (Array.isArray(q.matchingPairs) && q.matchingPairs.length > 0) {
+        setMatchingPairs(q.matchingPairs);
+      } else {
+        setMatchingPairs([
+          { id: 1, left: '', right: '' },
+          { id: 2, left: '', right: '' },
+          { id: 3, left: '', right: '' },
+        ]);
+      }
     } else {
-      setEssayPoints(q.points || 10);
       setEssayRubric(q.essayRubric || '');
     }
   };
@@ -455,52 +487,86 @@ export default function TeacherExamsManagementPage() {
   const handleAddQuestion = async (e) => {
     e.preventDefault();
     if (!newQuestionText.trim()) {
-      alert('Teks pertanyaan soal tidak boleh kosong!');
+      alert('Teks pertanyaan / pernyataan soal tidak boleh kosong!');
       return;
     }
 
     if (newQuestionType === 'MCQ') {
       if (!optA.trim() || !optB.trim() || !optC.trim() || !optD.trim()) {
-        alert('Untuk soal pilihan ganda, mohon lengkapi semua Opsi A, B, C, dan D!');
+        alert('Untuk soal pilihan ganda tunggal, mohon lengkapi semua Opsi A, B, C, dan D!');
+        return;
+      }
+    }
+
+    if (newQuestionType === 'COMPLEX_MCQ') {
+      if (!optA.trim() || !optB.trim() || !optC.trim() || !optD.trim()) {
+        alert('Untuk soal pilihan ganda kompleks, mohon lengkapi opsi A, B, C, dan D!');
+        return;
+      }
+      if (!correctOptions || correctOptions.length === 0) {
+        alert('Untuk pilihan ganda kompleks, centang minimal 1 atau lebih jawaban kunci benar!');
+        return;
+      }
+    }
+
+    if (newQuestionType === 'MATCHING') {
+      const validPairs = matchingPairs.filter((p) => p.left.trim() && p.right.trim());
+      if (validPairs.length < 2) {
+        alert('Untuk soal menjodohkan / pencocokan, mohon isi minimal 2 pasang premis dan jawaban!');
         return;
       }
     }
 
     setIsSavingQuestion(true);
     try {
+      const optionsList = [];
+      if (newQuestionType === 'MCQ' || newQuestionType === 'COMPLEX_MCQ') {
+        if (optA.trim()) optionsList.push({ key: 'A', text: optA.trim() });
+        if (optB.trim()) optionsList.push({ key: 'B', text: optB.trim() });
+        if (optC.trim()) optionsList.push({ key: 'C', text: optC.trim() });
+        if (optD.trim()) optionsList.push({ key: 'D', text: optD.trim() });
+        if (optE.trim()) optionsList.push({ key: 'E', text: optE.trim() });
+      }
+
+      const validPairs = matchingPairs
+        .filter((p) => p.left.trim() && p.right.trim())
+        .map((p, idx) => ({ id: p.id || idx + 1, left: p.left.trim(), right: p.right.trim() }));
+
+      const targetPoints = Number(newQuestionType === 'ESSAY' ? essayPoints : mcqPoints) || 10;
+
       const newQ = {
-        id: `q-${Date.now()}`,
-        questionNumber: examQuestions.length + 1,
+        id: editingQuestionId || `q-${Date.now()}`,
+        questionNumber: editingQuestionId
+          ? (examQuestions.find((q) => q.id === editingQuestionId)?.questionNumber || examQuestions.length + 1)
+          : examQuestions.length + 1,
         type: newQuestionType,
         questionText: newQuestionText.trim(),
         stimulusText: stimulusText.trim() || undefined,
         imageUrl: imageUrl.trim() || undefined,
-        options:
-          newQuestionType === 'MCQ'
-            ? [
-                { key: 'A', text: optA.trim() || 'Opsi A' },
-                { key: 'B', text: optB.trim() || 'Opsi B' },
-                { key: 'C', text: optC.trim() || 'Opsi C' },
-                { key: 'D', text: optD.trim() || 'Opsi D' },
-              ]
-            : [],
-        correctOption: newQuestionType === 'MCQ' ? correctOption : '',
-        points: Number(newQuestionType === 'MCQ' ? mcqPoints : essayPoints) || 10,
+        options: optionsList,
+        correctOption: newQuestionType === 'MCQ' ? correctOption : (newQuestionType === 'TRUE_FALSE' ? (trueFalseAnswer ? 'TRUE' : 'FALSE') : ''),
+        correctOptions: newQuestionType === 'COMPLEX_MCQ' ? correctOptions : undefined,
+        trueFalseAnswer: newQuestionType === 'TRUE_FALSE' ? trueFalseAnswer : undefined,
+        matchingPairs: newQuestionType === 'MATCHING' ? validPairs : undefined,
+        points: targetPoints,
         essayRubric: newQuestionType === 'ESSAY' ? essayRubric.trim() || undefined : undefined,
       };
 
       let updated;
       if (editingQuestionId) {
-        updated = examQuestions.map((q) =>
-          q.id === editingQuestionId
-            ? { ...q, ...newQ, id: editingQuestionId, questionNumber: q.questionNumber }
-            : q
-        );
-        setSaveSuccessMsg(`✓ Soal #${examQuestions.find(q => q.id === editingQuestionId)?.questionNumber || ''} berhasil diperbarui!`);
+        updated = examQuestions.map((q) => (q.id === editingQuestionId ? { ...q, ...newQ } : q));
+        setSaveSuccessMsg(`✓ Soal #${newQ.questionNumber} berhasil diperbarui!`);
       } else {
         updated = [...examQuestions, newQ];
+        const labels = {
+          MCQ: 'Pilihan Ganda',
+          COMPLEX_MCQ: 'PG Kompleks',
+          TRUE_FALSE: 'Benar/Salah',
+          MATCHING: 'Menjodohkan',
+          ESSAY: 'Esai',
+        };
         setSaveSuccessMsg(
-          `✓ Soal #${newQ.questionNumber} (${newQuestionType === 'MCQ' ? 'Pilihan Ganda' : 'Esai'}) tersimpan!`
+          `✓ Soal #${newQ.questionNumber} (${labels[newQuestionType] || 'Soal'}) tersimpan!`
         );
       }
 
@@ -545,7 +611,7 @@ export default function TeacherExamsManagementPage() {
   };
 
   if (activeQuestionEditorExam) {
-    const mcqCount = examQuestions.filter((q) => q.type === 'MCQ').length;
+    const mcqCount = examQuestions.filter((q) => q.type !== 'ESSAY').length;
     const essayCount = examQuestions.filter((q) => q.type === 'ESSAY').length;
 
     return (
@@ -582,7 +648,7 @@ export default function TeacherExamsManagementPage() {
                   ⏱️ {activeQuestionEditorExam.durationMinutes || activeQuestionEditorExam.duration_minutes || 60} Menit
                 </span>
                 <span>•</span>
-                <span className="text-neutral-700 font-semibold">{examQuestions.length} Butir Soal ({mcqCount} PG, {essayCount} Esai)</span>
+                <span className="text-neutral-700 font-semibold">{examQuestions.length} Butir Soal ({mcqCount} Objektif, {essayCount} Esai)</span>
               </div>
             </div>
           </div>
@@ -651,59 +717,44 @@ export default function TeacherExamsManagementPage() {
               </div>
 
               <form onSubmit={handleAddQuestion} className="space-y-4">
-                {/* 1. Tipe Soal (Segmented Toggle) */}
+                {/* 1. Tipe Soal (Segmented Toggle 5 Variasi Soal) */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-neutral-800">Pilih Tipe Soal:</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setNewQuestionType('MCQ')}
-                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
-                        newQuestionType === 'MCQ'
-                          ? 'border-primary-500 bg-primary-50/70 ring-2 ring-primary-500/20 text-primary-950 font-medium'
-                          : 'border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-600'
-                      }`}
-                    >
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
-                        newQuestionType === 'MCQ' ? 'bg-primary-600 text-white' : 'bg-neutral-100 text-neutral-500'
-                      }`}>
-                        PG
-                      </div>
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-1.5">
-                          <p className="font-bold text-xs sm:text-sm text-neutral-900">Pilihan Ganda (A, B, C, D)</p>
-                          {newQuestionType === 'MCQ' && <span className="text-primary-600 font-bold text-xs">✓</span>}
-                        </div>
-                        <p className="text-[11px] text-neutral-500 leading-snug">
-                          Siswa memilih 1 opsi jawaban benar yang otomatis dinilai sistem CBT.
-                        </p>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setNewQuestionType('ESSAY')}
-                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
-                        newQuestionType === 'ESSAY'
-                          ? 'border-primary-500 bg-primary-50/70 ring-2 ring-primary-500/20 text-primary-950 font-medium'
-                          : 'border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-600'
-                      }`}
-                    >
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
-                        newQuestionType === 'ESSAY' ? 'bg-primary-600 text-white' : 'bg-neutral-100 text-neutral-500'
-                      }`}>
-                        ✍️
-                      </div>
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-1.5">
-                          <p className="font-bold text-xs sm:text-sm text-neutral-900">Soal Esai / Uraian</p>
-                          {newQuestionType === 'ESSAY' && <span className="text-primary-600 font-bold text-xs">✓</span>}
-                        </div>
-                        <p className="text-[11px] text-neutral-500 leading-snug">
-                          Jawaban teks bebas, penjelasan studi kasus, atau sub-soal (a, b, c).
-                        </p>
-                      </div>
-                    </button>
+                  <label className="text-xs font-bold text-neutral-800">Pilih Variasi Tipe Soal:</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                    {[
+                      { key: 'MCQ', icon: '🔘', badge: 'PG', title: 'Pilihan Ganda', desc: '1 Kunci Benar' },
+                      { key: 'COMPLEX_MCQ', icon: '☑️', badge: 'PGK', title: 'PG Kompleks', desc: 'Banyak Kunci Benar' },
+                      { key: 'TRUE_FALSE', icon: '⚖️', badge: 'B/S', title: 'Benar / Salah', desc: 'Pernyataan Logis' },
+                      { key: 'MATCHING', icon: '🔗', badge: 'Jodoh', title: 'Pencocokan', desc: 'Menjodohkan' },
+                      { key: 'ESSAY', icon: '✍️', badge: 'Esai', title: 'Soal Uraian', desc: 'Jawaban Bebas' },
+                    ].map((t) => {
+                      const isSel = newQuestionType === t.key;
+                      return (
+                        <button
+                          key={t.key}
+                          type="button"
+                          onClick={() => setNewQuestionType(t.key)}
+                          className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                            isSel
+                              ? 'border-primary-500 bg-primary-50/80 ring-2 ring-primary-500/20 text-primary-950 font-medium shadow-xs'
+                              : 'border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-600'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between w-full mb-1">
+                            <span className="text-base">{t.icon}</span>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                              isSel ? 'bg-primary-600 text-white' : 'bg-neutral-100 text-neutral-600'
+                            }`}>
+                              {t.badge}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="font-bold text-xs text-neutral-900 leading-tight">{t.title}</p>
+                            <p className="text-[10px] text-neutral-500 mt-0.5">{t.desc}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -832,6 +883,12 @@ export default function TeacherExamsManagementPage() {
                     placeholder={
                       newQuestionType === 'ESSAY'
                         ? 'Tuliskan pertanyaan esai di sini. Jika soal memiliki sub-pertanyaan, gunakan format terstruktur:&#10;a. Berdasarkan teks di atas, hitunglah denda yang harus dibayar!&#10;b. Tuliskan pseudocode algoritma untuk menghitung total denda!&#10;c. Gambarkan flowchart alur programnya!'
+                        : newQuestionType === 'TRUE_FALSE'
+                        ? 'Tuliskan pernyataan yang akan dinilai oleh siswa apakah BENAR atau SALAH... Contoh: Sudut siku-siku memiliki besar 90 derajat.'
+                        : newQuestionType === 'MATCHING'
+                        ? 'Tuliskan instruksi penjodohan... Contoh: Pasangkan istilah perangkat keras komputer di sebelah kiri dengan fungsinya di sebelah kanan!'
+                        : newQuestionType === 'COMPLEX_MCQ'
+                        ? 'Tuliskan pertanyaan pilihan ganda kompleks di sini... (Siswa dapat mencentang lebih dari 1 pilihan yang benar).'
                         : 'Tuliskan pertanyaan pilihan ganda di sini...'
                     }
                     value={newQuestionText}
@@ -841,7 +898,7 @@ export default function TeacherExamsManagementPage() {
                   />
                 </div>
 
-                {/* 4A. Form Khusus Pilihan Ganda: Opsi A, B, C, D & Kunci */}
+                {/* 4A. Form Khusus Pilihan Ganda Tunggal: Opsi A, B, C, D & 1 Kunci */}
                 {newQuestionType === 'MCQ' && (
                   <div className="p-4 rounded-xl bg-neutral-50/80 border border-neutral-200 space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
@@ -849,7 +906,7 @@ export default function TeacherExamsManagementPage() {
                         Opsi Pilihan Jawaban & Tentukan Kunci Jawaban Benar:
                       </label>
                       <span className="text-[11px] text-neutral-500 font-medium">
-                        Klik tombol huruf untuk memilih kunci benar
+                        Klik tombol huruf untuk memilih 1 kunci benar
                       </span>
                     </div>
 
@@ -859,6 +916,7 @@ export default function TeacherExamsManagementPage() {
                         { key: 'B', value: optB, setter: setOptB },
                         { key: 'C', value: optC, setter: setOptC },
                         { key: 'D', value: optD, setter: setOptD },
+                        { key: 'E', value: optE, setter: setOptE, optional: true },
                       ].map((opt) => {
                         const isCorrect = correctOption === opt.key;
                         return (
@@ -885,11 +943,11 @@ export default function TeacherExamsManagementPage() {
 
                             <input
                               type="text"
-                              placeholder={`Teks Jawaban Opsi ${opt.key}...`}
+                              placeholder={`Teks Jawaban Opsi ${opt.key}${opt.optional ? ' (Opsional)...' : '...'}`}
                               value={opt.value}
                               onChange={(e) => opt.setter(e.target.value)}
                               className="w-full text-xs bg-transparent border-0 focus:outline-hidden p-1 font-medium text-neutral-800"
-                              required
+                              required={!opt.optional}
                             />
 
                             {isCorrect && (
@@ -902,14 +960,14 @@ export default function TeacherExamsManagementPage() {
                       })}
                     </div>
 
-                    {/* Bobot Skor Pilihan Ganda Per Butir Soal */}
+                    {/* Bobot Skor */}
                     <div className="flex items-center justify-between p-3 rounded-xl bg-primary-50/70 border border-primary-200">
                       <div>
                         <label className="text-xs font-bold text-neutral-800">
                           Bobot Skor / Nilai Butir Soal Ini:
                         </label>
                         <p className="text-[11px] text-neutral-500">
-                          Poin yang diperoleh siswa jika memilih jawaban kunci benar
+                          Poin otomatis yang didapat siswa jika menjawab benar
                         </p>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
@@ -927,7 +985,281 @@ export default function TeacherExamsManagementPage() {
                   </div>
                 )}
 
-                {/* 4B. Form Khusus Esai / Uraian */}
+                {/* 4B. Form Khusus Pilihan Ganda Kompleks (Multi-Select Checkbox) */}
+                {newQuestionType === 'COMPLEX_MCQ' && (
+                  <div className="p-4 rounded-xl bg-primary-50/40 border border-primary-200 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                      <label className="text-xs font-bold text-neutral-800 flex items-center gap-1.5">
+                        <span>☑️</span>
+                        <span>Opsi Jawaban & Centang Semua Kunci yang Benar (Bisa Lebih Dari 1):</span>
+                      </label>
+                      <span className="text-[11px] text-primary-700 font-semibold">
+                        {correctOptions.length} Opsi Terpilih Sebagai Kunci
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {[
+                        { key: 'A', value: optA, setter: setOptA },
+                        { key: 'B', value: optB, setter: setOptB },
+                        { key: 'C', value: optC, setter: setOptC },
+                        { key: 'D', value: optD, setter: setOptD },
+                        { key: 'E', value: optE, setter: setOptE, optional: true },
+                      ].map((opt) => {
+                        const isChecked = correctOptions.includes(opt.key);
+                        return (
+                          <div
+                            key={opt.key}
+                            className={`flex items-center gap-2 p-2 rounded-xl border transition-all ${
+                              isChecked
+                                ? 'bg-primary-50 border-primary-400 ring-1 ring-primary-400'
+                                : 'bg-white border-neutral-300'
+                            }`}
+                          >
+                            <label className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-100 hover:bg-neutral-200 cursor-pointer shrink-0">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  setCorrectOptions((prev) =>
+                                    prev.includes(opt.key)
+                                      ? (prev.length > 1 ? prev.filter((k) => k !== opt.key) : prev)
+                                      : [...prev, opt.key]
+                                  );
+                                }}
+                                className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500 cursor-pointer"
+                              />
+                              <span className="font-bold text-xs text-neutral-800">{opt.key}</span>
+                            </label>
+
+                            <input
+                              type="text"
+                              placeholder={`Teks Pernyataan / Opsi ${opt.key}${opt.optional ? ' (Opsional)...' : '...'}`}
+                              value={opt.value}
+                              onChange={(e) => opt.setter(e.target.value)}
+                              className="w-full text-xs bg-transparent border-0 focus:outline-hidden p-1 font-medium text-neutral-800"
+                              required={!opt.optional}
+                            />
+
+                            {isChecked && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary-600 text-white shrink-0 mr-1">
+                                ✓ KUNCI BENAR
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Bobot Skor */}
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-primary-200">
+                      <div>
+                        <label className="text-xs font-bold text-neutral-800">
+                          Bobot Skor Butir Soal PG Kompleks:
+                        </label>
+                        <p className="text-[11px] text-neutral-500">
+                          Siswa memperoleh poin jika mencentang seluruh kombinasi opsi yang benar
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={mcqPoints}
+                          onChange={(e) => setMcqPoints(e.target.value)}
+                          className="w-20 text-xs font-bold p-2 text-center rounded-lg border border-primary-300 bg-white"
+                        />
+                        <span className="text-xs font-semibold text-neutral-600">Poin</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4C. Form Khusus Benar / Salah (True / False) */}
+                {newQuestionType === 'TRUE_FALSE' && (
+                  <div className="p-4 rounded-xl bg-emerald-50/50 border border-emerald-200 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                      <label className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                        <span>⚖️</span>
+                        <span>Tentukan Kunci Kebenaran dari Pernyataan Soal:</span>
+                      </label>
+                      <span className="text-[11px] text-emerald-800 font-semibold">
+                        Kunci: {trueFalseAnswer ? 'BENAR (TRUE)' : 'SALAH (FALSE)'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setTrueFalseAnswer(true)}
+                        className={`p-4 rounded-xl border-2 text-center transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                          trueFalseAnswer
+                            ? 'bg-emerald-600 border-emerald-700 text-white shadow-sm ring-2 ring-emerald-500/30'
+                            : 'bg-white border-neutral-300 hover:border-emerald-300 text-neutral-700'
+                        }`}
+                      >
+                        <span className="text-base font-black">✓</span>
+                        <div className="text-left">
+                          <p className="font-bold text-xs sm:text-sm leading-tight">BENAR (TRUE)</p>
+                          <p className={`text-[10px] ${trueFalseAnswer ? 'text-emerald-100' : 'text-neutral-500'}`}>Pernyataan di atas bernilai benar</p>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setTrueFalseAnswer(false)}
+                        className={`p-4 rounded-xl border-2 text-center transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                          !trueFalseAnswer
+                            ? 'bg-rose-600 border-rose-700 text-white shadow-sm ring-2 ring-rose-500/30'
+                            : 'bg-white border-neutral-300 hover:border-rose-300 text-neutral-700'
+                        }`}
+                      >
+                        <span className="text-base font-black">✕</span>
+                        <div className="text-left">
+                          <p className="font-bold text-xs sm:text-sm leading-tight">SALAH (FALSE)</p>
+                          <p className={`text-[10px] ${!trueFalseAnswer ? 'text-rose-100' : 'text-neutral-500'}`}>Pernyataan di atas bernilai salah</p>
+                        </div>
+                      </button>
+                    </div>
+
+                    {/* Bobot Skor */}
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-emerald-200">
+                      <div>
+                        <label className="text-xs font-bold text-neutral-800">
+                          Bobot Skor Butir Soal Benar/Salah:
+                        </label>
+                        <p className="text-[11px] text-neutral-500">
+                          Poin otomatis yang didapat jika siswa memilih nilai kebenaran yang tepat
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={mcqPoints}
+                          onChange={(e) => setMcqPoints(e.target.value)}
+                          className="w-20 text-xs font-bold p-2 text-center rounded-lg border border-emerald-300 bg-white"
+                        />
+                        <span className="text-xs font-semibold text-neutral-600">Poin</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4D. Form Khusus Menjodohkan / Pencocokan (Matching Pairs) */}
+                {newQuestionType === 'MATCHING' && (
+                  <div className="p-4 rounded-xl bg-violet-50/50 border border-violet-200 space-y-3.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                      <label className="text-xs font-bold text-violet-950 flex items-center gap-1.5">
+                        <span>🔗</span>
+                        <span>Daftar Pasangan Menjodohkan (Premis Kiri ↔ Pasangan Kanan):</span>
+                      </label>
+                      <span className="text-[11px] text-violet-800 font-medium">
+                        Minimal 2 pasangan pencocokan
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {matchingPairs.map((pair, idx) => (
+                        <div
+                          key={pair.id || idx}
+                          className="p-2.5 rounded-xl bg-white border border-violet-200 flex flex-col sm:flex-row sm:items-center gap-2"
+                        >
+                          <span className="w-6 h-6 rounded-md bg-violet-100 text-violet-700 font-bold text-xs flex items-center justify-center shrink-0">
+                            {idx + 1}
+                          </span>
+
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              placeholder={`Premis / Soal Kiri ${idx + 1}...`}
+                              value={pair.left}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setMatchingPairs((prev) =>
+                                  prev.map((p, i) => (i === idx ? { ...p, left: val } : p))
+                                );
+                              }}
+                              className="w-full text-xs p-2 rounded-lg border border-neutral-300 focus:outline-hidden focus:border-violet-500 font-medium"
+                              required
+                            />
+                          </div>
+
+                          <span className="text-violet-500 font-black text-sm text-center shrink-0 hidden sm:inline">↔</span>
+
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              placeholder={`Jawaban Cocok Kanan ${idx + 1}...`}
+                              value={pair.right}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setMatchingPairs((prev) =>
+                                  prev.map((p, i) => (i === idx ? { ...p, right: val } : p))
+                                );
+                              }}
+                              className="w-full text-xs p-2 rounded-lg border border-neutral-300 focus:outline-hidden focus:border-violet-500 font-medium"
+                              required
+                            />
+                          </div>
+
+                          {matchingPairs.length > 2 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMatchingPairs((prev) => prev.filter((_, i) => i !== idx));
+                              }}
+                              className="text-danger-600 hover:text-danger-800 p-1 rounded hover:bg-danger-50 font-bold text-xs shrink-0 cursor-pointer"
+                              title="Hapus Pasangan Ini"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMatchingPairs((prev) => [
+                          ...prev,
+                          { id: Date.now(), left: '', right: '' },
+                        ]);
+                      }}
+                      className="text-xs font-bold text-violet-700 hover:text-violet-900 bg-white hover:bg-violet-100 border border-violet-300 px-3 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>+ Tambah Pasangan Menjodohkan</span>
+                    </button>
+
+                    {/* Bobot Skor */}
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-violet-200">
+                      <div>
+                        <label className="text-xs font-bold text-neutral-800">
+                          Total Bobot Skor Soal Menjodohkan:
+                        </label>
+                        <p className="text-[11px] text-neutral-500">
+                          Poin dihitung secara proporsional berdasarkan jumlah pasangan yang dicocokkan dengan tepat
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={mcqPoints}
+                          onChange={(e) => setMcqPoints(e.target.value)}
+                          className="w-20 text-xs font-bold p-2 text-center rounded-lg border border-violet-300 bg-white"
+                        />
+                        <span className="text-xs font-semibold text-neutral-600">Poin</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4E. Form Khusus Esai / Uraian */}
                 {newQuestionType === 'ESSAY' && (
                   <div className="p-4 rounded-xl bg-primary-50/60 border border-primary-200 space-y-3.5">
                     <div className="flex items-center gap-2 text-primary-900 font-bold text-xs">
@@ -1047,9 +1379,25 @@ export default function TeacherExamsManagementPage() {
                             #{idx + 1}
                           </span>
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            q.type === 'MCQ' ? 'bg-primary-100 text-primary-800' : 'bg-secondary-100 text-secondary-800'
+                            q.type === 'MCQ'
+                              ? 'bg-primary-100 text-primary-800'
+                              : q.type === 'COMPLEX_MCQ'
+                              ? 'bg-blue-100 text-blue-800'
+                              : q.type === 'TRUE_FALSE'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : q.type === 'MATCHING'
+                              ? 'bg-violet-100 text-violet-800'
+                              : 'bg-secondary-100 text-secondary-800'
                           }`}>
-                            {q.type === 'MCQ' ? 'Pilihan Ganda' : 'Esai'}
+                            {q.type === 'MCQ'
+                              ? 'Pilihan Ganda'
+                              : q.type === 'COMPLEX_MCQ'
+                              ? 'PG Kompleks'
+                              : q.type === 'TRUE_FALSE'
+                              ? 'Benar / Salah'
+                              : q.type === 'MATCHING'
+                              ? 'Menjodohkan'
+                              : 'Esai'}
                           </span>
                           {q.stimulusText && (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
@@ -1065,20 +1413,33 @@ export default function TeacherExamsManagementPage() {
 
                         <div className="flex items-center gap-1.5">
                           {q.type === 'MCQ' && (
-                            <>
-                              <span className="font-bold text-success-700 bg-success-50 px-2 py-0.5 rounded border border-success-200 text-[10px]">
-                                Kunci: {q.correctOption}
-                              </span>
-                              <span className="font-bold text-primary-700 bg-primary-50 px-2 py-0.5 rounded border border-primary-200 text-[10px]">
-                                {q.points || 10} Poin
-                              </span>
-                            </>
-                          )}
-                          {q.type === 'ESSAY' && (
-                            <span className="font-bold text-secondary-700 bg-secondary-50 px-2 py-0.5 rounded border border-secondary-200 text-[10px]">
-                              {q.points || 10} Poin (Esai)
+                            <span className="font-bold text-success-700 bg-success-50 px-2 py-0.5 rounded border border-success-200 text-[10px]">
+                              Kunci: {q.correctOption}
                             </span>
                           )}
+                          {q.type === 'COMPLEX_MCQ' && (
+                            <span className="font-bold text-primary-700 bg-primary-50 px-2 py-0.5 rounded border border-primary-200 text-[10px]">
+                              Kunci: {Array.isArray(q.correctOptions) ? q.correctOptions.join(', ') : q.correctOption}
+                            </span>
+                          )}
+                          {q.type === 'TRUE_FALSE' && (
+                            <span className={`font-bold px-2 py-0.5 rounded border text-[10px] ${
+                              q.trueFalseAnswer || q.correctOption === 'TRUE'
+                                ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                                : 'text-rose-700 bg-rose-50 border-rose-200'
+                            }`}>
+                              Kunci: {q.trueFalseAnswer || q.correctOption === 'TRUE' ? 'BENAR' : 'SALAH'}
+                            </span>
+                          )}
+                          {q.type === 'MATCHING' && (
+                            <span className="font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded border border-violet-200 text-[10px]">
+                              {Array.isArray(q.matchingPairs) ? q.matchingPairs.length : 0} Pasang
+                            </span>
+                          )}
+                          <span className="font-bold text-neutral-700 bg-neutral-100 px-2 py-0.5 rounded border border-neutral-200 text-[10px]">
+                            {q.points || 10} Poin
+                          </span>
+
                           <button
                             type="button"
                             onClick={() => handleEditQuestion(q)}
@@ -1112,20 +1473,41 @@ export default function TeacherExamsManagementPage() {
                         {q.questionText}
                       </p>
 
-                      {q.type === 'MCQ' && (
+                      {/* Detail Preview Tiap Tipe Soal */}
+                      {(q.type === 'MCQ' || q.type === 'COMPLEX_MCQ') && (
                         <div className="grid grid-cols-2 gap-1 text-[11px] text-neutral-600 pt-1">
-                          {q.options?.map((opt) => (
-                            <span
-                              key={opt.key}
-                              className={`truncate px-1.5 py-0.5 rounded ${
-                                opt.key === q.correctOption
-                                  ? 'font-bold text-success-700 bg-success-100/70 border border-success-200'
-                                  : 'bg-white border border-neutral-200'
-                              }`}
-                            >
-                              <strong>{opt.key}.</strong> {opt.text}
-                            </span>
+                          {q.options?.map((opt) => {
+                            const isKey = q.type === 'MCQ'
+                              ? opt.key === q.correctOption
+                              : Array.isArray(q.correctOptions) && q.correctOptions.includes(opt.key);
+                            return (
+                              <span
+                                key={opt.key}
+                                className={`truncate px-1.5 py-0.5 rounded ${
+                                  isKey
+                                    ? 'font-bold text-success-700 bg-success-100/70 border border-success-200'
+                                    : 'bg-white border border-neutral-200'
+                                }`}
+                              >
+                                <strong>{opt.key}.</strong> {opt.text}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {q.type === 'MATCHING' && Array.isArray(q.matchingPairs) && (
+                        <div className="space-y-1 pt-1">
+                          {q.matchingPairs.slice(0, 3).map((p, i) => (
+                            <div key={i} className="text-[11px] flex items-center justify-between bg-white border border-violet-100 px-2 py-0.5 rounded">
+                              <span className="font-semibold text-neutral-800 truncate max-w-[120px]">{p.left}</span>
+                              <span className="text-violet-500 font-bold px-1">↔</span>
+                              <span className="text-neutral-600 truncate max-w-[120px]">{p.right}</span>
+                            </div>
                           ))}
+                          {q.matchingPairs.length > 3 && (
+                            <p className="text-[10px] text-neutral-400 italic text-right">+{q.matchingPairs.length - 3} pasangan lainnya...</p>
+                          )}
                         </div>
                       )}
                     </div>

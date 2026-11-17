@@ -225,13 +225,14 @@ export default function CBTExamRunnerPage({ params }) {
 
   const currentQ = questions[currentIndex] || null;
 
-  // Handle Select Option (MCQ)
+  // Handle Select Option (MCQ Tunggal)
   const handleSelectOption = (key) => {
     if (!currentQ || isLocked) return;
     const isCurrentDoubtful = doubtfuls[currentQ.id] || false;
     const newAnswers = {
       ...answers,
       [currentQ.id]: {
+        ...answers[currentQ.id],
         selectedOption: key,
         isDoubtful: isCurrentDoubtful,
       },
@@ -239,13 +240,101 @@ export default function CBTExamRunnerPage({ params }) {
     setAnswers(newAnswers);
 
     const activeStudentId = session?.studentId || user?.id || user?.nisn || 'std-active';
-
     elearningApi.saveAnswer(
       session?.sessionId,
       examId,
       activeStudentId,
       currentQ.id,
       key,
+      '',
+      isCurrentDoubtful
+    );
+  };
+
+  // Handle Toggle Option (Pilihan Ganda Kompleks - Multi-Select)
+  const handleToggleComplexOption = (key) => {
+    if (!currentQ || isLocked) return;
+    const isCurrentDoubtful = doubtfuls[currentQ.id] || false;
+    const currentList = Array.isArray(answers[currentQ.id]?.selectedOptions)
+      ? answers[currentQ.id].selectedOptions
+      : [];
+    const nextList = currentList.includes(key)
+      ? currentList.filter((k) => k !== key)
+      : [...currentList, key];
+
+    const newAnswers = {
+      ...answers,
+      [currentQ.id]: {
+        ...answers[currentQ.id],
+        selectedOptions: nextList,
+        isDoubtful: isCurrentDoubtful,
+      },
+    };
+    setAnswers(newAnswers);
+
+    const activeStudentId = session?.studentId || user?.id || user?.nisn || 'std-active';
+    elearningApi.saveAnswer(
+      session?.sessionId,
+      examId,
+      activeStudentId,
+      currentQ.id,
+      nextList.join(','),
+      '',
+      isCurrentDoubtful
+    );
+  };
+
+  // Handle Select True / False (Benar atau Salah)
+  const handleSelectTrueFalse = (val) => {
+    if (!currentQ || isLocked) return;
+    const isCurrentDoubtful = doubtfuls[currentQ.id] || false;
+    const newAnswers = {
+      ...answers,
+      [currentQ.id]: {
+        ...answers[currentQ.id],
+        selectedOption: val, // 'TRUE' | 'FALSE'
+        trueFalseAnswer: val === 'TRUE',
+        isDoubtful: isCurrentDoubtful,
+      },
+    };
+    setAnswers(newAnswers);
+
+    const activeStudentId = session?.studentId || user?.id || user?.nisn || 'std-active';
+    elearningApi.saveAnswer(
+      session?.sessionId,
+      examId,
+      activeStudentId,
+      currentQ.id,
+      val,
+      '',
+      isCurrentDoubtful
+    );
+  };
+
+  // Handle Select Matching Pair (Menjodohkan / Pencocokan)
+  const handleSelectMatchingPair = (pairId, rightVal) => {
+    if (!currentQ || isLocked) return;
+    const isCurrentDoubtful = doubtfuls[currentQ.id] || false;
+    const prevMatching = answers[currentQ.id]?.matchingAnswers || {};
+    const nextMatching = { ...prevMatching, [pairId]: rightVal };
+
+    const newAnswers = {
+      ...answers,
+      [currentQ.id]: {
+        ...answers[currentQ.id],
+        matchingAnswers: nextMatching,
+        isDoubtful: isCurrentDoubtful,
+      },
+    };
+    setAnswers(newAnswers);
+
+    const activeStudentId = session?.studentId || user?.id || user?.nisn || 'std-active';
+    elearningApi.saveAnswer(
+      session?.sessionId,
+      examId,
+      activeStudentId,
+      currentQ.id,
+      JSON.stringify(nextMatching),
       '',
       isCurrentDoubtful
     );
@@ -439,14 +528,31 @@ export default function CBTExamRunnerPage({ params }) {
     );
   }
 
+  // Helper mengecek apakah suatu nomor soal sudah dijawab oleh siswa
+  const checkIsAnswered = (q) => {
+    if (!q) return false;
+    const ans = answers[q.id];
+    if (!ans) return false;
+    if (q.type === 'MCQ' || q.type === 'TRUE_FALSE') {
+      return Boolean(ans.selectedOption && String(ans.selectedOption).trim() !== '');
+    }
+    if (q.type === 'COMPLEX_MCQ') {
+      return Array.isArray(ans.selectedOptions) && ans.selectedOptions.length > 0;
+    }
+    if (q.type === 'MATCHING') {
+      const mAns = ans.matchingAnswers || {};
+      const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
+      return pairs.length > 0 && pairs.every((p) => Boolean(mAns[p.id]));
+    }
+    if (q.type === 'ESSAY') {
+      return Boolean(ans.essayAnswer && String(ans.essayAnswer).trim() !== '');
+    }
+    return Boolean(ans.selectedOption || ans.essayAnswer);
+  };
+
   // Answer status summary
   const totalQuestions = questions.length;
-  const answeredCount = questions.filter((q) =>
-    Boolean(
-      (answers[q.id]?.selectedOption && String(answers[q.id]?.selectedOption).trim() !== '') ||
-      (answers[q.id]?.essayAnswer && String(answers[q.id]?.essayAnswer).trim() !== '')
-    )
-  ).length;
+  const answeredCount = questions.filter((q) => checkIsAnswered(q)).length;
   const doubtfulCount = questions.filter((q) => Boolean(doubtfuls[q.id])).length;
   const unansweredCount = Math.max(0, totalQuestions - answeredCount);
 
@@ -596,10 +702,7 @@ export default function CBTExamRunnerPage({ params }) {
           <div className="grid grid-cols-5 gap-2">
             {questions.map((q, idx) => {
               const isCurrent = idx === currentIndex;
-              const isAnswered = Boolean(
-                (answers[q.id]?.selectedOption && String(answers[q.id]?.selectedOption).trim() !== '') ||
-                (answers[q.id]?.essayAnswer && String(answers[q.id]?.essayAnswer).trim() !== '')
-              );
+              const isAnswered = checkIsAnswered(q);
               const isDoubtful = Boolean(doubtfuls[q.id]);
 
               let circleClass = 'border-2 border-neutral-300 text-neutral-600 bg-white hover:border-neutral-400';
@@ -714,21 +817,44 @@ export default function CBTExamRunnerPage({ params }) {
               )}
 
               {/* 3. Teks Pertanyaan */}
-              <div className="text-sm sm:text-base text-neutral-900 leading-relaxed whitespace-pre-wrap">
+              <div className="text-sm sm:text-base text-neutral-900 leading-relaxed whitespace-pre-wrap font-medium">
                 {currentQ?.questionText}
               </div>
 
-              {/* Petunjuk Pengerjaan */}
+              {/* Petunjuk Pengerjaan Berdasarkan Tipe Soal */}
               {currentQ?.type === 'MCQ' && (
                 <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-xs">
                   <svg className="w-4 h-4 shrink-0 mt-0.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span><strong>Petunjuk Pengerjaan:</strong> Silakan klik pilihan jawabanmu.</span>
+                  <span><strong>Pilihan Ganda (Tunggal):</strong> Silakan klik salah satu opsi jawaban yang paling tepat.</span>
                 </div>
               )}
 
-              {/* Multiple Choice Options */}
+              {currentQ?.type === 'COMPLEX_MCQ' && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-primary-50 border border-primary-200 text-primary-900 text-xs">
+                  <svg className="w-4 h-4 shrink-0 mt-0.5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span><strong>Pilihan Ganda Kompleks:</strong> Centang semua pilihan yang Anda anggap benar (bisa memilih lebih dari satu jawaban).</span>
+                </div>
+              )}
+
+              {currentQ?.type === 'TRUE_FALSE' && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs">
+                  <span className="text-sm">⚖️</span>
+                  <span><strong>Benar / Salah:</strong> Tentukan apakah pernyataan di atas bernilai BENAR atau SALAH dengan menekan salah satu tombol pilihan di bawah.</span>
+                </div>
+              )}
+
+              {currentQ?.type === 'MATCHING' && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-violet-50 border border-violet-200 text-violet-950 text-xs">
+                  <span className="text-sm">🔗</span>
+                  <span><strong>Pencocokan / Menjodohkan:</strong> Pasangkan setiap premis di kolom kiri dengan pilihan jawaban yang cocok pada kolom kanan.</span>
+                </div>
+              )}
+
+              {/* 4A. Pilihan Ganda Tunggal (Radio Style) */}
               {currentQ?.type === 'MCQ' && (
                 <div className="space-y-2.5 pt-1">
                   {currentQ?.options?.map((opt) => {
@@ -762,7 +888,152 @@ export default function CBTExamRunnerPage({ params }) {
                 </div>
               )}
 
-              {/* Essay Textarea (Mendukung jawaban per sub-poin a, b, c) */}
+              {/* 4B. Pilihan Ganda Kompleks (Checkbox Multi-Select) */}
+              {currentQ?.type === 'COMPLEX_MCQ' && (
+                <div className="space-y-2.5 pt-1">
+                  {currentQ?.options?.map((opt) => {
+                    const selectedList = Array.isArray(answers[currentQ.id]?.selectedOptions)
+                      ? answers[currentQ.id].selectedOptions
+                      : [];
+                    const isSelected = selectedList.includes(opt.key);
+
+                    return (
+                      <div
+                        key={opt.key}
+                        onClick={() => handleToggleComplexOption(opt.key)}
+                        className={`flex items-center gap-3.5 p-3.5 sm:p-4 rounded-2xl border-2 transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-primary-50 border-primary-500 shadow-xs ring-1 ring-primary-500/20'
+                            : 'bg-white border-neutral-200 hover:border-primary-300 hover:bg-neutral-50/50'
+                        }`}
+                      >
+                        <div
+                          className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-black shrink-0 transition-colors border ${
+                            isSelected
+                              ? 'bg-primary-600 border-primary-600 text-white'
+                              : 'bg-white border-neutral-300 text-transparent'
+                          }`}
+                        >
+                          ✓
+                        </div>
+                        <span className="w-6 h-6 rounded-md bg-neutral-100 text-neutral-700 font-bold text-xs flex items-center justify-center shrink-0">
+                          {opt.key}
+                        </span>
+                        <span className="text-xs sm:text-sm text-neutral-800 leading-normal flex-1">
+                          {opt.text}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* 4C. Benar / Salah (True / False Interactive Buttons) */}
+              {currentQ?.type === 'TRUE_FALSE' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                  {(() => {
+                    const ansVal = answers[currentQ.id]?.selectedOption;
+                    const isTrue = ansVal === 'TRUE' || answers[currentQ.id]?.trueFalseAnswer === true;
+                    const isFalse = ansVal === 'FALSE' || answers[currentQ.id]?.trueFalseAnswer === false;
+
+                    return (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectTrueFalse('TRUE')}
+                          className={`p-5 rounded-2xl border-2 text-center transition-all cursor-pointer flex items-center justify-center gap-3 ${
+                            isTrue
+                              ? 'bg-emerald-600 border-emerald-700 text-white shadow-md ring-2 ring-emerald-500/30'
+                              : 'bg-white border-neutral-200 hover:border-emerald-400 hover:bg-emerald-50/30 text-neutral-800'
+                          }`}
+                        >
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-base shrink-0 ${
+                            isTrue ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700'
+                          }`}>
+                            ✓
+                          </div>
+                          <div className="text-left">
+                            <p className="font-bold text-sm sm:text-base leading-tight">BENAR (TRUE)</p>
+                            <p className={`text-xs ${isTrue ? 'text-emerald-100' : 'text-neutral-500'}`}>Pernyataan di atas bernilai benar</p>
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSelectTrueFalse('FALSE')}
+                          className={`p-5 rounded-2xl border-2 text-center transition-all cursor-pointer flex items-center justify-center gap-3 ${
+                            isFalse
+                              ? 'bg-rose-600 border-rose-700 text-white shadow-md ring-2 ring-rose-500/30'
+                              : 'bg-white border-neutral-200 hover:border-rose-400 hover:bg-rose-50/30 text-neutral-800'
+                          }`}
+                        >
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-base shrink-0 ${
+                            isFalse ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-700'
+                          }`}>
+                            ✕
+                          </div>
+                          <div className="text-left">
+                            <p className="font-bold text-sm sm:text-base leading-tight">SALAH (FALSE)</p>
+                            <p className={`text-xs ${isFalse ? 'text-rose-100' : 'text-neutral-500'}`}>Pernyataan di atas bernilai salah</p>
+                          </div>
+                        </button>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* 4D. Menjodohkan / Pencocokan (Matching Pairs) */}
+              {currentQ?.type === 'MATCHING' && (
+                <div className="space-y-3 pt-2">
+                  {(() => {
+                    const pairs = Array.isArray(currentQ?.matchingPairs) ? currentQ.matchingPairs : [];
+                    const allRightOptions = Array.from(new Set(pairs.map((p) => p.right))).filter(Boolean);
+
+                    return pairs.map((pair, pIdx) => {
+                      const selectedRight = answers[currentQ.id]?.matchingAnswers?.[pair.id] || '';
+
+                      return (
+                        <div
+                          key={pair.id || pIdx}
+                          className="p-3.5 sm:p-4 rounded-xl border border-neutral-200 bg-neutral-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs"
+                        >
+                          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                            <span className="w-7 h-7 rounded-lg bg-neutral-800 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                              {pIdx + 1}
+                            </span>
+                            <p className="text-xs sm:text-sm font-semibold text-neutral-900 leading-snug">
+                              {pair.left}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2 sm:w-1/2 shrink-0">
+                            <span className="text-neutral-400 font-bold hidden sm:inline">↔</span>
+                            <select
+                              value={selectedRight}
+                              onChange={(e) => handleSelectMatchingPair(pair.id, e.target.value)}
+                              className={`w-full text-xs sm:text-sm p-2.5 rounded-lg border font-medium transition-colors cursor-pointer ${
+                                selectedRight
+                                  ? 'bg-violet-50 border-violet-400 text-violet-950 font-semibold ring-1 ring-violet-400/20'
+                                  : 'bg-white border-neutral-300 text-neutral-600'
+                              }`}
+                            >
+                              <option value="">-- Pilih Pasangan Jawaban --</option>
+                              {allRightOptions.map((optText, oIdx) => (
+                                <option key={oIdx} value={optText}>
+                                  {optText}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
+
+              {/* 4E. Essay Textarea (Mendukung jawaban per sub-poin a, b, c) */}
               {currentQ?.type === 'ESSAY' && (
                 <div className="space-y-2 pt-2">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs text-neutral-600">

@@ -619,6 +619,10 @@ export const elearningApi = {
         imageUrl: q.imageUrl || q.image_url || '',
         options: options,
         correctOption: q.correctOption || q.correct_answer || 'A',
+        correctOptions: Array.isArray(q.correctOptions) ? q.correctOptions : (q.correct_answers || []),
+        trueFalseAnswer: q.trueFalseAnswer !== undefined ? q.trueFalseAnswer : (q.correctOption === 'TRUE' || q.correctOption === 'BENAR' ? true : false),
+        matchingPairs: Array.isArray(q.matchingPairs) ? q.matchingPairs : (q.matching_pairs || []),
+        essayRubric: q.essayRubric || q.essay_rubric || '',
         points: Number(q.points || q.score_weight || 10),
       };
     });
@@ -1260,31 +1264,66 @@ export const elearningApi = {
       ...(inMemoryAnswers || {}),
     };
 
-    // Hitung skor otomatis untuk PG berdasarkan poin tiap butir soal
+    // Hitung skor otomatis untuk soal objektif (PG, PG Kompleks, Benar/Salah, Menjodohkan)
     const questions = await elearningApi.getExamQuestions(examId);
     let correctCount = 0;
-    let totalMcq = 0;
+    let totalAutoGraded = 0;
     let totalEssay = 0;
-    let totalMcqPoints = 0;
-    let earnedMcqPoints = 0;
+    let totalAutoPoints = 0;
+    let earnedAutoPoints = 0;
 
     questions.forEach((q) => {
       const qPoints = Number(q.points) > 0 ? Number(q.points) : 10;
       if (q.type === 'MCQ') {
-        totalMcq += 1;
-        totalMcqPoints += qPoints;
+        totalAutoGraded += 1;
+        totalAutoPoints += qPoints;
         const answer = mergedAnswers[q.id];
         if (answer && answer.selectedOption === q.correctOption) {
           correctCount += 1;
-          earnedMcqPoints += qPoints;
+          earnedAutoPoints += qPoints;
+        }
+      } else if (q.type === 'COMPLEX_MCQ') {
+        totalAutoGraded += 1;
+        totalAutoPoints += qPoints;
+        const answer = mergedAnswers[q.id];
+        const selected = Array.isArray(answer?.selectedOptions) ? [...answer.selectedOptions].sort().join(',') : '';
+        const expected = Array.isArray(q.correctOptions) ? [...q.correctOptions].sort().join(',') : (q.correctOption || '');
+        if (selected && selected === expected) {
+          correctCount += 1;
+          earnedAutoPoints += qPoints;
+        }
+      } else if (q.type === 'TRUE_FALSE') {
+        totalAutoGraded += 1;
+        totalAutoPoints += qPoints;
+        const answer = mergedAnswers[q.id];
+        const studentAns = String(answer?.selectedOption || (answer?.trueFalseAnswer !== undefined ? (answer.trueFalseAnswer ? 'TRUE' : 'FALSE') : '')).toUpperCase();
+        const expected = String(q.trueFalseAnswer !== undefined ? (q.trueFalseAnswer ? 'TRUE' : 'FALSE') : (q.correctOption || 'TRUE')).toUpperCase();
+        if (studentAns && (studentAns === expected || (studentAns === 'TRUE' && expected === 'BENAR') || (studentAns === 'FALSE' && expected === 'SALAH'))) {
+          correctCount += 1;
+          earnedAutoPoints += qPoints;
+        }
+      } else if (q.type === 'MATCHING') {
+        totalAutoGraded += 1;
+        totalAutoPoints += qPoints;
+        const answer = mergedAnswers[q.id];
+        const matchingAns = answer?.matchingAnswers || {};
+        const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
+        if (pairs.length > 0) {
+          let matchedCorrect = 0;
+          pairs.forEach((p) => {
+            if (matchingAns[p.id] === p.right) matchedCorrect++;
+          });
+          const ratio = matchedCorrect / pairs.length;
+          earnedAutoPoints += Math.round(ratio * qPoints);
+          if (ratio === 1) correctCount += 1;
         }
       } else if (q.type === 'ESSAY') {
         totalEssay += 1;
       }
     });
 
-    const score = totalMcq > 0
-      ? (totalMcqPoints > 0 ? Math.round((earnedMcqPoints / totalMcqPoints) * 100) : Math.round((correctCount / totalMcq) * 100))
+    const score = totalAutoGraded > 0
+      ? (totalAutoPoints > 0 ? Math.round((earnedAutoPoints / totalAutoPoints) * 100) : Math.round((correctCount / totalAutoGraded) * 100))
       : null;
 
     if (session) {
@@ -1292,11 +1331,11 @@ export const elearningApi = {
       session.submittedAt = new Date().toISOString();
       session.score = score;
       session.correctCount = correctCount;
-      session.totalMcq = totalMcq;
+      session.totalMcq = totalAutoGraded;
       session.totalEssay = totalEssay;
-      session.totalMcqPoints = totalMcqPoints;
-      session.earnedMcqPoints = earnedMcqPoints;
-      session.isEssayOnly = totalMcq === 0 && totalEssay > 0;
+      session.totalMcqPoints = totalAutoPoints;
+      session.earnedMcqPoints = earnedAutoPoints;
+      session.isEssayOnly = totalAutoGraded === 0 && totalEssay > 0;
       session.answers = mergedAnswers;
       setLocal(`exam_session_${examId}_${sId}`, session);
 
