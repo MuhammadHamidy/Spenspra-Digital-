@@ -305,7 +305,7 @@ function SidebarContent({ mobileOpen = false, onCloseMobile = () => {} }) {
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#F2C94C]"></span>
                   <p className="text-[11px] font-semibold text-slate-600 truncate">
-                    Sistem e-Rapor
+                    e-Rapor Spenspra
                   </p>
                 </div>
               </div>

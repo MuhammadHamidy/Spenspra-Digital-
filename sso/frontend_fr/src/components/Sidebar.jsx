@@ -68,7 +68,7 @@ function SidebarContent({ mobileOpen = false, onCloseMobile = () => {} }) {
               </div>
               <div className="min-w-0">
                 <h1 className="truncate text-sm font-bold leading-tight tracking-tight text-[#4B3B78]">SMPN 1 PRAMBON</h1>
-                <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-600">Portal SSO & Identitas</p>
+                <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-600">Portal SSO Spenspra</p>
               </div>
             </div>
 
