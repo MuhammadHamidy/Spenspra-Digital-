@@ -140,29 +140,25 @@ export const tokenStorage = {
     if (typeof window === 'undefined') return null;
     purgeBloatedCookies();
 
-    // 1. Coba dari sessionStorage
+    // Pastikan sisa token usang di localStorage dibersihkan (Mode Session Only)
+    try {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem('elearning_auth_token');
+      localStorage.removeItem('sso_auth_token');
+    } catch (e) {}
+
+    // 1. Coba dari sessionStorage (aktif per tab)
     let token = null;
     try {
       token = sessionStorage.getItem(TOKEN_KEY);
     } catch (e) {}
 
-    // 2. Fallback ke localStorage
-    if (!token) {
-      try {
-        token = localStorage.getItem(TOKEN_KEY);
-        if (token) {
-          sessionStorage.setItem(TOKEN_KEY, token);
-        }
-      } catch (e) {}
-    }
-
-    // 3. Fallback ke cookie cross-subdomain
+    // 2. Fallback ke session cookie cross-subdomain (hanya aktif selama browser terbuka)
     if (!token) {
       token = getCookie(TOKEN_KEY);
       if (token) {
         try {
           sessionStorage.setItem(TOKEN_KEY, token);
-          localStorage.setItem(TOKEN_KEY, token);
         } catch (e) {}
       }
     }
@@ -175,9 +171,11 @@ export const tokenStorage = {
       purgeBloatedCookies();
       try {
         sessionStorage.setItem(TOKEN_KEY, token);
-        localStorage.setItem(TOKEN_KEY, token);
         sessionStorage.setItem(SESSION_ACTIVE_KEY, '1');
         sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+        // Hapus dari localStorage agar tidak tersimpan saat browser ditutup
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem('elearning_auth_token');
       } catch (e) {}
       setSessionCookie(TOKEN_KEY, token);
     }
@@ -187,6 +185,13 @@ export const tokenStorage = {
     if (typeof window === 'undefined') return null;
     purgeBloatedCookies();
 
+    // Pastikan user usang di localStorage dibersihkan (Mode Session Only)
+    try {
+      localStorage.removeItem(USER_KEY);
+      localStorage.removeItem('elearning_auth_user');
+      localStorage.removeItem('sso_auth_user');
+    } catch (e) {}
+
     const currentToken = tokenStorage.getToken();
     const jwtUser = parseJwtUser(currentToken);
 
@@ -194,15 +199,6 @@ export const tokenStorage = {
     try {
       data = sessionStorage.getItem(USER_KEY);
     } catch (e) {}
-
-    if (!data) {
-      try {
-        data = localStorage.getItem(USER_KEY);
-        if (data) {
-          sessionStorage.setItem(USER_KEY, data);
-        }
-      } catch (e) {}
-    }
 
     if (data) {
       try {
@@ -213,20 +209,16 @@ export const tokenStorage = {
           if (matchId && matchUsername) {
             return parsed;
           }
-          // Sesi lama di localStorage tidak cocok dengan token login aktif, perbarui secara otomatis
         } else if (parsed && (parsed.id || parsed.username)) {
           return parsed;
         }
-      } catch {
-        // Fallback
-      }
+      } catch {}
     }
 
     if (jwtUser) {
       try {
         const userStr = JSON.stringify(jwtUser);
         sessionStorage.setItem(USER_KEY, userStr);
-        localStorage.setItem(USER_KEY, userStr);
       } catch (e) {}
       return jwtUser;
     }
@@ -240,9 +232,11 @@ export const tokenStorage = {
       const userStr = JSON.stringify(user);
       try {
         sessionStorage.setItem(USER_KEY, userStr);
-        localStorage.setItem(USER_KEY, userStr);
         sessionStorage.setItem(SESSION_ACTIVE_KEY, '1');
         sessionStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+        // Hapus dari localStorage agar sesi berakhir saat browser ditutup
+        localStorage.removeItem(USER_KEY);
+        localStorage.removeItem('elearning_auth_user');
       } catch (e) {}
       // PENTING: JANGAN simpan profil user ke document.cookie (mencegah error 431)
       removeCookie(USER_KEY);
@@ -256,10 +250,18 @@ export const tokenStorage = {
         sessionStorage.removeItem(USER_KEY);
         sessionStorage.removeItem(SESSION_ACTIVE_KEY);
         sessionStorage.removeItem(LAST_ACTIVITY_KEY);
+        sessionStorage.removeItem('sso_auth_token');
+        sessionStorage.removeItem('sso_auth_user');
+        sessionStorage.removeItem('elearning_auth_token');
+        sessionStorage.removeItem('elearning_auth_user');
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(USER_KEY);
         localStorage.removeItem(SESSION_ACTIVE_KEY);
         localStorage.removeItem(LAST_ACTIVITY_KEY);
+        localStorage.removeItem('sso_auth_token');
+        localStorage.removeItem('sso_auth_user');
+        localStorage.removeItem('elearning_auth_token');
+        localStorage.removeItem('elearning_auth_user');
       } catch (e) {}
       removeCookie(TOKEN_KEY);
       removeCookie(USER_KEY);

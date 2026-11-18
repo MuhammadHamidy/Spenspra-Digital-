@@ -13,8 +13,14 @@ export function useAuth() {
 
   // Memvalidasi apakah sesi token dan server backend benar-benar aktif
   const validateSession = useCallback(async () => {
-    // Pada halaman login, jangan hapus sesi yang baru saja dibuat oleh proses login
+    // Pada halaman login, jika ada parameter logout=1, bersihkan seluruh sesi
     if (pathname === '/login') {
+      if (typeof window !== 'undefined' && window.location.search.includes('logout=1')) {
+        tokenStorage.clear();
+        setUser(null);
+        setLoading(false);
+        return;
+      }
       const stored = tokenStorage.getUser();
       setUser(stored);
       setLoading(false);
@@ -65,9 +71,9 @@ export function useAuth() {
     setUser(null);
     setLoading(false);
     if (typeof window !== 'undefined') {
-      window.location.href = '/';
+      window.location.href = '/login?logout=1';
     } else {
-      router.replace('/');
+      router.replace('/login?logout=1');
     }
   };
 

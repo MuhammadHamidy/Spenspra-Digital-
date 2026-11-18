@@ -17,7 +17,25 @@ function LoginForm() {
   const [redirectTarget, setRedirectTarget] = useState('');
 
   const reason = searchParams.get('reason');
+  const isLogout = searchParams.get('logout') === '1' || searchParams.get('logout') === 'true';
   const [showPassword, setShowPassword] = useState(false);
+
+  // Jika parameter logout=1 diterima, pastikan seluruh token sesi dibersihkan tuntas
+  React.useEffect(() => {
+    if (isLogout) {
+      try {
+        sessionStorage.clear();
+        localStorage.removeItem('perpusdig_auth_token');
+        localStorage.removeItem('perpusdig_auth_user');
+        localStorage.removeItem('spenspra_session_active');
+        localStorage.removeItem('spenspra_last_activity');
+        localStorage.removeItem('sso_auth_token');
+        localStorage.removeItem('sso_auth_user');
+        localStorage.removeItem('elearning_auth_token');
+        localStorage.removeItem('elearning_auth_user');
+      } catch (e) {}
+    }
+  }, [isLogout]);
 
   // Ambil parameter app target dari query URL
   const appParam = (searchParams.get('app') || '').toLowerCase();
@@ -207,13 +225,22 @@ function LoginForm() {
           Portal Masuk Single Sign-On (SSO)
         </p>
 
-        {targetAppName && (
+        {targetAppName && !isLogout && (
           <div className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary-50 border border-primary-200 text-primary-800 text-[11px] font-semibold animate-in fade-in">
             <span className="w-1.5 h-1.5 rounded-full bg-primary-600 animate-pulse" />
             <span>Menuju Langsung: <strong className="font-bold text-primary-900">{targetAppName}</strong></span>
           </div>
         )}
       </div>
+
+      {isLogout && (
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 flex items-center gap-2.5">
+          <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+          </svg>
+          <span>Anda telah berhasil keluar dari akun SSO Spenspra.</span>
+        </div>
+      )}
 
       {reason === 'inactivity' && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 flex items-center gap-2.5">

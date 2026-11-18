@@ -46,12 +46,12 @@ function SSOCallbackContent() {
         tokenStorage.setUser(user);
       }
 
-      // Simpan backup langsung ke local storage
+      // Simpan ke session storage (Mode Session Only) & bersihkan local storage
       try {
-        localStorage.setItem('elearning_auth_token', accessToken);
         sessionStorage.setItem('elearning_auth_token', accessToken);
-        localStorage.setItem('elearning_auth_user', JSON.stringify(user));
         sessionStorage.setItem('elearning_auth_user', JSON.stringify(user));
+        localStorage.removeItem('elearning_auth_token');
+        localStorage.removeItem('elearning_auth_user');
       } catch (e) {}
 
       const redirectPath = searchParams.get('redirect');
