@@ -62,6 +62,9 @@ export default function PenilaianUASPage() {
   // Import Excel Modal
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
+  // Pengurutan data nilai: 'ABSEN' (default sesuai no urut presensi), 'PREDICATE' (A->D), 'SCORE_DESC', 'SCORE_ASC'
+  const [sortBy, setSortBy] = useState('ABSEN');
+
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -173,13 +176,18 @@ export default function PenilaianUASPage() {
         semester,
       });
       if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+        // Urutkan siswa selalu sesuai abjad nama (nomor urut absen resmi 1..N)
+        const sortedGrades = [...res.data].sort((a, b) =>
+          (a.student_name || '').localeCompare(b.student_name || '', 'id', { sensitivity: 'base' })
+        );
         setRows(
-          res.data.map((g) => {
+          sortedGrades.map((g, idx) => {
             const hasScore = g.score !== undefined && g.score !== null && Number(g.score) >= 0;
             const pred = hasScore ? getPredicate(g.score) : '-';
             const defaultDesc = formatDescription(pred);
             return {
               id: g.student_id,
+              absenNo: idx + 1,
               person_id: g.person_id || null,
               nisn: g.nisn || '-',
               name: g.student_name || 'Siswa',
@@ -195,9 +203,17 @@ export default function PenilaianUASPage() {
           const { accountApiAdapter } = await import('@/lib/features/auth/infrastructure/accountApiAdapter');
           const list = await accountApiAdapter.getStudents(className);
           if (Array.isArray(list) && list.length > 0) {
+            const sortedStudents = [...list].sort((a, b) =>
+              (a.full_name || a.fullName || a.name || '').localeCompare(
+                b.full_name || b.fullName || b.name || '',
+                'id',
+                { sensitivity: 'base' }
+              )
+            );
             setRows(
-              list.map((s) => ({
+              sortedStudents.map((s, idx) => ({
                 id: s.id,
+                absenNo: idx + 1,
                 person_id: s.person_id || null,
                 nisn: s.nisn || s.nim_nip || '-',
                 name: s.full_name || s.fullName || s.name || 'Siswa',
@@ -285,14 +301,49 @@ export default function PenilaianUASPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [className, subject, search]);
+  }, [className, subject, search, sortBy]);
 
-  const visibleRows = rows.filter(
-    (row) =>
-      !search ||
-      (row.name && row.name.toLowerCase().includes(search.toLowerCase())) ||
-      (row.nisn && row.nisn.includes(search))
-  );
+  // Mengurutkan & memfilter baris siswa: default SELALU urutan absen (1..N)
+  const visibleRows = useMemo(() => {
+    let list = rows.filter(
+      (row) =>
+        !search ||
+        (row.name && row.name.toLowerCase().includes(search.toLowerCase())) ||
+        (row.nisn && row.nisn.includes(search))
+    );
+
+    if (sortBy === 'PREDICATE') {
+      const predRank = { A: 1, B: 2, C: 3, D: 4, '-': 5 };
+      list = [...list].sort((a, b) => {
+        const pA = getPredicate(a.score);
+        const pB = getPredicate(b.score);
+        const rDiff = (predRank[pA] || 5) - (predRank[pB] || 5);
+        if (rDiff !== 0) return rDiff;
+        const sDiff = Number(b.score || 0) - Number(a.score || 0);
+        if (sDiff !== 0) return sDiff;
+        return (a.absenNo || 0) - (b.absenNo || 0);
+      });
+    } else if (sortBy === 'SCORE_DESC') {
+      list = [...list].sort((a, b) => {
+        const sA = a.score !== '' && a.score !== null ? Number(a.score) : -1;
+        const sB = b.score !== '' && b.score !== null ? Number(b.score) : -1;
+        if (sB !== sA) return sB - sA;
+        return (a.absenNo || 0) - (b.absenNo || 0);
+      });
+    } else if (sortBy === 'SCORE_ASC') {
+      list = [...list].sort((a, b) => {
+        const sA = a.score !== '' && a.score !== null ? Number(a.score) : 999;
+        const sB = b.score !== '' && b.score !== null ? Number(b.score) : 999;
+        if (sA !== sB) return sA - sB;
+        return (a.absenNo || 0) - (b.absenNo || 0);
+      });
+    } else {
+      // DEFAULT 'ABSEN': Selalu urutan nomor absen resmi kelas (No. 1 s/d selesai)
+      list = [...list].sort((a, b) => (a.absenNo || 0) - (b.absenNo || 0));
+    }
+
+    return list;
+  }, [rows, search, sortBy]);
 
   const paginatedRows = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -424,28 +475,87 @@ export default function PenilaianUASPage() {
     const currentSubjectObj = subjects.find((item) => item.code === subject);
     const subjectName = currentSubjectObj ? currentSubjectObj.name : subject;
 
+    // WAJIB: Selalu diurutkan sesuai nomor absen resmi (A-Z)
+    const sortedByAbsen = [...rows].sort((a, b) => (a.absenNo || 0) - (b.absenNo || 0));
+
     exportToExcelXml({
       filename: `Format_Nilai_UAS_${className}_${subject}_${academicYear.replace('/', '-')}.xls`,
-      sheetName: `UAS ${className}`,
+      sheetName: `Format UAS ${className}`,
       title: 'FORMAT PENGISIAN NILAI ASESMEN SUMATIF AKHIR SEMESTER (UAS / ASAS)',
       subtitle: `SMP NEGERI 1 PRAMBON • TAHUN AJARAN ${academicYear} SEMESTER ${semester}`,
       metadata: [
         { label: 'Kelas / Rombel', value: `Kelas ${className}` },
         { label: 'Mata Pelajaran', value: `${subject} - ${subjectName}` },
         { label: 'Guru Pengampu', value: currentUser?.fullName || currentUser?.full_name || 'Guru Pengampu' },
+        { label: 'Urutan Presensi', value: 'Sesuai Nomor Absen Resmi Kelas (No. 1 s/d selesai)' },
         { label: 'Panduan', value: 'Isi kolom Nilai UAS dengan angka 0-100. Setelah selesai, impor kembali via sistem.' },
         { label: 'Tanggal Cetak Format', value: new Date().toLocaleDateString('id-ID', { dateStyle: 'full' }) },
       ],
-      headers: ['No', 'NISN', 'Nama Siswa', 'Kelas', 'Nilai UAS (0-100)', 'Panduan Predikat', 'Deskripsi Capaian (Opsional)'],
-      rows: rows.map((r, idx) => {
+      headers: ['No. Absen', 'NISN', 'Nama Siswa', 'Kelas', 'Nilai UAS (0-100)', 'Panduan Predikat', 'Deskripsi Capaian (Opsional)'],
+      rows: sortedByAbsen.map((r, idx) => {
         const scoreVal = r.score !== '' && r.score !== null && !isNaN(Number(r.score)) ? Number(r.score) : '';
         return [
-          idx + 1,
+          r.absenNo || idx + 1,
           r.nisn,
           r.name,
           `Kelas ${className}`,
           scoreVal,
           '>=86 A, >=76 B, >=66 C, <66 D',
+          r.description || '',
+        ];
+      }),
+    });
+  };
+
+  // =================== CETAK / UNDUH BUKU LEGGER NILAI & PREDIKAT UAS ===================
+  const handleDownloadLegger = () => {
+    const currentSubjectObj = subjects.find((item) => item.code === subject);
+    const subjectName = currentSubjectObj ? currentSubjectObj.name : subject;
+    const kkm = 75;
+
+    // PENTING: Buku Legger Nilai & Predikat SELALU 100% konsisten berurutan sesuai nomor absen resmi (A-Z)
+    const sortedByAbsen = [...rows].sort((a, b) => (a.absenNo || 0) - (b.absenNo || 0));
+    const scoredList = sortedByAbsen.filter((r) => r.score !== '' && r.score !== null && !isNaN(Number(r.score)));
+    const passCount = scoredList.filter((r) => Number(r.score) >= kkm).length;
+    const failCount = scoredList.filter((r) => Number(r.score) < kkm).length;
+
+    exportToExcelXml({
+      filename: `Legger_Nilai_UAS_${className}_${subject}_${academicYear.replace('/', '-')}_${semester}.xls`,
+      sheetName: `Legger UAS ${className}`,
+      title: 'BUKU LEGGER NILAI & PREDIKAT ASESMEN SUMATIF AKHIR SEMESTER (UAS / ASAS)',
+      subtitle: `SMP NEGERI 1 PRAMBON • TAHUN AJARAN ${academicYear} SEMESTER ${semester}`,
+      metadata: [
+        { label: 'Kelas / Rombel', value: `Kelas ${className}` },
+        { label: 'Mata Pelajaran', value: `${subject} - ${subjectName}` },
+        { label: 'Guru Pengampu', value: currentUser?.fullName || currentUser?.full_name || 'Guru Pengampu' },
+        { label: 'Batas KKM Sekolah', value: `${kkm} Poin` },
+        { label: 'Urutan Presensi', value: 'Sesuai Nomor Absen Resmi Kelas (No. 1 s/d selesai)' },
+        { label: 'Statistik Capaian', value: `Total: ${sortedByAbsen.length} Siswa | Terisi: ${scoredList.length} | Tuntas: ${passCount} Siswa | Belum Tuntas: ${failCount} Siswa | Rata-rata: ${avgClassScore}` },
+        { label: 'Tanggal Cetak Legger', value: new Date().toLocaleDateString('id-ID', { dateStyle: 'full' }) },
+      ],
+      headers: [
+        'No. Absen',
+        'NISN',
+        'Nama Lengkap Siswa',
+        'Kelas',
+        'Nilai Akhir UAS (0-100)',
+        'Predikat',
+        'Status Ketuntasan (KKM 75)',
+        'Deskripsi Capaian Kompetensi Kurikulum Merdeka',
+      ],
+      rows: sortedByAbsen.map((r, idx) => {
+        const hasScore = r.score !== '' && r.score !== null && !isNaN(Number(r.score));
+        const numScore = hasScore ? Number(r.score) : '';
+        const pred = hasScore ? getPredicate(numScore) : '-';
+        const status = hasScore ? (numScore >= kkm ? 'Tuntas' : 'Belum Tuntas') : 'Belum Ada Nilai';
+        return [
+          r.absenNo || idx + 1,
+          r.nisn,
+          r.name,
+          `Kelas ${className}`,
+          numScore,
+          pred,
+          status,
           r.description || '',
         ];
       }),
@@ -594,7 +704,19 @@ export default function PenilaianUASPage() {
           }`}
         >
           <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold bg-white/60">
-            {cbtNotice.type === 'success' ? '✅' : cbtNotice.type === 'error' ? '❌' : '⚠️'}
+            {cbtNotice.type === 'success' ? (
+              <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+              </svg>
+            ) : cbtNotice.type === 'error' ? (
+              <svg className="w-4 h-4 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            )}
           </div>
           <div className="flex-1">
             <h4 className="text-xs font-bold">
@@ -757,29 +879,43 @@ export default function PenilaianUASPage() {
         </div>
       </div>
 
-      {/* Bar Tombol Tambahan: Unduh Template, Impor Excel */}
+      {/* Bar Tombol Tambahan: Unduh Template, Cetak Legger, Impor Excel */}
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex flex-wrap items-center gap-2">
+          {/* Tombol Cetak / Unduh Buku Legger Nilai & Predikat UAS */}
+          <button
+            type="button"
+            onClick={handleDownloadLegger}
+            disabled={rows.length === 0}
+            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            title="Cetak & unduh Buku Legger Nilai & Predikat UAS resmi siswa (selalu sesuai nomor absen resmi)"
+          >
+            <svg className="w-4 h-4 text-emerald-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>Cetak Legger Nilai & Predikat (.xls)</span>
+          </button>
+
           <button
             type="button"
             onClick={handleDownloadTemplate}
-            className="px-3.5 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
-            title="Unduh format spreadsheet untuk penilaian offline"
+            className="px-3.5 py-2 rounded-xl bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold transition shadow-xs hover:shadow-sm hover:-translate-y-0.5 active:scale-[0.98] flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            title="Unduh format spreadsheet untuk penilaian offline (sesuai nomor absen)"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
-            <span>Unduh Template Penilaian (.xls)</span>
+            <span>Format Penilaian (.xls)</span>
           </button>
 
           {!isKepalaSekolah && (
             <button
               type="button"
               onClick={() => setIsImportModalOpen(true)}
-              className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs hover:shadow-sm hover:-translate-y-0.5 active:scale-[0.98] flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
               title="Impor nilai dari berkas Excel atau salin-tempel"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-blue-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               <span>Impor Nilai Excel</span>
@@ -823,7 +959,10 @@ export default function PenilaianUASPage() {
               onClick={applyTemplateToAllStudents}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
             >
-              <span>🔄 Terapkan ke Semua Siswa Kelas {className}</span>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>Terapkan ke Semua Siswa Kelas {className}</span>
             </button>
           </div>
         </div>
@@ -831,26 +970,131 @@ export default function PenilaianUASPage() {
 
       {/* Tabel Nilai UAS */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
-        <div className="border-b border-slate-200 bg-slate-50/80 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="border-b border-slate-200 bg-slate-50/80 px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
             <span className="text-xs font-bold text-slate-800">
               Daftar Siswa Kelas {className} ({visibleRows.length} Siswa Terdaftar)
             </span>
+            <span className="text-slate-300">|</span>
+            <span className="text-[11px] font-semibold text-slate-600">
+              Mapel: <span className="text-blue-700 font-bold">{subjects.find((s) => s.code === subject)?.name || subject}</span>
+            </span>
           </div>
-          <span className="text-[11px] font-semibold text-slate-600">
-            Mata Pelajaran: <span className="text-blue-700 font-bold">{subjects.find((s) => s.code === subject)?.name || subject}</span>
-          </span>
+
+          {/* Pengatur Urutan Tampilan: Absen (Default) vs Predikat / Nilai */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-bold text-slate-600 whitespace-nowrap">Urutkan Tabel:</span>
+            <div className="inline-flex items-center p-0.5 bg-slate-200/80 rounded-xl border border-slate-300/80 text-xs shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setSortBy('ABSEN')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  sortBy === 'ABSEN'
+                    ? 'bg-white text-slate-900 shadow-xs border border-slate-300'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Tampilkan sesuai urutan presensi / nomor absen resmi kelas"
+              >
+                <svg className="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                </svg>
+                <span>No. Absen</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSortBy('PREDICATE')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  sortBy === 'PREDICATE'
+                    ? 'bg-white text-indigo-900 shadow-xs border border-slate-300'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Urutkan ranking berdasarkan predikat capaian (A -> B -> C -> D)"
+              >
+                <svg className="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Sesuai Predikat (A-D)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSortBy('SCORE_DESC')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  sortBy === 'SCORE_DESC'
+                    ? 'bg-white text-slate-900 shadow-xs border border-slate-300'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Urutkan dari nilai tertinggi ke terendah"
+              >
+                <span>Nilai Tertinggi</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSortBy('SCORE_ASC')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  sortBy === 'SCORE_ASC'
+                    ? 'bg-white text-slate-900 shadow-xs border border-slate-300'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Urutkan dari nilai terendah ke tertinggi (untuk remedial)"
+              >
+                <span>Nilai Terendah</span>
+              </button>
+            </div>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 font-semibold text-slate-600">
-                <th className="py-2.5 px-3 w-12 text-center">No</th>
+              <tr className="border-b border-slate-200 bg-slate-50 font-semibold text-slate-600 select-none">
+                <th
+                  onClick={() => setSortBy('ABSEN')}
+                  className="py-2.5 px-3 w-20 text-center cursor-pointer hover:bg-slate-100 transition-colors"
+                  title="Klik untuk mengurutkan sesuai No. Absen"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>No. Absen</span>
+                    {sortBy === 'ABSEN' && <span className="text-blue-600 font-bold">▲</span>}
+                  </div>
+                </th>
                 <th className="py-2.5 px-3 w-28">NISN</th>
-                <th className="py-2.5 px-3 min-w-[160px]">Nama Siswa</th>
-                <th className="py-2.5 px-3 w-24 text-center">Nilai UAS</th>
-                <th className="py-2.5 px-3 w-20 text-center">Predikat</th>
+                <th
+                  onClick={() => setSortBy('ABSEN')}
+                  className="py-2.5 px-3 min-w-[160px] cursor-pointer hover:bg-slate-100 transition-colors"
+                  title="Klik untuk mengurutkan sesuai alfabetis nama"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Nama Siswa</span>
+                    {sortBy === 'ABSEN' && <span className="text-blue-600 font-bold">▲</span>}
+                  </div>
+                </th>
+                <th
+                  onClick={() => setSortBy(sortBy === 'SCORE_DESC' ? 'SCORE_ASC' : 'SCORE_DESC')}
+                  className="py-2.5 px-3 w-28 text-center cursor-pointer hover:bg-slate-100 transition-colors"
+                  title="Klik untuk mengurutkan nilai (Tertinggi / Terendah)"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Nilai UAS</span>
+                    {sortBy === 'SCORE_DESC' ? (
+                      <span className="text-blue-600 font-bold">▼</span>
+                    ) : sortBy === 'SCORE_ASC' ? (
+                      <span className="text-blue-600 font-bold">▲</span>
+                    ) : null}
+                  </div>
+                </th>
+                <th
+                  onClick={() => setSortBy('PREDICATE')}
+                  className="py-2.5 px-3 w-24 text-center cursor-pointer hover:bg-slate-100 transition-colors"
+                  title="Klik untuk mengurutkan berdasarkan Predikat (A -> D)"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Predikat</span>
+                    {sortBy === 'PREDICATE' && <span className="text-indigo-600 font-bold">▼</span>}
+                  </div>
+                </th>
                 <th className="py-2.5 px-3 min-w-[280px]">Deskripsi Capaian Akhir Semester</th>
               </tr>
             </thead>
@@ -878,7 +1122,9 @@ export default function PenilaianUASPage() {
 
                   return (
                     <tr key={r.id} className="hover:bg-slate-50/80">
-                      <td className="py-2 px-3 text-center text-slate-500">{itemNo}</td>
+                      <td className="py-2 px-3 text-center text-slate-700 font-bold">
+                        {r.absenNo || itemNo}
+                      </td>
                       <td className="py-2 px-3 font-mono text-slate-600">{r.nisn}</td>
                       <td className="py-2 px-3 font-semibold text-slate-800">{r.name}</td>
                       <td className="py-2 px-3 text-center">
