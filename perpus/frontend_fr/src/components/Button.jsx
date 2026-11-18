@@ -23,37 +23,37 @@ export default function Button({
   ...props
 }) {
   const sizeClasses = {
-    xs: 'px-2.5 py-1 text-xs',
-    sm: 'px-3 py-1.5 text-xs',
-    md: 'px-4 py-2 text-sm',
-    lg: 'px-5 py-2.5 text-base',
-  }[size] || 'px-4 py-2 text-sm';
+    xs: 'px-2.5 py-1 text-xs rounded-lg gap-1',
+    sm: 'px-3 py-1.5 text-xs rounded-lg gap-1.5',
+    md: 'px-4 py-2 text-sm rounded-xl gap-2',
+    lg: 'px-5 py-2.5 text-base rounded-xl gap-2.5',
+  }[size] || 'px-4 py-2 text-sm rounded-xl gap-2';
 
   const variantClasses = {
     primary:
-      'bg-[var(--color-primary-500,#4B3B78)] text-white hover:bg-[var(--color-primary-700,#3D2E66)] active:bg-[var(--color-primary-800,#30264F)] focus:ring-2 focus:ring-[var(--color-primary-300,#B9B0D2)] shadow-[var(--shadow-sm)] border border-transparent',
+      'bg-[#4B3B78] text-white hover:bg-[#3D2E66] active:bg-[#30264F] border border-[#3D2E66]/50 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] focus:ring-2 focus:ring-[#4B3B78]/30 font-bold',
     secondary:
-      'bg-[var(--color-secondary-500,#4F8FBB)] text-white hover:bg-[var(--color-secondary-700,#397394)] active:bg-[var(--color-secondary-800,#2E607C)] focus:ring-2 focus:ring-[var(--color-secondary-300,#A8CBDD)] shadow-[var(--shadow-sm)] border border-transparent',
+      'bg-[#4F8FBB] text-white hover:bg-[#397394] active:bg-[#2E607C] border border-[#397394]/50 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] focus:ring-2 focus:ring-[#4F8FBB]/30 font-bold',
     outline:
-      'bg-white text-[var(--color-neutral-1000,#172033)] border border-[var(--color-neutral-300,#E5E7EB)] hover:bg-[var(--color-neutral-100,#F8F9FC)] active:bg-[var(--color-neutral-300,#E5E7EB)] focus:ring-2 focus:ring-[var(--color-primary-100,#EDEAF5)] shadow-[var(--shadow-sm)]',
+      'bg-white text-slate-700 border-2 border-slate-300 hover:border-slate-400 hover:bg-slate-50 active:bg-slate-100 shadow-xs hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] focus:ring-2 focus:ring-slate-300 font-bold',
     accent:
-      'bg-[var(--color-accent-500,#F2C94C)] text-[var(--color-accent-1000,#5C4305)] hover:bg-[var(--color-accent-700,#D8A91F)] active:bg-[var(--color-accent-800,#A97E0D)] focus:ring-2 focus:ring-[var(--color-accent-300,#F9DD82)] shadow-[var(--shadow-sm)] border border-transparent',
+      'bg-[#F2C94C] text-[#5C4305] hover:bg-[#D8A91F] active:bg-[#A97E0D] border border-[#D8A91F] shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] focus:ring-2 focus:ring-[#F2C94C]/40 font-bold',
     gold:
-      'bg-[var(--color-accent-500,#F2C94C)] text-[var(--color-accent-1000,#5C4305)] hover:bg-[var(--color-accent-700,#D8A91F)] active:bg-[var(--color-accent-800,#A97E0D)] focus:ring-2 focus:ring-[var(--color-accent-300,#F9DD82)] shadow-[var(--shadow-sm)] border border-transparent',
+      'bg-[#F2C94C] text-[#5C4305] hover:bg-[#D8A91F] active:bg-[#A97E0D] border border-[#D8A91F] shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] focus:ring-2 focus:ring-[#F2C94C]/40 font-bold',
     success:
-      'bg-[var(--color-success-500,#2E7D5B)] text-white hover:bg-[var(--color-success-800,#1C5038)] focus:ring-2 focus:ring-[var(--color-success-300,#A9D8BC)] shadow-[var(--shadow-sm)] border border-transparent',
+      'bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800 border border-emerald-700/50 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] focus:ring-2 focus:ring-emerald-500/30 font-bold',
     danger:
-      'bg-[var(--color-danger-500,#C0392B)] text-white hover:bg-[var(--color-danger-800,#7D261E)] active:bg-[var(--color-danger-800,#7D261E)] focus:ring-2 focus:ring-[var(--color-danger-300,#F1B4AC)] shadow-[var(--shadow-sm)] border border-transparent',
+      'bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800 border border-rose-700/50 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] focus:ring-2 focus:ring-rose-500/30 font-bold',
     ghost:
-      'bg-transparent text-[var(--color-neutral-800,#344054)] hover:bg-[var(--color-neutral-100,#F8F9FC)] border border-transparent',
-  }[variant] || 'bg-[var(--color-primary-500,#4B3B78)] text-white hover:bg-[var(--color-primary-700,#3D2E66)]';
+      'bg-transparent text-slate-700 hover:bg-slate-100 active:bg-slate-200 border border-transparent font-semibold active:scale-[0.98]',
+  }[variant] || 'bg-[#4B3B78] text-white hover:bg-[#3D2E66] border border-[#3D2E66]/50 shadow-sm font-bold';
 
   return (
     <button
       type={type}
       disabled={disabled || loading}
       onClick={onClick}
-      className={`inline-flex items-center justify-center gap-2 rounded-[8px] font-semibold transition-all duration-150 select-none cursor-pointer focus:outline-none disabled:bg-[var(--color-neutral-300,#E5E7EB)] disabled:text-[var(--color-neutral-500,#98A2B3)] disabled:border-transparent disabled:shadow-none disabled:cursor-not-allowed ${variantClasses} ${sizeClasses} ${className}`}
+      className={`inline-flex items-center justify-center font-bold transition-all duration-150 select-none cursor-pointer focus:outline-none disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none ${variantClasses} ${sizeClasses} ${className}`}
       {...props}
     >
       {loading && (

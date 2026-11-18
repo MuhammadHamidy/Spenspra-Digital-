@@ -1280,7 +1280,7 @@ export default function LiveProctoringMonitoringPage() {
                                     })
                                   }
                                   placeholder="0"
-                                  className="w-24 p-2 text-center text-sm font-bold rounded-lg border border-amber-300 bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                                  className="w-24 p-2 text-center text-sm font-bold rounded-xl border-2 border-amber-300 bg-white shadow-2xs focus:outline-hidden focus:ring-4 focus:ring-amber-500/20 focus:border-amber-500 transition-all"
                                 />
                                 <span className="text-xs font-bold text-amber-950">/ {qPoints} Poin</span>
                               </div>
@@ -1464,44 +1464,62 @@ export default function LiveProctoringMonitoringPage() {
             </span>
           </div>
 
-          <div className="w-full md:w-72">
+          <div className="w-full md:w-80">
             <input
               type="search"
               placeholder="Cari nama atau NISN siswa..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full text-xs px-3 py-2 rounded-[8px] border border-neutral-300 bg-white focus:outline-hidden focus:border-primary-500"
+              className="w-full text-xs px-3.5 py-2 rounded-xl border-2 border-slate-200 bg-white font-medium text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:border-[#4B3B78] focus:ring-4 focus:ring-[#4B3B78]/10 shadow-2xs transition-all"
             />
           </div>
         </div>
 
-        {/* Filter Quick Tabs */}
-        <div className="flex items-center gap-1 px-4 py-2 border-b border-neutral-100 overflow-x-auto text-xs bg-white">
-          {[
-            { id: 'ALL', label: `Semua Peserta (${totalStudents})` },
-            { id: 'VIOLATION', label: `Melanggar (${violatingList.length})`, highlight: violatingList.length > 0 },
-            { id: 'LOCKED', label: `Layar Terkunci (${lockedCount})`, danger: lockedCount > 0 },
-            { id: 'IN_PROGRESS', label: `Sedang Ujian (${inProgressCount})` },
-            { id: 'SUBMITTED', label: `Selesai (${submittedCount})` },
-            { id: 'NOT_STARTED', label: `Belum Bergabung (${notStartedCount})` },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveFilter(tab.id)}
-              className={`px-3 py-1.5 rounded-[6px] font-bold text-xs whitespace-nowrap transition-all cursor-pointer ${
-                activeFilter === tab.id
-                  ? 'bg-neutral-900 text-white shadow-2xs'
-                  : tab.danger
-                  ? 'bg-danger-50 text-danger-700 hover:bg-danger-100'
-                  : tab.highlight
-                  ? 'bg-amber-50 text-amber-800 hover:bg-amber-100'
-                  : 'bg-neutral-50 text-neutral-600 hover:bg-neutral-100'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        {/* Filter Quick Tabs (Segmented Control Affordance) */}
+        <div className="p-2.5 border-b border-slate-100 bg-slate-50/60 overflow-x-auto">
+          <div className="inline-flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-2xl border border-slate-200/90 shadow-2xs">
+            {[
+              { id: 'ALL', label: 'Semua Peserta', count: totalStudents },
+              { id: 'VIOLATION', label: 'Melanggar', count: violatingList.length, highlight: violatingList.length > 0 },
+              { id: 'LOCKED', label: 'Layar Terkunci', count: lockedCount, danger: lockedCount > 0 },
+              { id: 'IN_PROGRESS', label: 'Sedang Ujian', count: inProgressCount },
+              { id: 'SUBMITTED', label: 'Selesai', count: submittedCount },
+              { id: 'NOT_STARTED', label: 'Belum Bergabung', count: notStartedCount },
+            ].map((tab) => {
+              const isActive = activeFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveFilter(tab.id)}
+                  className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl font-bold text-xs whitespace-nowrap transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                      : tab.danger
+                      ? 'text-rose-700 hover:bg-rose-50/80 hover:text-rose-800'
+                      : tab.highlight
+                      ? 'text-amber-800 hover:bg-amber-50/80 hover:text-amber-900'
+                      : 'text-slate-600 hover:bg-white/60 hover:text-slate-900'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                      isActive
+                        ? 'bg-[#4B3B78] text-white'
+                        : tab.danger
+                        ? 'bg-rose-100 text-rose-700'
+                        : tab.highlight
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-slate-200/80 text-slate-600'
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Table Content */}
@@ -1583,36 +1601,36 @@ export default function LiveProctoringMonitoringPage() {
 
                       <td className="py-3 px-4 whitespace-nowrap">
                         {isLocked ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[999px] text-[10px] font-bold bg-danger-100 text-danger-800 border border-danger-300">
-                            <AppIcon name="lock" color="red" size={11} />
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs select-none">
+                            <AppIcon name="lock" color="red" size={12} />
                             <span>LAYAR TERKUNCI</span>
                           </span>
                         ) : isSubmitted ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[999px] text-[10px] font-bold bg-success-100 text-success-800 border border-success-300">
-                            <AppIcon name="tick" color="green" size={11} />
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs select-none">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                             <span>SELESAI {s.score !== null && s.score !== undefined ? `(${s.score})` : ''}</span>
                           </span>
                         ) : isNotStarted ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[999px] text-[10px] font-semibold bg-neutral-100 text-neutral-500 border border-neutral-200">
-                            <AppIcon name="timer" color="grey" size={11} />
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200 select-none">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                             <span>Belum Bergabung</span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[999px] text-[10px] font-bold bg-secondary-100 text-secondary-800 border border-secondary-300">
-                            <span className="w-1.5 h-1.5 rounded-full bg-secondary-600 animate-pulse" />
-                            MENGERJAKAN
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs select-none">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                            <span>MENGERJAKAN</span>
                           </span>
                         )}
                       </td>
 
                       <td className="py-3 px-4 text-center">
                         <span
-                          className={`inline-flex items-center justify-center min-w-7 h-6 px-2 rounded-[999px] text-xs font-bold ${
+                          className={`inline-flex items-center justify-center min-w-7 h-6 px-2.5 rounded-full text-xs font-bold border ${
                             realViolCount >= (selectedExam?.maxViolations || 3)
-                              ? 'bg-danger-600 text-white animate-bounce'
+                              ? 'bg-rose-600 text-white border-rose-700 shadow-xs animate-bounce'
                               : realViolCount > 0
-                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                              : 'bg-neutral-100 text-neutral-500'
+                              ? 'bg-amber-100 text-amber-900 border-amber-300 shadow-2xs'
+                              : 'bg-slate-100 text-slate-500 border-slate-200'
                           }`}
                         >
                           {realViolCount}x
@@ -1640,16 +1658,16 @@ export default function LiveProctoringMonitoringPage() {
                       </td>
 
                       <td className="py-3 px-4 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-end gap-2">
                           {s.status !== 'NOT_STARTED' && (
                             <Button
-                              variant="outline"
+                              variant="primary"
                               size="xs"
                               onClick={() => handleOpenStudentAnswers(s)}
-                              className="font-bold cursor-pointer text-primary-700 bg-primary-50/70 hover:bg-primary-100 border-primary-200 flex items-center gap-1"
+                              className="font-bold cursor-pointer flex items-center gap-1.5 shadow-xs"
                               title="Periksa dan koreksi lembar jawaban siswa"
                             >
-                              <AppIcon name="edit" color="blue" size={13} />
+                              <AppIcon name="edit" color="white" size={13} />
                               <span>Periksa Jawaban</span>
                             </Button>
                           )}
@@ -1659,7 +1677,7 @@ export default function LiveProctoringMonitoringPage() {
                               variant="outline"
                               size="xs"
                               onClick={() => setActiveStudentAudit(s)}
-                              className="cursor-pointer"
+                              className="font-semibold cursor-pointer border-slate-300 hover:border-slate-400 hover:bg-slate-50 text-slate-700 shadow-2xs"
                             >
                               Riwayat ({violations.length})
                             </Button>
@@ -1670,7 +1688,7 @@ export default function LiveProctoringMonitoringPage() {
                               variant="accent"
                               size="xs"
                               onClick={() => handleUnlockStudent(s)}
-                              className="font-bold cursor-pointer bg-amber-500 hover:bg-amber-600 text-neutral-900 flex items-center gap-1"
+                              className="font-bold cursor-pointer flex items-center gap-1.5 shadow-xs"
                             >
                               <AppIcon name="unlock" color="grey" size={13} />
                               <span>Buka Kunci</span>

@@ -92,12 +92,12 @@ export default function ConfirmModal({
           </div>
         </div>
 
-        <div className="bg-slate-50 px-6 py-3.5 flex items-center justify-end gap-2.5 border-t border-slate-200">
+        <div className="bg-slate-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-slate-200">
           <button
             type="button"
             disabled={isLoading}
             onClick={onCancel}
-            className="px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 active:bg-slate-200 transition shadow-xs cursor-pointer disabled:opacity-50"
+            className="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-700 bg-white border-2 border-slate-300 hover:border-slate-400 hover:bg-slate-50 active:bg-slate-100 transition-all duration-150 shadow-xs hover:shadow-sm active:translate-y-0.5 cursor-pointer disabled:opacity-50"
           >
             {cancelText}
           </button>
@@ -105,12 +105,12 @@ export default function ConfirmModal({
             type="button"
             disabled={isLoading}
             onClick={onConfirm}
-            className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold text-white transition shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50 ${
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-white transition-all duration-150 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] cursor-pointer flex items-center gap-1.5 disabled:opacity-50 border border-transparent ${
               isLogout
-                ? 'bg-rose-600 hover:bg-rose-700 active:bg-rose-800'
+                ? 'bg-rose-600 hover:bg-rose-700 active:bg-rose-800 border-rose-700/40'
                 : isDanger
-                ? 'bg-rose-600 hover:bg-rose-700 active:bg-rose-800'
-                : 'bg-[#193D9B] hover:bg-[#153280] active:bg-blue-900'
+                ? 'bg-rose-600 hover:bg-rose-700 active:bg-rose-800 border-rose-700/40'
+                : 'bg-[#4B3B78] hover:bg-[#3D2E66] active:bg-[#30264F] border-[#3D2E66]/40'
             }`}
           >
             {isLoading ? (

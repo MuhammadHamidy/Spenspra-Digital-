@@ -1677,21 +1677,28 @@ export default function TeacherExamsManagementPage() {
                       setToken(`ASAS${Math.random().toString(36).substring(2, 6).toUpperCase()}`);
                     }
                   }}
-                  className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
+                  className={`p-4 rounded-2xl border-2 text-left transition-all duration-150 cursor-pointer flex items-start gap-3.5 ${
                     examCategory === 'SEMESTER_UAS'
-                      ? 'border-primary-500 bg-primary-50/70 ring-2 ring-primary-500/20 text-primary-950'
-                      : 'border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-600'
+                      ? 'border-[#4B3B78] bg-[#4B3B78]/5 ring-2 ring-[#4B3B78]/20 shadow-xs text-slate-900'
+                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-600 shadow-2xs'
                   }`}
                 >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                    examCategory === 'SEMESTER_UAS' ? 'bg-primary-600 text-white shadow-xs' : 'bg-neutral-100 text-neutral-500'
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${
+                    examCategory === 'SEMESTER_UAS' ? 'bg-[#4B3B78] text-white' : 'bg-slate-100 text-slate-500'
                   }`}>
                     <AppIcon name="medal" color={examCategory === 'SEMESTER_UAS' ? 'white' : 'blue'} size={18} />
                   </div>
-                  <div className="space-y-0.5 min-w-0">
-                    <p className="font-bold text-xs sm:text-sm text-neutral-900">Ujian UAS / ASAS Semester (Koordinator)</p>
-                    <p className="text-[11px] text-neutral-500 leading-snug">
-                      1 Guru PJ membuat soal untuk seluruh kelas paralel tingkat (7, 8, atau 9). Nilai otomatis masuk ke rekap Wali Kelas.
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-bold text-xs sm:text-sm text-slate-900">Ujian UAS / ASAS Semester (Koordinator)</p>
+                      <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                        examCategory === 'SEMESTER_UAS' ? 'border-[#4B3B78] bg-[#4B3B78]' : 'border-slate-300 bg-white'
+                      }`}>
+                        {examCategory === 'SEMESTER_UAS' && <span className="w-1.5 h-1.5 rounded-full bg-white"></span>}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-snug">
+                      1 Guru PJ membuat soal untuk seluruh rombel paralel tingkat (7, 8, atau 9). Nilai otomatis siap disinkron ke e-Rapor UAS.
                     </p>
                   </div>
                 </button>
@@ -1699,20 +1706,27 @@ export default function TeacherExamsManagementPage() {
                 <button
                   type="button"
                   onClick={() => setExamCategory('REGULAR')}
-                  className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
+                  className={`p-4 rounded-2xl border-2 text-left transition-all duration-150 cursor-pointer flex items-start gap-3.5 ${
                     examCategory === 'REGULAR'
-                      ? 'border-primary-500 bg-primary-50/70 ring-2 ring-primary-500/20 text-primary-950'
-                      : 'border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-600'
+                      ? 'border-[#4B3B78] bg-[#4B3B78]/5 ring-2 ring-[#4B3B78]/20 shadow-xs text-slate-900'
+                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-600 shadow-2xs'
                   }`}
                 >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                    examCategory === 'REGULAR' ? 'bg-primary-600 text-white shadow-xs' : 'bg-neutral-100 text-neutral-500'
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${
+                    examCategory === 'REGULAR' ? 'bg-[#4B3B78] text-white' : 'bg-slate-100 text-slate-500'
                   }`}>
                     <AppIcon name="course" color={examCategory === 'REGULAR' ? 'white' : 'blue'} size={18} />
                   </div>
-                  <div className="space-y-0.5 min-w-0">
-                    <p className="font-bold text-xs sm:text-sm text-neutral-900">Ujian Reguler / Harian</p>
-                    <p className="text-[11px] text-neutral-500 leading-snug">
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-bold text-xs sm:text-sm text-slate-900">Ujian Reguler / Harian</p>
+                      <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                        examCategory === 'REGULAR' ? 'border-[#4B3B78] bg-[#4B3B78]' : 'border-slate-300 bg-white'
+                      }`}>
+                        {examCategory === 'REGULAR' && <span className="w-1.5 h-1.5 rounded-full bg-white"></span>}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-snug">
                       Ulangan harian atau kuis mandiri per rombel kelas yang diajar guru bersangkutan.
                     </p>
                   </div>
@@ -2059,42 +2073,59 @@ export default function TeacherExamsManagementPage() {
         </Button>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex items-center gap-2 border-b border-neutral-200 pb-3">
+      {/* Filter Tabs Segmented Control */}
+      <div className="bg-slate-100 p-1.5 rounded-2xl inline-flex items-center gap-1.5 border border-slate-200/90 shadow-2xs">
         <button
           type="button"
           onClick={() => setExamFilterTab('ALL')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 ${
             examFilterTab === 'ALL'
-              ? 'bg-neutral-900 text-white shadow-xs'
-              : 'bg-white text-neutral-600 hover:bg-neutral-50 border border-neutral-200'
+              ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
           }`}
         >
-          Semua Ujian ({exams.length})
+          <span>Semua Ujian</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+            examFilterTab === 'ALL' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
+          }`}>
+            {exams.length}
+          </span>
         </button>
+
         <button
           type="button"
           onClick={() => setExamFilterTab('SEMESTER_UAS')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 ${
             examFilterTab === 'SEMESTER_UAS'
-              ? 'bg-primary-600 text-white shadow-xs'
-              : 'bg-white text-primary-700 hover:bg-primary-50 border border-primary-200'
+              ? 'bg-[#4B3B78] text-white shadow-xs'
+              : 'text-slate-600 hover:text-[#4B3B78] hover:bg-white/60'
           }`}
         >
           <AppIcon name="medal" color={examFilterTab === 'SEMESTER_UAS' ? 'white' : 'blue'} size={14} />
-          <span>UAS / ASAS Semester ({uasCount})</span>
+          <span>UAS / ASAS Semester</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+            examFilterTab === 'SEMESTER_UAS' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
+          }`}>
+            {uasCount}
+          </span>
         </button>
+
         <button
           type="button"
           onClick={() => setExamFilterTab('REGULAR')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 ${
             examFilterTab === 'REGULAR'
-              ? 'bg-neutral-900 text-white shadow-xs'
-              : 'bg-white text-neutral-600 hover:bg-neutral-50 border border-neutral-200'
+              ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
           }`}
         >
-          <AppIcon name="course" color={examFilterTab === 'REGULAR' ? 'white' : 'grey'} size={14} />
-          <span>Ujian Reguler / Harian ({regularCount})</span>
+          <AppIcon name="course" color={examFilterTab === 'REGULAR' ? 'purple' : 'grey'} size={14} />
+          <span>Ujian Reguler / Harian</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+            examFilterTab === 'REGULAR' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
+          }`}>
+            {regularCount}
+          </span>
         </button>
       </div>
 
@@ -2195,17 +2226,17 @@ export default function TeacherExamsManagementPage() {
 
                       {/* 3. Akses CBT */}
                       <td className="py-4 px-5">
-                        <div className="space-y-1">
+                        <div className="space-y-1.5">
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">Token</span>
-                            <span className="px-2 py-0.5 rounded-md font-mono font-bold text-xs bg-amber-50 text-amber-900 border border-amber-200">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Token</span>
+                            <span className="px-2.5 py-1 rounded-lg font-mono font-bold text-xs bg-slate-100 text-slate-800 border border-slate-300 shadow-2xs tracking-wider select-all">
                               {ex.token}
                             </span>
                           </div>
                           {ex.supervisorPin && (
                             <div className="flex items-center gap-2">
                               <span className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">PIN</span>
-                              <span className="px-2 py-0.5 rounded-md font-mono font-bold text-[11px] bg-emerald-50 text-emerald-800 border border-emerald-200 tracking-wider">
+                              <span className="px-2.5 py-0.5 rounded-lg font-mono font-bold text-[11px] bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs tracking-wider select-all">
                                 {ex.supervisorPin}
                               </span>
                             </div>
@@ -2213,48 +2244,48 @@ export default function TeacherExamsManagementPage() {
                         </div>
                       </td>
 
-                      {/* 4. Status */}
+                      {/* 4. Status Badge (Bukan Button) */}
                       <td className="py-4 px-5">
                         {currentStatus === 'ACTIVE' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs select-none">
                             <span className="relative flex h-2 w-2">
                               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                             </span>
-                            Sedang Berlangsung
+                            <span>Sedang Berlangsung</span>
                           </span>
                         ) : currentStatus === 'UPCOMING' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                            <AppIcon name="timer" color="yellow" size={13} />
-                            Akan Datang
+                          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/90 shadow-2xs select-none">
+                            <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+                            <span>Akan Datang</span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-neutral-100 text-neutral-600 border border-neutral-200">
-                            <AppIcon name="tick" color="grey" size={13} />
-                            Selesai
+                          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200/90 shadow-2xs select-none">
+                            <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0"></span>
+                            <span>Selesai</span>
                           </span>
                         )}
                       </td>
 
-                      {/* 5. Aksi (Single-Row Horizontal Action Group) */}
+                      {/* 5. Aksi (Grup Tombol Berafordansi Jelas) */}
                       <td className="py-4 px-5 text-right">
-                        <div className="inline-flex items-center justify-end gap-1.5">
+                        <div className="inline-flex items-center justify-end gap-2">
                           {currentStatus !== 'ACTIVE' ? (
                             <button
                               type="button"
                               disabled={activatingExamId === ex.id}
                               onClick={() => handleStartExamNow(ex)}
-                              className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] border border-emerald-700/40 transition-all duration-150 cursor-pointer"
                               title="Aktifkan & buka sesi ujian sekarang untuk siswa"
                             >
                               {activatingExamId === ex.id ? (
                                 <>
-                                  <AppIcon name="sync" color="white" size={12} className="animate-spin" />
+                                  <AppIcon name="sync" color="white" size={13} className="animate-spin" />
                                   <span>Mengaktifkan...</span>
                                 </>
                               ) : (
                                 <>
-                                  <AppIcon name="play" color="white" size={12} />
+                                  <AppIcon name="play" color="white" size={13} />
                                   <span>Aktifkan</span>
                                 </>
                               )}
@@ -2263,10 +2294,10 @@ export default function TeacherExamsManagementPage() {
                             <button
                               type="button"
                               onClick={() => handleEndExamNow(ex)}
-                              className="px-2.5 py-1.5 rounded-lg border border-danger-300 text-danger-700 hover:bg-danger-50 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                              className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] border border-rose-700/40 transition-all duration-150 cursor-pointer"
                               title="Tutup & selesaikan sesi ujian sekarang"
                             >
-                              <AppIcon name="close-cancel" color="red" size={12} />
+                              <AppIcon name="close-cancel" color="white" size={13} />
                               <span>Tutup</span>
                             </button>
                           )}
@@ -2274,26 +2305,27 @@ export default function TeacherExamsManagementPage() {
                           <button
                             type="button"
                             onClick={() => handleOpenQuestionEditor(ex)}
-                            className="px-2.5 py-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                            className="px-3.5 py-2 rounded-xl bg-[#4B3B78] hover:bg-[#3D2E66] active:bg-[#30264F] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] border border-[#3D2E66]/50 transition-all duration-150 cursor-pointer"
                             title="Kelola Butir Soal"
                           >
-                            <AppIcon name="edit" color="white" size={13} />
+                            <AppIcon name="edit" color="white" size={14} />
                             <span>Kelola Soal</span>
                           </button>
 
                           <button
                             type="button"
                             onClick={() => router.push('/guru/monitoring')}
-                            className="p-2 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 transition-colors cursor-pointer flex items-center justify-center"
+                            className="px-3 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-blue-50 hover:border-blue-400 text-slate-700 hover:text-blue-700 font-bold text-xs flex items-center gap-1.5 shadow-2xs hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-150 cursor-pointer"
                             title="Lihat hasil pengerjaan & lembar jawaban siswa"
                           >
                             <AppIcon name="survey" color="blue" size={15} />
+                            <span className="hidden sm:inline">Hasil</span>
                           </button>
 
                           <button
                             type="button"
                             onClick={() => handleOpenEditModal(ex)}
-                            className="p-2 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 transition-colors cursor-pointer flex items-center justify-center"
+                            className="p-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-amber-50 hover:border-amber-400 text-slate-600 hover:text-amber-700 shadow-2xs hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-150 cursor-pointer flex items-center justify-center"
                             title="Edit Jadwal & Konfigurasi"
                           >
                             <AppIcon name="edit" color="grey" size={15} />
@@ -2302,7 +2334,7 @@ export default function TeacherExamsManagementPage() {
                           <button
                             type="button"
                             onClick={() => handleDeleteExam(ex.id, ex.title)}
-                            className="p-2 rounded-lg border border-danger-200 bg-white hover:bg-danger-50 text-danger-600 transition-colors cursor-pointer flex items-center justify-center"
+                            className="p-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-400 text-slate-600 hover:text-rose-700 shadow-2xs hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-150 cursor-pointer flex items-center justify-center"
                             title="Hapus Ujian"
                           >
                             <AppIcon name="delete" color="red" size={15} />

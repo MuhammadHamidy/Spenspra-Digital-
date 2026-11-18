@@ -55,13 +55,13 @@ export default function Input({
           placeholder={placeholder}
           disabled={disabled}
           required={required}
-          className={`w-full px-3.5 py-2 text-sm sm:text-base font-normal bg-[var(--color-neutral-50,#FFFFFF)] border rounded-[6px] transition-all duration-150 outline-none
-            placeholder:text-[var(--color-neutral-500,#98A2B3)]
-            disabled:bg-[var(--color-neutral-100,#F8F9FC)] disabled:text-[var(--color-neutral-500,#98A2B3)] disabled:cursor-not-allowed
+          className={`w-full px-3.5 py-2.5 text-sm font-medium bg-white border-2 rounded-xl transition-all duration-150 outline-none shadow-2xs
+            placeholder:text-slate-400
+            disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-200 disabled:cursor-not-allowed
             ${
               error
-                ? 'border-[var(--color-danger-500,#C0392B)] text-[var(--color-danger-800,#7D261E)] focus:ring-2 focus:ring-[var(--color-danger-300,#F1B4AC)]'
-                : 'border-[var(--color-neutral-300,#E5E7EB)] text-[var(--color-neutral-1000,#172033)] focus:border-[var(--color-primary-500,#4B3B78)] focus:ring-2 focus:ring-[var(--color-primary-100,#EDEAF5)]'
+                ? 'border-rose-400 text-rose-900 focus:border-rose-600 focus:ring-4 focus:ring-rose-500/10'
+                : 'border-slate-200 text-slate-900 hover:border-slate-300 focus:border-[#4B3B78] focus:ring-4 focus:ring-[#4B3B78]/10'
             }
             ${startIcon ? 'pl-9' : ''}
             ${endIcon ? 'pr-9' : ''}
