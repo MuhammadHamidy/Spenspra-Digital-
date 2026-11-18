@@ -637,9 +637,11 @@ export default function PenilaianUASPage() {
       {/* Integrasi Tarik Nilai dari Ujian CBT (UAS / ASAS) */}
       <div className="p-4 rounded-xl border border-indigo-200 bg-linear-to-r from-indigo-50/90 to-blue-50/90 shadow-xs space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold shadow-xs">
-              ⚡
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0">
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
             </div>
             <div>
               <h3 className="text-xs font-bold text-indigo-950">
@@ -660,7 +662,7 @@ export default function PenilaianUASPage() {
             <select
               value={selectedExamId}
               onChange={(e) => setSelectedExamId(e.target.value)}
-              className="w-full rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
+              className="w-full rounded-xl border-2 border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-2xs outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 transition-all"
             >
               {availableCbtExams.length === 0 ? (
                 <option value="">— Belum ada sesi ujian CBT untuk {subjects.find((s) => s.code === subject)?.name || subject} di Kelas {className} —</option>
@@ -669,7 +671,7 @@ export default function PenilaianUASPage() {
                   const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || /uas|asas/i.test(ex.title);
                   return (
                     <option key={ex.id} value={ex.id}>
-                      {isUasType ? '⭐ [UAS / ASAS Semester] ' : '📝 [Ujian Reguler] '}
+                      {isUasType ? '[UAS / ASAS Semester] ' : '[Ujian Reguler] '}
                       {ex.title} (Mapel: {ex.subject}) — Token: {ex.token || '-'}
                     </option>
                   );
@@ -683,12 +685,12 @@ export default function PenilaianUASPage() {
               type="button"
               onClick={handleSyncFromCBT}
               disabled={isSyncingCbt || !selectedExamId}
-              className="w-full md:w-auto px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition shadow-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              className="w-full md:w-auto px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
               <svg className={`w-4 h-4 ${isSyncingCbt ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              <span>{isSyncingCbt ? 'Menyinkronkan Nilai...' : '⚡ Tarik Nilai dari Ujian Ini'}</span>
+              <span>{isSyncingCbt ? 'Menyinkronkan Nilai...' : 'Tarik Nilai dari Ujian Ini'}</span>
             </button>
           </div>
         </div>
