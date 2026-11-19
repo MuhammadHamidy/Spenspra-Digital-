@@ -13,14 +13,27 @@ export function useAuth() {
 
   // Memvalidasi apakah sesi token dan server backend benar-benar aktif
   const validateSession = useCallback(async () => {
-    // Pada halaman login, jika ada parameter logout=1, bersihkan seluruh sesi
-    if (pathname === '/login') {
-      if (typeof window !== 'undefined' && window.location.search.includes('logout=1')) {
+    // Jika ada parameter logout=1 di halaman manapun (termasuk Beranda '/'), bersihkan seluruh sesi
+    if (typeof window !== 'undefined' && window.location.search.includes('logout=1')) {
+      try {
         tokenStorage.clear();
-        setUser(null);
-        setLoading(false);
-        return;
-      }
+        sessionStorage.clear();
+        localStorage.removeItem('perpusdig_auth_token');
+        localStorage.removeItem('perpusdig_auth_user');
+        localStorage.removeItem('spenspra_session_active');
+        localStorage.removeItem('spenspra_last_activity');
+        localStorage.removeItem('sso_auth_token');
+        localStorage.removeItem('sso_auth_user');
+        localStorage.removeItem('elearning_auth_token');
+        localStorage.removeItem('elearning_auth_user');
+        window.history.replaceState({}, '', pathname || '/');
+      } catch (e) {}
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
+    if (pathname === '/login') {
       const stored = tokenStorage.getUser();
       setUser(stored);
       setLoading(false);
@@ -71,9 +84,9 @@ export function useAuth() {
     setUser(null);
     setLoading(false);
     if (typeof window !== 'undefined') {
-      window.location.href = '/login?logout=1';
+      window.location.href = '/?logout=1';
     } else {
-      router.replace('/login?logout=1');
+      router.replace('/?logout=1');
     }
   };
 

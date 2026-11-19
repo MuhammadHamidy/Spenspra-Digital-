@@ -215,6 +215,22 @@ export default function MainPage() {
   const isSuperAdmin = role === 'SUPER_ADMIN';
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search.includes('logout=1')) {
+      try {
+        tokenStorage.clear();
+        sessionStorage.clear();
+        localStorage.removeItem('perpusdig_auth_token');
+        localStorage.removeItem('perpusdig_auth_user');
+        localStorage.removeItem('spenspra_session_active');
+        localStorage.removeItem('spenspra_last_activity');
+        localStorage.removeItem('sso_auth_token');
+        localStorage.removeItem('sso_auth_user');
+        localStorage.removeItem('elearning_auth_token');
+        localStorage.removeItem('elearning_auth_user');
+        window.history.replaceState({}, '', '/');
+      } catch (e) {}
+      return;
+    }
     if (loading) return;
     if (!user) {
       return;

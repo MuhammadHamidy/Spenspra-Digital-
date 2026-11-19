@@ -41,10 +41,10 @@ export function redirectToSsoLogout() {
     const isProd = window.location.hostname.includes('spenspra.com');
     const isSch = window.location.hostname.includes('spenspra.sch.id');
     const targetHome = isProd
-      ? 'https://spenspra.com/'
+      ? 'https://sso.spenspra.com/?logout=1'
       : isSch
-      ? 'https://spenspra.sch.id/'
-      : (process.env.NEXT_PUBLIC_SSO_PORTAL_URL || (process.env.NEXT_PUBLIC_SSO_LOGIN_URL ? process.env.NEXT_PUBLIC_SSO_LOGIN_URL.replace(/\/login.*$/, '') : 'http://sso.localhost'));
+      ? 'https://sso.spenspra.sch.id/?logout=1'
+      : `${(process.env.NEXT_PUBLIC_SSO_PORTAL_URL || (process.env.NEXT_PUBLIC_SSO_LOGIN_URL ? process.env.NEXT_PUBLIC_SSO_LOGIN_URL.replace(/\/login.*$/, '') : 'http://sso.localhost')).replace(/\/$/, '')}/?logout=1`;
     window.location.href = targetHome;
   }
 }

@@ -336,9 +336,20 @@ function LoginForm() {
         </button>
       </form>
 
-      <p className="mt-6 text-center text-[11px] text-slate-400">
-        Lupa kata sandi atau kendala akun? Hubungi Super Admin / Tim TI Sekolah.
-      </p>
+      <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col items-center gap-2 text-center">
+        <a
+          href="/?logout=1"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#4B3B78] hover:text-[#30264F] transition"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          <span>Kembali ke Halaman Beranda Portal</span>
+        </a>
+        <p className="text-[11px] text-slate-400">
+          Lupa kata sandi atau kendala akun? Hubungi Super Admin / Tim TI Sekolah.
+        </p>
+      </div>
     </div>
   );
 }
