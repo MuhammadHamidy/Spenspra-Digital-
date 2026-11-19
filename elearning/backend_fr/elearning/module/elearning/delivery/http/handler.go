@@ -720,8 +720,9 @@ func (h *ELearningHandler) DeleteExam(c *fiber.Ctx) error {
 }
 
 type CBTQuestionOptionInput struct {
-	Key  string `json:"key"`
-	Text string `json:"text"`
+	Key      string `json:"key"`
+	Text     string `json:"text"`
+	ImageURL string `json:"imageUrl,omitempty"`
 }
 
 type CBTMatchingPairInput struct {
@@ -758,13 +759,14 @@ type CBTQuestionInput struct {
 }
 
 type CBTQuestionMeta struct {
-	Type            string                 `json:"type,omitempty"`
-	StimulusText    string                 `json:"stimulusText,omitempty"`
-	CorrectOptions  []string               `json:"correctOptions,omitempty"`
-	TrueFalseAnswer *bool                  `json:"trueFalseAnswer,omitempty"`
-	MatchingPairs   []CBTMatchingPairInput `json:"matchingPairs,omitempty"`
-	EssayRubric     string                 `json:"essayRubric,omitempty"`
-	Points          float64                `json:"points,omitempty"`
+	Type            string                   `json:"type,omitempty"`
+	StimulusText    string                   `json:"stimulusText,omitempty"`
+	Options         []CBTQuestionOptionInput `json:"options,omitempty"`
+	CorrectOptions  []string                 `json:"correctOptions,omitempty"`
+	TrueFalseAnswer *bool                    `json:"trueFalseAnswer,omitempty"`
+	MatchingPairs   []CBTMatchingPairInput   `json:"matchingPairs,omitempty"`
+	EssayRubric     string                   `json:"essayRubric,omitempty"`
+	Points          float64                  `json:"points,omitempty"`
 }
 
 func (in *CBTQuestionInput) ToDomain(examID string, index int) domain.CBTQuestion {
@@ -888,6 +890,7 @@ func (in *CBTQuestionInput) ToDomain(examID string, index int) domain.CBTQuestio
 	meta := CBTQuestionMeta{
 		Type:            qType,
 		StimulusText:    strings.TrimSpace(in.StimulusText),
+		Options:         in.Options,
 		CorrectOptions:  in.CorrectOptions,
 		TrueFalseAnswer: in.TrueFalseAnswer,
 		MatchingPairs:   in.MatchingPairs,
@@ -930,20 +933,33 @@ func formatQuestionForFrontend(q domain.CBTQuestion) fiber.Map {
 	}
 
 	opts := []fiber.Map{}
-	if q.OptionA != "" {
-		opts = append(opts, fiber.Map{"key": "A", "text": q.OptionA})
-	}
-	if q.OptionB != "" {
-		opts = append(opts, fiber.Map{"key": "B", "text": q.OptionB})
-	}
-	if q.OptionC != "" {
-		opts = append(opts, fiber.Map{"key": "C", "text": q.OptionC})
-	}
-	if q.OptionD != "" {
-		opts = append(opts, fiber.Map{"key": "D", "text": q.OptionD})
-	}
-	if q.OptionE != "" {
-		opts = append(opts, fiber.Map{"key": "E", "text": q.OptionE})
+	if len(meta.Options) > 0 {
+		for _, option := range meta.Options {
+			if strings.TrimSpace(option.Text) == "" && strings.TrimSpace(option.ImageURL) == "" {
+				continue
+			}
+			opts = append(opts, fiber.Map{
+				"key":      option.Key,
+				"text":     option.Text,
+				"imageUrl": option.ImageURL,
+			})
+		}
+	} else {
+		if q.OptionA != "" {
+			opts = append(opts, fiber.Map{"key": "A", "text": q.OptionA})
+		}
+		if q.OptionB != "" {
+			opts = append(opts, fiber.Map{"key": "B", "text": q.OptionB})
+		}
+		if q.OptionC != "" {
+			opts = append(opts, fiber.Map{"key": "C", "text": q.OptionC})
+		}
+		if q.OptionD != "" {
+			opts = append(opts, fiber.Map{"key": "D", "text": q.OptionD})
+		}
+		if q.OptionE != "" {
+			opts = append(opts, fiber.Map{"key": "E", "text": q.OptionE})
+		}
 	}
 
 	qType := q.QuestionType
