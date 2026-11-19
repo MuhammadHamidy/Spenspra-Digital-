@@ -176,6 +176,8 @@ type Repository interface {
 
 	// CBT Sessions & Proctoring
 	GetOrCreateSession(ctx context.Context, examID, studentID, studentName, classCode string) (*CBTStudentSession, error)
+	GetSessionByExamAndStudent(ctx context.Context, examID, studentID string) (*CBTStudentSession, error)
+	GetSessionByID(ctx context.Context, sessionID string) (*CBTStudentSession, error)
 	RecordViolation(ctx context.Context, log *CBTViolationLog) (*CBTStudentSession, error)
 	UnlockSession(ctx context.Context, sessionID string) error
 	SubmitExamSession(ctx context.Context, sessionID string, score float64) error
@@ -213,6 +215,8 @@ type UseCase interface {
 
 	// CBT Proctoring & Student Runner
 	StartStudentExam(ctx context.Context, examID, token, studentID, studentName, classCode string) (*CBTStudentSession, error)
+	GetStudentSessionByExamAndStudent(ctx context.Context, examID, studentID string) (*CBTStudentSession, error)
+	GetStudentSessionByID(ctx context.Context, sessionID string) (*CBTStudentSession, error)
 	LogViolation(ctx context.Context, log *CBTViolationLog) (*CBTStudentSession, error)
 	UnlockStudent(ctx context.Context, sessionID string) error
 	SaveStudentAnswer(ctx context.Context, ans *CBTStudentAnswer) error

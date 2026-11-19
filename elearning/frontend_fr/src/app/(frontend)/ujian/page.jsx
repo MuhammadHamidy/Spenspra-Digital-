@@ -55,11 +55,6 @@ export default function StudentExamsHubPage() {
           const sess = await elearningApi.getStudentExamSession(ex.id, uId);
           if (sess) {
             sessionMap[ex.id] = sess;
-            // Sinkronkan jawaban lokal ke backend jika ada sesi lokal yang belum tersinkron
-            if (sess.sessionId && sess.answers && Object.keys(sess.answers).length > 0) {
-              elearningApi.finishExamSession(sess.sessionId, ex.id, uId, sess.answers).catch(() => {});
-            }
-
           }
         }
         setExamSessions(sessionMap);
@@ -287,9 +282,10 @@ export default function StudentExamsHubPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredExams.map((exam) => {
             const session = examSessions[exam.id];
-            const isCompleted = session?.status === 'SUBMITTED';
+            const isCompleted = session?.status === 'SUBMITTED' || session?.status === 'COMPLETED';
             const isLocked = session?.status === 'LOCKED';
             const isInProgress = session?.status === 'IN_PROGRESS';
+            const isScoreVisible = exam.showScoreToStudent !== false && !String(exam.description || '').includes('[SCORE:0]');
 
             return (
               <Card
@@ -342,7 +338,10 @@ export default function StudentExamsHubPage() {
                       {exam.title}
                     </h3>
                     <p className="text-xs text-neutral-500 mt-1 line-clamp-2 leading-relaxed">
-                      {exam.description || 'Ujian berbasis komputer (CBT) dengan pengawasan anti-cheat.'}
+                      {(exam.description || '')
+                        .replace(/\[SCORE:[01]\]/g, '')
+                        .replace(/\[ANSWERS:[01]\]/g, '')
+                        .trim() || 'Ujian berbasis komputer (CBT) dengan pengawasan anti-cheat.'}
                     </p>
                   </div>
 
@@ -378,24 +377,40 @@ export default function StudentExamsHubPage() {
                     </div>
                   </div>
 
-                  {/* Score Card if Submitted (Requirement 6) */}
+                  {/* Score Card if Submitted & Configured to Show */}
                   {isCompleted && (
-                    <div className="p-3 rounded-[8px] bg-success-50 border border-success-200 flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <p className="text-[11px] font-semibold text-success-800">Hasil Penilaian CBT:</p>
-                        <p className="text-[10px] text-success-600">
-                          {session.submittedAt
-                            ? `Dikumpulkan: ${new Date(session.submittedAt).toLocaleTimeString('id-ID')} WIB`
-                            : 'Jawaban tersimpan di sistem'}
-                        </p>
+                    isScoreVisible ? (
+                      <div className="p-3 rounded-[8px] bg-success-50 border border-success-200 flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <p className="text-[11px] font-semibold text-success-800">Hasil Penilaian CBT:</p>
+                          <p className="text-[10px] text-success-600">
+                            {session.submittedAt
+                              ? `Dikumpulkan: ${new Date(session.submittedAt).toLocaleTimeString('id-ID')} WIB`
+                              : 'Jawaban tersimpan di sistem'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-2xl font-black text-success-700">
+                            {session.score !== undefined && session.score !== null ? session.score : 0}
+                          </span>
+                          <span className="text-xs font-bold text-success-600"> / 100</span>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-2xl font-black text-success-700">
-                          {session.score !== undefined && session.score !== null ? session.score : 0}
+                    ) : (
+                      <div className="p-3 rounded-[8px] bg-neutral-50 border border-neutral-200 flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <p className="text-[11px] font-semibold text-neutral-700">Status Pengumpulan:</p>
+                          <p className="text-[10px] text-neutral-500">
+                            {session.submittedAt
+                              ? `Dikumpulkan: ${new Date(session.submittedAt).toLocaleTimeString('id-ID')} WIB`
+                              : 'Jawaban telah tersimpan di server'}
+                          </p>
+                        </div>
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-neutral-200 text-neutral-700">
+                          Menunggu Publikasi Nilai
                         </span>
-                        <span className="text-xs font-bold text-success-600"> / 100</span>
                       </div>
-                    </div>
+                    )
                   )}
                 </div>
 
@@ -408,7 +423,14 @@ export default function StudentExamsHubPage() {
                       disabled
                       className="w-full min-h-[42px] font-bold bg-neutral-100 text-neutral-500 border-neutral-200 cursor-not-allowed"
                     >
-                      ✓ Ujian Telah Dikerjakan (Skor: {session.score ?? '-'})
+                      <span className="inline-flex items-center gap-1.5">
+                        <AppIcon name="tick" color="gray" size={14} />
+                        <span>
+                          {isScoreVisible
+                            ? `Ujian Telah Dikerjakan (Skor: ${session.score ?? '-'})`
+                            : 'Ujian Telah Dikerjakan'}
+                        </span>
+                      </span>
                     </Button>
                   ) : isLocked ? (
                     <Button
@@ -417,7 +439,10 @@ export default function StudentExamsHubPage() {
                       disabled
                       className="w-full min-h-[42px] font-bold bg-danger-50 text-danger-700 border-danger-300 cursor-not-allowed"
                     >
-                      🔒 Layar Terkunci - Hubungi Pengawas
+                      <span className="inline-flex items-center gap-1.5">
+                        <AppIcon name="lock" color="red" size={14} />
+                        <span>Layar Terkunci - Hubungi Pengawas</span>
+                      </span>
                     </Button>
                   ) : isInProgress ? (
                     <Button

@@ -110,6 +110,7 @@ func (h *ELearningHandler) RegisterRoutes(app *fiber.App) {
 	api.Put("/exams/:id/questions", h.SaveExamQuestions)
 
 	// 4. CBT Student Runner & Anti-Cheat Proctoring
+	api.Get("/exams/:id/session", h.GetStudentSession)
 	api.Post("/exams/:id/start", h.StartStudentExam)
 	api.Post("/sessions/:id/answers", h.SaveStudentAnswer)
 	api.Get("/sessions/:id/answers", h.GetStudentAnswers)
@@ -1328,7 +1329,59 @@ func (h *ELearningHandler) FinishStudentExam(c *fiber.Ctx) error {
 	if err := h.useCase.FinishStudentExam(c.Context(), id, req.Score, answerList); err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
 	}
-	return c.Status(http.StatusOK).JSON(responses.Success(fiber.Map{"finished": true}, "Ujian berhasil diselesaikan"))
+	sess, _ := h.useCase.GetStudentSessionByID(c.Context(), id)
+	retScore := req.Score
+	if sess != nil {
+		retScore = sess.Score
+	}
+	return c.Status(http.StatusOK).JSON(responses.Success(fiber.Map{
+		"finished": true,
+		"score":    retScore,
+	}, "Ujian berhasil diselesaikan"))
+}
+
+func (h *ELearningHandler) GetStudentSession(c *fiber.Ctx) error {
+	examID := c.Params("id")
+	studentID := strings.TrimSpace(c.Query("student_id"))
+	if studentID == "" {
+		studentID = strings.TrimSpace(c.Query("studentId"))
+	}
+	if studentID == "" {
+		studentID = strings.TrimSpace(c.Get("X-User-Id"))
+	}
+	if studentID == "" {
+		return c.Status(http.StatusBadRequest).JSON(responses.Fail("VALIDATION_ERROR", "student_id diperlukan"))
+	}
+
+	sess, err := h.useCase.GetStudentSessionByExamAndStudent(c.Context(), examID, studentID)
+	if err != nil || sess == nil {
+		return c.Status(http.StatusNotFound).JSON(responses.Fail("NOT_FOUND", "Sesi ujian siswa tidak ditemukan"))
+	}
+
+	subAt := ""
+	if sess.SubmittedAt != nil {
+		subAt = sess.SubmittedAt.Format(time.RFC3339)
+	}
+
+	return c.Status(http.StatusOK).JSON(responses.Success(fiber.Map{
+		"id":              sess.ID,
+		"sessionId":       sess.ID,
+		"exam_id":         sess.ExamID,
+		"examId":          sess.ExamID,
+		"student_id":      sess.StudentID,
+		"studentId":       sess.StudentID,
+		"student_name":    sess.StudentName,
+		"studentName":     sess.StudentName,
+		"class_code":      sess.ClassCode,
+		"className":       sess.ClassCode,
+		"status":          sess.Status,
+		"score":           sess.Score,
+		"started_at":      sess.StartedAt.Format(time.RFC3339),
+		"submitted_at":    subAt,
+		"submittedAt":     subAt,
+		"violationsCount": sess.ViolationCount,
+		"violations_count": sess.ViolationCount,
+	}, "Sesi ujian dimuat"))
 }
 
 func (h *ELearningHandler) GetLiveProctoring(c *fiber.Ctx) error {

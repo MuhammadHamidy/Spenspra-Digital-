@@ -321,6 +321,29 @@ func (r *repository) GetOrCreateSession(ctx context.Context, examID, studentID, 
 	return &sess, nil
 }
 
+func (r *repository) GetSessionByExamAndStudent(ctx context.Context, examID, studentID string) (*domain.CBTStudentSession, error) {
+	var sess domain.CBTStudentSession
+	err := r.db.WithContext(ctx).Table("cbt_student_sessions").
+		Where("exam_id = ? AND student_id = ?", examID, studentID).
+		Order("started_at desc").
+		First(&sess).Error
+	if err != nil {
+		return nil, err
+	}
+	return &sess, nil
+}
+
+func (r *repository) GetSessionByID(ctx context.Context, sessionID string) (*domain.CBTStudentSession, error) {
+	var sess domain.CBTStudentSession
+	err := r.db.WithContext(ctx).Table("cbt_student_sessions").
+		Where("id = ?", sessionID).
+		First(&sess).Error
+	if err != nil {
+		return nil, err
+	}
+	return &sess, nil
+}
+
 func (r *repository) RecordViolation(ctx context.Context, log *domain.CBTViolationLog) (*domain.CBTStudentSession, error) {
 	if log.ID == "" {
 		log.ID = "viol-" + uuid.NewString()[:8]

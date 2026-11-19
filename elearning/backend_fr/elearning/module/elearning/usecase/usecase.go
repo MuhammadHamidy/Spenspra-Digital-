@@ -168,6 +168,14 @@ func (u *useCase) SaveStudentAnswer(ctx context.Context, ans *domain.CBTStudentA
 	return u.repo.SaveStudentAnswer(ctx, ans)
 }
 
+func (u *useCase) GetStudentSessionByExamAndStudent(ctx context.Context, examID, studentID string) (*domain.CBTStudentSession, error) {
+	return u.repo.GetSessionByExamAndStudent(ctx, examID, studentID)
+}
+
+func (u *useCase) GetStudentSessionByID(ctx context.Context, sessionID string) (*domain.CBTStudentSession, error) {
+	return u.repo.GetSessionByID(ctx, sessionID)
+}
+
 func (u *useCase) FinishStudentExam(ctx context.Context, sessionID string, score float64, answers []domain.CBTStudentAnswer) error {
 	if len(answers) > 0 {
 		_ = u.repo.BatchSaveStudentAnswers(ctx, sessionID, answers)

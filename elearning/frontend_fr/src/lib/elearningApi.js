@@ -1375,9 +1375,30 @@ export const elearningApi = {
     };
   },
 
-  getStudentExamSession: (examId, studentId) => {
+  getStudentExamSession: async (examId, studentId) => {
     const sessionKey = `exam_session_${examId}_${studentId || 'demo'}`;
-    return getLocal(sessionKey, null);
+    const localSess = getLocal(sessionKey, null);
+
+    // Prioritaskan data sesi dan nilai resmi langsung dari database PostgreSQL server
+    try {
+      const res = await fetchJson(`/exams/${examId}/session?student_id=${encodeURIComponent(studentId || '')}`);
+      if (res?.success && res?.data) {
+        const serverSess = res.data;
+        const merged = {
+          ...(localSess || {}),
+          ...serverSess,
+          id: serverSess.sessionId || serverSess.id || localSess?.id,
+          sessionId: serverSess.sessionId || serverSess.id || localSess?.sessionId,
+          status: serverSess.status || localSess?.status,
+          score: serverSess.score !== undefined && serverSess.score !== null ? serverSess.score : localSess?.score,
+          submittedAt: serverSess.submittedAt || serverSess.submitted_at || localSess?.submittedAt,
+        };
+        setLocal(sessionKey, merged);
+        return merged;
+      }
+    } catch (_) {}
+
+    return localSess;
   },
 
   startExamSession: async (examId, token, student) => {
@@ -1817,18 +1838,26 @@ export const elearningApi = {
       }
     }
 
-    // Call backend async
+    // Call backend async and synchronize authoritative score
     const finalSessId = effSessionId || session?.sessionId;
     if (finalSessId) {
-      fetchJson(`/sessions/${finalSessId}/finish`, {
-        method: 'POST',
-        body: JSON.stringify({
-          score: score !== null ? score : 0,
-          answers: mergedAnswers,
-        }),
-      }).catch((e) => {
+      try {
+        const res = await fetchJson(`/sessions/${finalSessId}/finish`, {
+          method: 'POST',
+          body: JSON.stringify({
+            score: score !== null ? score : 0,
+            answers: mergedAnswers,
+          }),
+        });
+        if (res?.success && res?.data?.score !== undefined && res?.data?.score !== null) {
+          if (session) {
+            session.score = res.data.score;
+            setLocal(`exam_session_${examId}_${sId}`, session);
+          }
+        }
+      } catch (e) {
         console.warn('Gagal finish session ke backend:', e);
-      });
+      }
     }
 
     return session || { status: 'SUBMITTED', score, answers: mergedAnswers, reviewItems, correctCount, totalMcq: totalAutoGraded, totalEssay };

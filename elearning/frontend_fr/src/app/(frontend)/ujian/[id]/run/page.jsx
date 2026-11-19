@@ -477,7 +477,7 @@ export default function CBTExamRunnerPage({ params }) {
 
   // Result state
   if (finishResult) {
-    const isScoreVisible = exam?.showScoreToStudent !== false;
+    const isScoreVisible = exam?.showScoreToStudent !== false && !String(exam?.description || '').includes('[SCORE:0]');
     const canReviewAnswers = Boolean(exam?.showAnswersToStudent);
 
     return (
