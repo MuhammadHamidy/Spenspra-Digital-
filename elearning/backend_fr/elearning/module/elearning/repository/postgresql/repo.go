@@ -37,8 +37,6 @@ func NewRepository(db *gorm.DB) domain.Repository {
 	return &repository{db: db}
 }
 
-
-
 // ================= MATERIALS =================
 
 func (r *repository) ListMaterials(ctx context.Context, classCode string) ([]domain.LearningMaterial, error) {
@@ -110,7 +108,6 @@ func (r *repository) DeleteAssignment(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Table("learning_assignments").Where("id = ?", id).Delete(nil).Error
 }
 
-
 func (r *repository) ListSubmissions(ctx context.Context, assignmentID string) ([]domain.AssignmentSubmission, error) {
 	var list []domain.AssignmentSubmission
 	err := r.db.WithContext(ctx).Table("assignment_submissions").
@@ -178,20 +175,24 @@ func (r *repository) CreateExam(ctx context.Context, e *domain.CBTExam) error {
 func (r *repository) UpdateExam(ctx context.Context, id string, e *domain.CBTExam) error {
 	e.UpdatedAt = time.Now()
 	updates := map[string]interface{}{
-		"title":            e.Title,
-		"class_code":       e.ClassCode,
-		"course_name":      e.CourseName,
-		"course_id":        e.CourseID,
-		"teacher_name":     e.TeacherName,
-		"teacher_id":       e.TeacherID,
-		"token":            e.Token,
-		"duration_minutes": e.DurationMinutes,
-		"max_violations":   e.MaxViolations,
-		"start_time":       e.StartTime,
-		"end_time":         e.EndTime,
-		"description":      e.Description,
-		"status":           e.Status,
-		"updated_at":       e.UpdatedAt,
+		"title":               e.Title,
+		"class_code":          e.ClassCode,
+		"course_name":         e.CourseName,
+		"course_id":           e.CourseID,
+		"teacher_name":        e.TeacherName,
+		"teacher_id":          e.TeacherID,
+		"token":               e.Token,
+		"duration_minutes":    e.DurationMinutes,
+		"max_violations":      e.MaxViolations,
+		"exam_category":       e.ExamCategory,
+		"target_grade_level":  e.TargetGradeLevel,
+		"supervisor_pin":      e.SupervisorPin,
+		"is_coordinator_exam": e.IsCoordinatorExam,
+		"start_time":          e.StartTime,
+		"end_time":            e.EndTime,
+		"description":         e.Description,
+		"status":              e.Status,
+		"updated_at":          e.UpdatedAt,
 	}
 	return r.db.WithContext(ctx).Table("cbt_exams").Where("id = ?", id).Updates(updates).Error
 }
@@ -658,6 +659,3 @@ func (r *repository) GetStudentAnswers(ctx context.Context, sessionID string) ([
 		Find(&answers).Error
 	return answers, err
 }
-
-
-

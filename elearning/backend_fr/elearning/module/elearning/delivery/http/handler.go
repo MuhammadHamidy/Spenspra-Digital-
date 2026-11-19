@@ -26,12 +26,14 @@ func actorRole(c *fiber.Ctx) string {
 
 func isTeacherRole(role string) bool {
 	r := strings.ToUpper(strings.TrimSpace(role))
-	return r == "GURU" || r == "TEACHER" || r == "PENDIDIK" || r == "WALI_KELAS" || r == "KOORDINATOR"
+	return r == "GURU" || r == "TEACHER" || r == "PENDIDIK" || r == "WALI_KELAS" || r == "KOORDINATOR" ||
+		r == "PROKTOR" || r == "ADMIN_PROKTOR" || r == "KOORDINATOR_UAS"
 }
 
 func canManageAll(role string) bool {
 	r := strings.ToUpper(strings.TrimSpace(role))
-	return r == "ADMIN" || r == "SUPER_ADMIN" || r == "ADMIN_ELEARNING"
+	return r == "ADMIN" || r == "SUPER_ADMIN" || r == "ADMIN_ELEARNING" ||
+		r == "PROKTOR" || r == "ADMIN_PROKTOR" || r == "KOORDINATOR_UAS"
 }
 
 func cleanTeacherName(s string) string {
@@ -271,30 +273,38 @@ func (h *ELearningHandler) GradeSubmission(c *fiber.Ctx) error {
 }
 
 type CBTExamInput struct {
-	ID                   string `json:"id"`
-	Title                string `json:"title"`
-	Subject              string `json:"subject"`
-	CourseName           string `json:"course_name"`
-	SubjectCode          string `json:"subjectCode"`
-	CourseID             string `json:"course_id"`
-	ClassName            string `json:"className"`
-	ClassCode            string `json:"class_code"`
-	TeacherName          string `json:"teacherName"`
-	TeacherNameSnake     string `json:"teacher_name"`
-	TeacherID            string `json:"teacherId"`
-	TeacherIDSnake       string `json:"teacher_id"`
-	Token                string `json:"token"`
-	DurationMinutes      int    `json:"durationMinutes"`
-	DurationMinutesSnake int    `json:"duration_minutes"`
-	MaxViolations        int    `json:"maxViolations"`
-	MaxViolationsSnake   int    `json:"max_violations"`
-	ScheduledDate        string `json:"scheduledDate"`
-	StartTime            string `json:"startTime"`
-	EndTime              string `json:"endTime"`
-	StartDateTime        string `json:"startDateTime"`
-	EndDateTime          string `json:"endDateTime"`
-	Description          string `json:"description"`
-	Status               string `json:"status"`
+	ID                     string `json:"id"`
+	Title                  string `json:"title"`
+	Subject                string `json:"subject"`
+	CourseName             string `json:"course_name"`
+	SubjectCode            string `json:"subjectCode"`
+	CourseID               string `json:"course_id"`
+	ClassName              string `json:"className"`
+	ClassCode              string `json:"class_code"`
+	TeacherName            string `json:"teacherName"`
+	TeacherNameSnake       string `json:"teacher_name"`
+	TeacherID              string `json:"teacherId"`
+	TeacherIDSnake         string `json:"teacher_id"`
+	Token                  string `json:"token"`
+	DurationMinutes        int    `json:"durationMinutes"`
+	DurationMinutesSnake   int    `json:"duration_minutes"`
+	MaxViolations          int    `json:"maxViolations"`
+	MaxViolationsSnake     int    `json:"max_violations"`
+	ScheduledDate          string `json:"scheduledDate"`
+	StartTime              string `json:"startTime"`
+	EndTime                string `json:"endTime"`
+	StartDateTime          string `json:"startDateTime"`
+	EndDateTime            string `json:"endDateTime"`
+	Description            string `json:"description"`
+	Status                 string `json:"status"`
+	ExamCategory           string `json:"examCategory"`
+	ExamCategorySnake      string `json:"exam_category"`
+	TargetGradeLevel       string `json:"targetGradeLevel"`
+	TargetGradeLevelSnake  string `json:"target_grade_level"`
+	SupervisorPin          string `json:"supervisorPin"`
+	SupervisorPinSnake     string `json:"supervisor_pin"`
+	IsCoordinatorExam      bool   `json:"isCoordinatorExam"`
+	IsCoordinatorExamSnake bool   `json:"is_coordinator_exam"`
 }
 
 func (in *CBTExamInput) ToDomain() domain.CBTExam {
@@ -370,21 +380,34 @@ func (in *CBTExamInput) ToDomain() domain.CBTExam {
 	endT := parseTime(in.EndDateTime, in.ScheduledDate, in.EndTime)
 
 	return domain.CBTExam{
-		ID:              in.ID,
-		Title:           strings.TrimSpace(in.Title),
-		ClassCode:       cls,
-		CourseName:      cName,
-		CourseID:        cID,
-		TeacherName:     tName,
-		TeacherID:       tID,
-		Token:           strings.ToUpper(strings.TrimSpace(in.Token)),
-		DurationMinutes: dur,
-		MaxViolations:   maxV,
-		StartTime:       startT,
-		EndTime:         endT,
-		Description:     strings.TrimSpace(in.Description),
-		Status:          stat,
+		ID:                in.ID,
+		Title:             strings.TrimSpace(in.Title),
+		ClassCode:         cls,
+		CourseName:        cName,
+		CourseID:          cID,
+		TeacherName:       tName,
+		TeacherID:         tID,
+		Token:             strings.ToUpper(strings.TrimSpace(in.Token)),
+		DurationMinutes:   dur,
+		MaxViolations:     maxV,
+		StartTime:         startT,
+		EndTime:           endT,
+		Description:       strings.TrimSpace(in.Description),
+		ExamCategory:      firstNonEmpty(in.ExamCategorySnake, in.ExamCategory, "REGULAR"),
+		TargetGradeLevel:  firstNonEmpty(in.TargetGradeLevelSnake, in.TargetGradeLevel),
+		SupervisorPin:     strings.ToUpper(firstNonEmpty(in.SupervisorPinSnake, in.SupervisorPin)),
+		IsCoordinatorExam: in.IsCoordinatorExam || in.IsCoordinatorExamSnake,
+		Status:            stat,
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func formatExamForFrontend(e domain.CBTExam) fiber.Map {
@@ -436,6 +459,14 @@ func formatExamForFrontend(e domain.CBTExam) fiber.Map {
 		"durationMinutes":         e.DurationMinutes,
 		"max_violations":          e.MaxViolations,
 		"maxViolations":           e.MaxViolations,
+		"examCategory":            e.ExamCategory,
+		"exam_category":           e.ExamCategory,
+		"targetGradeLevel":        e.TargetGradeLevel,
+		"target_grade_level":      e.TargetGradeLevel,
+		"supervisorPin":           e.SupervisorPin,
+		"supervisor_pin":          e.SupervisorPin,
+		"isCoordinatorExam":       e.IsCoordinatorExam,
+		"is_coordinator_exam":     e.IsCoordinatorExam,
 		"scheduledDate":           sDate,
 		"startTime":               sTime,
 		"endTime":                 eTime,
@@ -620,6 +651,19 @@ func (h *ELearningHandler) UpdateExam(c *fiber.Ctx) error {
 		req.MaxViolations = maxV
 	}
 
+	if category := firstNonEmpty(input.ExamCategorySnake, input.ExamCategory); category != "" {
+		req.ExamCategory = strings.ToUpper(category)
+	}
+	if level := firstNonEmpty(input.TargetGradeLevelSnake, input.TargetGradeLevel); level != "" {
+		req.TargetGradeLevel = level
+	}
+	if pin := firstNonEmpty(input.SupervisorPinSnake, input.SupervisorPin); pin != "" {
+		req.SupervisorPin = strings.ToUpper(pin)
+	}
+	if input.IsCoordinatorExam || input.IsCoordinatorExamSnake {
+		req.IsCoordinatorExam = true
+	}
+
 	if stat := strings.TrimSpace(input.Status); stat != "" {
 		req.Status = strings.ToUpper(stat)
 	}
@@ -714,13 +758,13 @@ type CBTQuestionInput struct {
 }
 
 type CBTQuestionMeta struct {
-	Type            string                   `json:"type,omitempty"`
-	StimulusText    string                   `json:"stimulusText,omitempty"`
-	CorrectOptions  []string                 `json:"correctOptions,omitempty"`
-	TrueFalseAnswer *bool                    `json:"trueFalseAnswer,omitempty"`
-	MatchingPairs   []CBTMatchingPairInput   `json:"matchingPairs,omitempty"`
-	EssayRubric     string                   `json:"essayRubric,omitempty"`
-	Points          float64                  `json:"points,omitempty"`
+	Type            string                 `json:"type,omitempty"`
+	StimulusText    string                 `json:"stimulusText,omitempty"`
+	CorrectOptions  []string               `json:"correctOptions,omitempty"`
+	TrueFalseAnswer *bool                  `json:"trueFalseAnswer,omitempty"`
+	MatchingPairs   []CBTMatchingPairInput `json:"matchingPairs,omitempty"`
+	EssayRubric     string                 `json:"essayRubric,omitempty"`
+	Points          float64                `json:"points,omitempty"`
 }
 
 func (in *CBTQuestionInput) ToDomain(examID string, index int) domain.CBTQuestion {
@@ -1364,22 +1408,22 @@ func (h *ELearningHandler) GetStudentSession(c *fiber.Ctx) error {
 	}
 
 	return c.Status(http.StatusOK).JSON(responses.Success(fiber.Map{
-		"id":              sess.ID,
-		"sessionId":       sess.ID,
-		"exam_id":         sess.ExamID,
-		"examId":          sess.ExamID,
-		"student_id":      sess.StudentID,
-		"studentId":       sess.StudentID,
-		"student_name":    sess.StudentName,
-		"studentName":     sess.StudentName,
-		"class_code":      sess.ClassCode,
-		"className":       sess.ClassCode,
-		"status":          sess.Status,
-		"score":           sess.Score,
-		"started_at":      sess.StartedAt.Format(time.RFC3339),
-		"submitted_at":    subAt,
-		"submittedAt":     subAt,
-		"violationsCount": sess.ViolationCount,
+		"id":               sess.ID,
+		"sessionId":        sess.ID,
+		"exam_id":          sess.ExamID,
+		"examId":           sess.ExamID,
+		"student_id":       sess.StudentID,
+		"studentId":        sess.StudentID,
+		"student_name":     sess.StudentName,
+		"studentName":      sess.StudentName,
+		"class_code":       sess.ClassCode,
+		"className":        sess.ClassCode,
+		"status":           sess.Status,
+		"score":            sess.Score,
+		"started_at":       sess.StartedAt.Format(time.RFC3339),
+		"submitted_at":     subAt,
+		"submittedAt":      subAt,
+		"violationsCount":  sess.ViolationCount,
 		"violations_count": sess.ViolationCount,
 	}, "Sesi ujian dimuat"))
 }

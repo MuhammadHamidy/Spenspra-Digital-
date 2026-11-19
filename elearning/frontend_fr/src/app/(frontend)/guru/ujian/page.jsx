@@ -28,6 +28,68 @@ const formatDateDisplay = (dateStr) => {
   }
 };
 
+function parseQuestionImport(text) {
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\t/g, ' ').trim())
+    .filter(Boolean);
+  const questions = [];
+  let current = null;
+  let currentOption = null;
+
+  const startQuestion = (line) => {
+    const match = line.match(/^(?:soal\s*)?(\d+)\s*[\.\):\-]\s*(.+)$/i);
+    if (!match) return false;
+    if (current?.questionText && current.options.length >= 2) questions.push(current);
+    current = {
+      questionNumber: Number(match[1]),
+      questionText: match[2].trim(),
+      options: [],
+      correctOption: 'A',
+    };
+    currentOption = null;
+    return true;
+  };
+
+  lines.forEach((line) => {
+    if (startQuestion(line)) return;
+    if (!current) return;
+
+    const answerMatch = line.match(/^(?:kunci|jawaban|answer)\s*[:\-]\s*([A-E])/i);
+    if (answerMatch) {
+      current.correctOption = answerMatch[1].toUpperCase();
+      currentOption = null;
+      return;
+    }
+
+    const optionMatch = line.match(/^([A-E])\s*[\.\):\-]\s*(.+)$/i);
+    if (optionMatch) {
+      const key = optionMatch[1].toUpperCase();
+      current.options.push({ key, text: optionMatch[2].trim() });
+      currentOption = key;
+      return;
+    }
+
+    if (currentOption) {
+      const option = current.options.find((item) => item.key === currentOption);
+      if (option) option.text = `${option.text} ${line}`.trim();
+    } else {
+      current.questionText = `${current.questionText} ${line}`.trim();
+    }
+  });
+
+  if (current?.questionText && current.options.length >= 2) questions.push(current);
+  return questions.map((question, index) => ({
+    id: `q-import-${Date.now()}-${index}`,
+    questionNumber: index + 1,
+    type: 'MCQ',
+    questionText: question.questionText,
+    options: question.options,
+    correctOption: question.correctOption,
+    points: 10,
+  }));
+}
+
 export default function TeacherExamsManagementPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
@@ -98,6 +160,9 @@ export default function TeacherExamsManagementPage() {
   const [essayRubric, setEssayRubric] = useState('');
   const [isSavingQuestion, setIsSavingQuestion] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
 
   useEffect(() => {
     loadInitialData();
@@ -680,6 +745,31 @@ export default function TeacherExamsManagementPage() {
     });
   };
 
+  const handleImportQuestions = async () => {
+    const imported = parseQuestionImport(importText);
+    if (imported.length === 0) {
+      alert('Tidak ada soal yang terbaca. Gunakan format nomor soal lalu opsi A), B), C), D).');
+      return;
+    }
+    setIsImporting(true);
+    try {
+      const updated = [...examQuestions, ...imported].map((question, index) => ({
+        ...question,
+        questionNumber: index + 1,
+      }));
+      setExamQuestions(updated);
+      await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, updated);
+      setImportText('');
+      setIsImportOpen(false);
+      setSaveSuccessMsg(`${imported.length} soal pilihan ganda berhasil diimpor.`);
+      setTimeout(() => setSaveSuccessMsg(''), 4000);
+    } catch (error) {
+      alert(`Gagal mengimpor soal: ${error.message}`);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   if (activeQuestionEditorExam) {
     const mcqCount = examQuestions.filter((q) => q.type !== 'ESSAY').length;
     const essayCount = examQuestions.filter((q) => q.type === 'ESSAY').length;
@@ -748,6 +838,15 @@ export default function TeacherExamsManagementPage() {
                 <span>Simpan ke Server ({examQuestions.length} Soal)</span>
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsImportOpen(true)}
+              className="cursor-pointer font-bold flex items-center gap-1.5"
+            >
+              <AppIcon name="upload" color="blue" size={14} />
+              <span>Impor Soal Word/Teks</span>
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -1620,6 +1719,56 @@ export default function TeacherExamsManagementPage() {
             </Card>
           </div>
         </div>
+
+        {isImportOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+            <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl border border-neutral-200 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200">
+                <div>
+                  <h2 className="font-bold text-neutral-900">Impor Soal Pilihan Ganda</h2>
+                  <p className="text-[11px] text-neutral-500">
+                    Bisa ditempel dari Word, Notepad, atau Excel. Kunci jawaban opsional.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsImportOpen(false)}
+                  className="text-neutral-500 hover:text-neutral-900 text-xl"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="p-5 space-y-3">
+                <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-[11px] text-blue-900">
+                  Format: <strong>1. Pertanyaan</strong>, lalu <strong>A) Opsi A</strong> sampai
+                  <strong> D) Opsi D</strong>. Tambahkan <strong>Kunci: B</strong> bila ingin
+                  menentukan jawaban benar; jika tidak, sistem memakai A sebagai default.
+                </div>
+                <textarea
+                  value={importText}
+                  onChange={(event) => setImportText(event.target.value)}
+                  rows={14}
+                  placeholder={'1. Ibu kota Indonesia adalah ...\nA) Bandung\nB) Jakarta\nC) Surabaya\nD) Medan\nKunci: B'}
+                  className="w-full rounded-xl border border-neutral-300 p-3 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setIsImportOpen(false)}>
+                    Batal
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={handleImportQuestions}
+                    loading={isImporting}
+                  >
+                    Impor & Simpan Soal
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <ConfirmModal
           {...confirmModal}

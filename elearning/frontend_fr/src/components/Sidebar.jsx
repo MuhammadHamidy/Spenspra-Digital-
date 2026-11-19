@@ -29,7 +29,7 @@ function SidebarContent({ mobileOpen = false, onCloseMobile = () => {} }) {
 
   const role = String(user?.roleName || user?.role || user?.role_name || '').toUpperCase();
   const isSiswa = role.includes('SISWA') || role.includes('STUDENT');
-  const isAdmin = role.includes('ADMIN') || role === 'SUPER_ADMIN';
+  const isAdmin = role.includes('ADMIN') || role === 'SUPER_ADMIN' || role === 'PROKTOR' || role === 'KOORDINATOR_UAS';
   const isKepalaSekolah = role.includes('KEPALA');
   const isGuru = !isAdmin && !isKepalaSekolah && !isSiswa;
 

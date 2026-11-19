@@ -15,6 +15,7 @@ const APPS = [
     statusLabel: 'Rilis Aktif',
     roles: [
       { code: 'ADMIN', label: 'Admin Belajar / CBT' },
+      { code: 'PROKTOR', label: 'Proktor UAS / ASAS' },
       { code: 'GURU', label: 'Guru (Materi & CBT)' },
       { code: 'SISWA', label: 'Siswa (Belajar & Ujian CBT)' },
     ],
@@ -178,6 +179,7 @@ export default function AppAccessMatrixPage() {
         // Guru/Pendidik peran utamanya di sekolah adalah GURU, meskipun memegang tugas tambahan admin perpustakaan/rapor!
         let ssoRole = 'GURU';
         if (role === 'SUPER_ADMIN' || role.includes('SUPER')) ssoRole = 'SUPER_ADMIN';
+        else if (['PROKTOR', 'ADMIN_PROKTOR', 'KOORDINATOR_UAS'].includes(role)) ssoRole = 'PROKTOR';
         else if (role.includes('KEPALA')) ssoRole = 'KEPALA_SEKOLAH';
         else if (role.includes('SISWA')) ssoRole = 'SISWA';
         else if (role.includes('TENDIK') || role.includes('TENAGA_KEPENDIDIKAN') || role.includes('STAFF')) ssoRole = 'TENAGA_KEPENDIDIKAN';
@@ -190,7 +192,7 @@ export default function AppAccessMatrixPage() {
 
         // Tentukan peran Belajar (LMS & CBT)
         let elearningVal = 'NONE';
-        if (role === 'SUPER_ADMIN') elearningVal = 'ADMIN';
+        if (role === 'SUPER_ADMIN' || ['PROKTOR', 'ADMIN_PROKTOR', 'KOORDINATOR_UAS'].includes(role)) elearningVal = 'ADMIN';
         else if (role.includes('SISWA')) elearningVal = 'SISWA';
         else if (isEducator) elearningVal = 'GURU';
 
@@ -246,6 +248,11 @@ export default function AppAccessMatrixPage() {
           updated.erapor = 'ADMIN';
           updated.eperpus = 'ADMIN';
           updated.presensi = 'ADMIN';
+        } else if (newRole === 'PROKTOR') {
+          updated.elearning = 'ADMIN';
+          if (!updated.erapor || updated.erapor === 'NONE') updated.erapor = 'GURU';
+          if (!updated.eperpus || updated.eperpus === 'NONE') updated.eperpus = 'GURU';
+          if (!updated.presensi || updated.presensi === 'NONE') updated.presensi = 'GURU';
         } else if (newRole === 'ADMIN_RAPOR') {
           updated.erapor = 'ADMIN';
           if (!updated.elearning || updated.elearning === 'NONE') updated.elearning = 'GURU';
@@ -339,6 +346,8 @@ export default function AppAccessMatrixPage() {
       updatedRole = 'ADMIN_ABSENSI';
     } else if (ssoRole === 'ADMIN') {
       updatedRole = 'ADMIN';
+    } else if (ssoRole === 'PROKTOR') {
+      updatedRole = 'PROKTOR';
     } else if (ssoRole === 'TENAGA_KEPENDIDIKAN') {
       if (eperpus === 'ADMIN') updatedRole = 'ADMIN_PERPUS';
       else if (erapor === 'ADMIN') updatedRole = 'ADMIN_RAPOR';
@@ -685,6 +694,7 @@ export default function AppAccessMatrixPage() {
                           >
                             <option value="SUPER_ADMIN">★ Super Admin</option>
                             <option value="ADMIN">Admin Sekolah</option>
+                            <option value="PROKTOR">Proktor UAS / ASAS</option>
                             <option value="ADMIN_RAPOR">Admin e-Rapor</option>
                             <option value="ADMIN_PERPUS">Admin Perpustakaan</option>
                             <option value="ADMIN_ABSENSI">Admin Presensi</option>

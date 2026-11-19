@@ -77,6 +77,10 @@ type CBTExam struct {
 	MaxViolations      int        `json:"max_violations"`
 	RandomizeQuestions bool       `json:"randomize_questions"`
 	RandomizeOptions   bool       `json:"randomize_options"`
+	ExamCategory       string     `json:"exam_category"`
+	TargetGradeLevel   string     `json:"target_grade_level"`
+	SupervisorPin      string     `json:"supervisor_pin"`
+	IsCoordinatorExam  bool       `json:"is_coordinator_exam"`
 	Status             string     `json:"status"` // ACTIVE | UPCOMING | CLOSED
 	CreatedAt          time.Time  `json:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at"`
@@ -224,4 +228,3 @@ type UseCase interface {
 	GetStudentAnswers(ctx context.Context, sessionID string) (map[string]CBTStudentAnswer, error)
 	GetLiveProctoring(ctx context.Context, examID string) (map[string]interface{}, error)
 }
-

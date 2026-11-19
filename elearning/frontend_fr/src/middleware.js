@@ -44,7 +44,7 @@ export function middleware(request) {
       const payload = JSON.parse(payloadJson);
 
       const role = String(payload.role_name || payload.role || '').toUpperCase();
-      const isAllowedRole = ['SISWA', 'ROLE-SISWA', 'GURU', 'WALI_KELAS', 'SUPER_ADMIN', 'ADMIN', 'KEPALA_SEKOLAH'].includes(role);
+      const isAllowedRole = ['SISWA', 'ROLE-SISWA', 'GURU', 'WALI_KELAS', 'SUPER_ADMIN', 'ADMIN', 'PROKTOR', 'ADMIN_PROKTOR', 'KOORDINATOR_UAS', 'KEPALA_SEKOLAH'].includes(role);
 
       if (!isAllowedRole && payload.aud && Array.isArray(payload.aud)) {
         if (!payload.aud.includes('elearning') && !payload.aud.includes('sso')) {

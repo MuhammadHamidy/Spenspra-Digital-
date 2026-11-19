@@ -337,7 +337,8 @@ function filterItemsByCurrentUserScope(items, params = {}) {
   if (!currentUser) return items;
 
   const role = String(currentUser.roleName || currentUser.role || currentUser.role_name || '').toUpperCase();
-  const isAdmin = role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ADMIN_ELEARNING' || role.includes('KEPALA');
+  const isAdmin = role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ADMIN_ELEARNING' ||
+    role === 'PROKTOR' || role === 'ADMIN_PROKTOR' || role === 'KOORDINATOR_UAS' || role.includes('KEPALA');
   if (isAdmin) return items;
 
   const isSiswa = role.includes('SISWA') || role.includes('STUDENT');
@@ -782,6 +783,10 @@ export const elearningApi = {
       ...(payload.teacherName ? { teacher_name: payload.teacherName } : {}),
       ...(payload.teacherId ? { teacher_id: payload.teacherId } : {}),
       ...(payload.token ? { token: payload.token.toUpperCase() } : {}),
+      exam_category: isUas ? 'SEMESTER_UAS' : 'REGULAR',
+      target_grade_level: isUas ? (payload.targetGradeLevel || '7') : '',
+      supervisor_pin: isUas ? String(payload.supervisorPin || '').toUpperCase() : '',
+      is_coordinator_exam: isUas,
       ...(payload.status ? { status: payload.status } : {}),
       ...(payload.startDateTime ? { startDateTime: payload.startDateTime, start_time: payload.startDateTime } : {}),
       ...(payload.endDateTime ? { endDateTime: payload.endDateTime, end_time: payload.endDateTime } : {}),
@@ -1857,6 +1862,85 @@ export const elearningApi = {
         }
       } catch (e) {
         console.warn('Gagal finish session ke backend:', e);
+      }
+    }
+
+    // Nilai UAS/PAS dikirim ke e-Rapor setelah skor otoritatif CBT tersedia.
+    // Endpoint bulk e-Rapor bersifat upsert sehingga aman dipanggil saat siswa
+    // membuka ulang halaman hasil ujian.
+    if (session && score !== null) {
+      try {
+        const exam = await elearningApi.getExamById(examId);
+        const isUas = exam?.examCategory === 'SEMESTER_UAS' || exam?.isCoordinatorExam;
+        if (isUas) {
+          const currentUser = tokenStorage.getUser() || {};
+          const token = tokenStorage.getToken();
+          const raporBase = getRaporApiBase();
+          const raporHeaders = {
+            'Content-Type': 'application/json',
+            'X-User-Id': String(currentUser.id || currentUser.nimNip || currentUser.username || studentId || ''),
+            'X-User-Name': currentUser.fullName || currentUser.full_name || currentUser.name || session.studentName || '',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          };
+          const now = new Date();
+          const academicStart = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+          const semester = now.getMonth() >= 6 ? 'GANJIL' : 'GENAP';
+          const normalizeAssignmentValue = (value) => String(value || '')
+            .replace(/^kelas\s*/i, '')
+            .replace(/^rombel\s*/i, '')
+            .trim()
+            .toLowerCase();
+          const studentClass = normalizeAssignmentValue(session.className || session.class_code || exam.className);
+          const subjectCode = String(exam.subjectCode || exam.course_id || '').trim().toUpperCase();
+          const subjectName = String(exam.subject || exam.course_name || '').trim().toLowerCase();
+          let subjectAssignment = null;
+          try {
+            const assignments = await elearningApi.getClassAssignments();
+            const matchingAssignments = (assignments || []).filter((assignment) => {
+              const assignmentClass = normalizeAssignmentValue(assignment.class_code || assignment.className);
+              const assignmentCode = String(assignment.course_code || assignment.subject_code || '').trim().toUpperCase();
+              const assignmentName = String(assignment.course_name || assignment.subject_name || '').trim().toLowerCase();
+              const sameClass = !studentClass || !assignmentClass || assignmentClass === studentClass;
+              const sameSubject = (subjectCode && assignmentCode === subjectCode) ||
+                (subjectName && assignmentName === subjectName) ||
+                (subjectName && assignmentName.includes(subjectName));
+              return sameClass && sameSubject;
+            });
+            subjectAssignment = matchingAssignments[0] || null;
+          } catch (assignmentError) {
+            console.warn('Gagal membaca penugasan guru untuk sinkronisasi nilai UAS:', assignmentError);
+          }
+          const assignedTeacherId = subjectAssignment?.teacher_id || subjectAssignment?.dosen_id;
+          const assignedTeacherName = subjectAssignment?.teacher_name || subjectAssignment?.dosen_name;
+          if (!assignedTeacherId && !assignedTeacherName) {
+            throw new Error(`Guru pengampu belum diatur untuk mapel "${subjectName}" pada kelas "${studentClass}"`);
+          }
+          const raporResponse = await fetch(`${raporBase}/grades/bulk`, {
+            method: 'POST',
+            headers: raporHeaders,
+            body: JSON.stringify({
+              class_name: session.className || session.class_code || exam.className || '',
+              subject_code: subjectCode || 'MAPEL',
+              subject_name: exam.subject || exam.course_name || '',
+              assessment_type: 'PAS',
+              academic_year: `${academicStart}/${academicStart + 1}`,
+              semester,
+              teacher_id: assignedTeacherId || '',
+              teacher_name: assignedTeacherName || '',
+              grades: [{
+                student_id: String(session.studentId || studentId || ''),
+                student_name: session.studentName || currentUser.fullName || currentUser.name || 'Siswa',
+                nisn: session.studentNISN || session.student_nisn || '',
+                score: Number(session.score ?? score),
+              }],
+            }),
+          });
+          if (!raporResponse.ok) {
+            console.warn('Sinkronisasi nilai UAS ke e-Rapor ditolak:', raporResponse.status);
+          }
+        }
+      } catch (e) {
+        console.warn('Gagal sinkronisasi nilai UAS ke e-Rapor:', e);
       }
     }
 
