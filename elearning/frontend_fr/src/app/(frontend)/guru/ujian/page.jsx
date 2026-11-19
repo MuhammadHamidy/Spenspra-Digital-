@@ -11,6 +11,7 @@ import ConfirmModal from '@/components/ConfirmModal';
 import AppIcon from '@/components/AppIcon';
 import { elearningApi, generateRandomPin } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
+import mammoth from 'mammoth';
 
 const formatDateDisplay = (dateStr) => {
   if (!dateStr) return 'Sesuai Jadwal';
@@ -27,6 +28,8 @@ const formatDateDisplay = (dateStr) => {
     return dateStr;
   }
 };
+
+const MATH_SYMBOLS = ['²', '³', '√', 'π', '∞', '≤', '≥', '≠', '≈', '×', '÷', '±', '∑', '∫', 'Δ', 'α', 'β', '°'];
 
 function parseQuestionImport(text) {
   const lines = String(text || '')
@@ -48,6 +51,8 @@ function parseQuestionImport(text) {
       options: [],
       correctOption: 'A',
       points: 10,
+      stimulusText: '',
+      imageUrl: '',
     };
     currentOption = null;
     return true;
@@ -56,6 +61,13 @@ function parseQuestionImport(text) {
   lines.forEach((line) => {
     if (startQuestion(line)) return;
     if (!current) return;
+
+    const stimulusMatch = line.match(/^(?:stimulus|wacana|teks\s*kasus)\s*[:\-]?\s*(.*)$/i);
+    if (stimulusMatch) {
+      current.stimulusText = stimulusMatch[1].trim();
+      currentOption = null;
+      return;
+    }
 
     const answerMatch = line.match(/^(?:kunci|jawaban|answer)\s*[:\-]\s*([A-E])/i);
     if (answerMatch) {
@@ -71,6 +83,17 @@ function parseQuestionImport(text) {
       return;
     }
 
+    const optionImageMatch = line.match(/^(?:gambar|image)\s*([A-E])?\s*[:=]\s*(.+)$/i);
+    if (optionImageMatch) {
+      const optionKey = optionImageMatch[1]?.toUpperCase();
+      const option = optionKey ? current.options.find((item) => item.key === optionKey) : null;
+      const activeOption = currentOption ? current.options.find((item) => item.key === currentOption) : null;
+      if (option || activeOption) (option || activeOption).imageUrl = optionImageMatch[2].trim();
+      else current.imageUrl = optionImageMatch[2].trim();
+      currentOption = null;
+      return;
+    }
+
     const optionMatch = line.match(/^([A-E])\s*[\.\):\-]\s*(.+)$/i);
     if (optionMatch) {
       const key = optionMatch[1].toUpperCase();
@@ -82,6 +105,8 @@ function parseQuestionImport(text) {
     if (currentOption) {
       const option = current.options.find((item) => item.key === currentOption);
       if (option) option.text = `${option.text} ${line}`.trim();
+    } else if (current.stimulusText && !current.options.length) {
+      current.stimulusText = `${current.stimulusText} ${line}`.trim();
     } else {
       current.questionText = `${current.questionText} ${line}`.trim();
     }
@@ -96,6 +121,8 @@ function parseQuestionImport(text) {
     options: question.options,
     correctOption: question.correctOption,
     points: question.points || 10,
+    stimulusText: question.stimulusText || undefined,
+    imageUrl: question.imageUrl || undefined,
   }));
 }
 
@@ -156,6 +183,11 @@ export default function TeacherExamsManagementPage() {
   const [optC, setOptC] = useState('');
   const [optD, setOptD] = useState('');
   const [optE, setOptE] = useState('');
+  const [optAImage, setOptAImage] = useState('');
+  const [optBImage, setOptBImage] = useState('');
+  const [optCImage, setOptCImage] = useState('');
+  const [optDImage, setOptDImage] = useState('');
+  const [optEImage, setOptEImage] = useState('');
   const [correctOption, setCorrectOption] = useState('A');
   const [correctOptions, setCorrectOptions] = useState(['A']); // Untuk Pilihan Ganda Kompleks (Multi-Select)
   const [trueFalseAnswer, setTrueFalseAnswer] = useState(true); // Untuk Benar / Salah
@@ -172,7 +204,9 @@ export default function TeacherExamsManagementPage() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
+  const [docxFileName, setDocxFileName] = useState('');
   const [isQuickEditMode, setIsQuickEditMode] = useState(false);
+  const [bulkPoints, setBulkPoints] = useState(10);
 
   useEffect(() => {
     loadInitialData();
@@ -535,6 +569,11 @@ export default function TeacherExamsManagementPage() {
     setOptC('');
     setOptD('');
     setOptE('');
+    setOptAImage('');
+    setOptBImage('');
+    setOptCImage('');
+    setOptDImage('');
+    setOptEImage('');
     setCorrectOption('A');
     setCorrectOptions(['A']);
     setTrueFalseAnswer(true);
@@ -583,6 +622,20 @@ export default function TeacherExamsManagementPage() {
     );
   };
 
+  const updateQuestionOptionImageInline = (questionId, key, imageUrl) => {
+    setExamQuestions((current) =>
+      current.map((question) => {
+        if (question.id !== questionId) return question;
+        const existingOptions = question.options || [];
+        const hasOption = existingOptions.some((option) => option.key === key);
+        const options = hasOption
+          ? existingOptions.map((option) => (option.key === key ? { ...option, imageUrl } : option))
+          : [...existingOptions, { key, text: '', imageUrl }];
+        return { ...question, options };
+      })
+    );
+  };
+
   const handleSaveAllQuestions = async () => {
     if (!activeQuestionEditorExam || examQuestions.length === 0) return;
     setIsSavingQuestion(true);
@@ -610,12 +663,17 @@ export default function TeacherExamsManagementPage() {
     setEssayPoints(q.points || 10);
 
     if (type === 'MCQ' || type === 'COMPLEX_MCQ') {
-      const optMap = (q.options || []).reduce((acc, curr) => ({ ...acc, [curr.key]: curr.text }), {});
-      setOptA(optMap['A'] || '');
-      setOptB(optMap['B'] || '');
-      setOptC(optMap['C'] || '');
-      setOptD(optMap['D'] || '');
-      setOptE(optMap['E'] || '');
+      const optMap = (q.options || []).reduce((acc, curr) => ({ ...acc, [curr.key]: curr }), {});
+      setOptA(optMap.A?.text || '');
+      setOptB(optMap.B?.text || '');
+      setOptC(optMap.C?.text || '');
+      setOptD(optMap.D?.text || '');
+      setOptE(optMap.E?.text || '');
+      setOptAImage(optMap.A?.imageUrl || '');
+      setOptBImage(optMap.B?.imageUrl || '');
+      setOptCImage(optMap.C?.imageUrl || '');
+      setOptDImage(optMap.D?.imageUrl || '');
+      setOptEImage(optMap.E?.imageUrl || '');
       setCorrectOption(q.correctOption || 'A');
       let initCorrectOpts = [];
       if (Array.isArray(q.correctOptions) && q.correctOptions.length > 0) {
@@ -659,6 +717,18 @@ export default function TeacherExamsManagementPage() {
     reader.readAsDataURL(file);
   };
 
+  const handleOptionImageUpload = (setter) => (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Ukuran gambar opsi maksimal 2MB!');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setter(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  };
+
   const handleAddQuestion = async (e) => {
     e.preventDefault();
     if (!newQuestionText.trim()) {
@@ -666,15 +736,18 @@ export default function TeacherExamsManagementPage() {
       return;
     }
 
+    const optionValues = [
+      [optA, optAImage], [optB, optBImage], [optC, optCImage], [optD, optDImage],
+    ];
     if (newQuestionType === 'MCQ') {
-      if (!optA.trim() || !optB.trim() || !optC.trim() || !optD.trim()) {
+      if (optionValues.some(([text, image]) => !text.trim() && !image.trim())) {
         alert('Untuk soal pilihan ganda tunggal, mohon lengkapi semua Opsi A, B, C, dan D!');
         return;
       }
     }
 
     if (newQuestionType === 'COMPLEX_MCQ') {
-      if (!optA.trim() || !optB.trim() || !optC.trim() || !optD.trim()) {
+      if (optionValues.some(([text, image]) => !text.trim() && !image.trim())) {
         alert('Untuk soal pilihan ganda kompleks, mohon lengkapi opsi A, B, C, dan D!');
         return;
       }
@@ -696,11 +769,14 @@ export default function TeacherExamsManagementPage() {
     try {
       const optionsList = [];
       if (newQuestionType === 'MCQ' || newQuestionType === 'COMPLEX_MCQ') {
-        if (optA.trim()) optionsList.push({ key: 'A', text: optA.trim() });
-        if (optB.trim()) optionsList.push({ key: 'B', text: optB.trim() });
-        if (optC.trim()) optionsList.push({ key: 'C', text: optC.trim() });
-        if (optD.trim()) optionsList.push({ key: 'D', text: optD.trim() });
-        if (optE.trim()) optionsList.push({ key: 'E', text: optE.trim() });
+        [
+          ['A', optA, optAImage], ['B', optB, optBImage], ['C', optC, optCImage],
+          ['D', optD, optDImage], ['E', optE, optEImage],
+        ].forEach(([key, text, optionImage]) => {
+          if (text.trim() || optionImage.trim()) {
+            optionsList.push({ key, text: text.trim(), imageUrl: optionImage.trim() || undefined });
+          }
+        });
       }
 
       const validPairs = matchingPairs
@@ -789,6 +865,43 @@ export default function TeacherExamsManagementPage() {
     });
   };
 
+  const handleApplyPointsToAll = () => {
+    const points = Number(bulkPoints);
+    if (!Number.isFinite(points) || points < 1) {
+      alert('Poin harus berupa angka minimal 1.');
+      return;
+    }
+    setExamQuestions((current) => current.map((question) => ({ ...question, points })));
+    setSaveSuccessMsg(`Poin ${points} diterapkan ke ${examQuestions.length} soal. Klik Simpan ke Server.`);
+  };
+
+  const handleDeleteAllQuestions = () => {
+    if (examQuestions.length === 0) return;
+    setConfirmModal({
+      isOpen: true,
+      title: 'Hapus Semua Soal?',
+      message: `Semua ${examQuestions.length} soal pada ujian ini akan dihapus dan tidak dapat dibatalkan.`,
+      confirmText: 'Hapus Semua',
+      cancelText: 'Batal',
+      isDanger: true,
+      onConfirm: async () => {
+        setIsSavingQuestion(true);
+        try {
+          await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, []);
+          setExamQuestions([]);
+          resetQuestionForm();
+          setIsQuickEditMode(false);
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+          setSaveSuccessMsg('Semua soal berhasil dihapus.');
+        } catch (error) {
+          alert('Gagal menghapus semua soal: ' + error.message);
+        } finally {
+          setIsSavingQuestion(false);
+        }
+      },
+    });
+  };
+
   const handleImportQuestions = async () => {
     const imported = parseQuestionImport(importText);
     if (imported.length === 0) {
@@ -811,6 +924,58 @@ export default function TeacherExamsManagementPage() {
       alert(`Gagal mengimpor soal: ${error.message}`);
     } finally {
       setIsImporting(false);
+    }
+  };
+
+  const handleImportDocx = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.docx')) {
+      alert('Pilih file Word .docx. Format .doc lama belum didukung.');
+      return;
+    }
+
+    setDocxFileName(file.name);
+    setIsImporting(true);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.convertToHtml(
+        { arrayBuffer },
+        {
+          convertImage: mammoth.images.imgElement((image) =>
+            image.read('base64').then((base64) => ({
+              src: `data:${image.contentType};base64,${base64}`,
+            }))
+          ),
+        }
+      );
+      const body = new DOMParser().parseFromString(result.value, 'text/html').body;
+      const lines = [];
+      body.querySelectorAll('p, li, tr').forEach((element) => {
+        element.querySelectorAll('img').forEach((image) => {
+          lines.push(`GAMBAR: ${image.getAttribute('src') || ''}`);
+        });
+        const text = String(element.textContent || '').replace(/\s+/g, ' ').trim();
+        if (text) lines.push(text);
+      });
+
+      const imported = parseQuestionImport(lines.join('\n'));
+      if (imported.length === 0) {
+        throw new Error('Struktur soal tidak dikenali. Gunakan nomor soal atau label SOAL, lalu opsi A-E.');
+      }
+      const updated = [...examQuestions, ...imported].map((question, index) => ({
+        ...question,
+        questionNumber: index + 1,
+      }));
+      setExamQuestions(updated);
+      await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, updated);
+      setSaveSuccessMsg(`${imported.length} soal dari ${file.name} berhasil diimpor.`);
+      setTimeout(() => setSaveSuccessMsg(''), 4000);
+    } catch (error) {
+      alert(`Gagal membaca file Word: ${error.message}`);
+    } finally {
+      setIsImporting(false);
+      event.target.value = '';
     }
   };
 
@@ -892,10 +1057,10 @@ export default function TeacherExamsManagementPage() {
           </div>
         </div>
 
-        {/* 2-Column Studio Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Studio: form dan daftar soal menggunakan lebar penuh agar mudah diedit */}
+        <div className="space-y-6">
           {/* LEFT COLUMN: Input Form */}
-          <div className="lg:col-span-7 xl:col-span-8 space-y-5">
+          <div className="space-y-5">
             <Card className="border border-neutral-200 bg-white shadow-xs p-5 sm:p-6 space-y-5">
               <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
                 <div className="flex items-center gap-2">
@@ -1104,6 +1269,21 @@ export default function TeacherExamsManagementPage() {
                     className="w-full text-xs sm:text-sm p-3.5 rounded-xl border border-neutral-300 bg-white font-sans leading-relaxed focus:outline-hidden focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                     required
                   />
+                  <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                    <span className="mr-1 text-[10px] font-bold text-slate-500">Simbol matematika:</span>
+                    {MATH_SYMBOLS.map((symbol) => (
+                      <button
+                        key={symbol}
+                        type="button"
+                        onClick={() => setNewQuestionText((current) => `${current}${symbol}`)}
+                        className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:border-primary-300 hover:bg-primary-50"
+                        title={`Tambahkan ${symbol}`}
+                      >
+                        {symbol}
+                      </button>
+                    ))}
+                    <span className="ml-1 text-[10px] text-slate-400">Simbol lain dapat langsung ditempel dari Word/LaTeX.</span>
+                  </div>
                 </div>
 
                 {/* 4A. Form Khusus Pilihan Ganda Tunggal: Opsi A, B, C, D & 1 Kunci */}
@@ -1120,17 +1300,17 @@ export default function TeacherExamsManagementPage() {
 
                     <div className="space-y-2.5">
                       {[
-                        { key: 'A', value: optA, setter: setOptA },
-                        { key: 'B', value: optB, setter: setOptB },
-                        { key: 'C', value: optC, setter: setOptC },
-                        { key: 'D', value: optD, setter: setOptD },
-                        { key: 'E', value: optE, setter: setOptE, optional: true },
+                        { key: 'A', value: optA, setter: setOptA, image: optAImage, imageSetter: setOptAImage, imageUpload: handleOptionImageUpload(setOptAImage) },
+                        { key: 'B', value: optB, setter: setOptB, image: optBImage, imageSetter: setOptBImage, imageUpload: handleOptionImageUpload(setOptBImage) },
+                        { key: 'C', value: optC, setter: setOptC, image: optCImage, imageSetter: setOptCImage, imageUpload: handleOptionImageUpload(setOptCImage) },
+                        { key: 'D', value: optD, setter: setOptD, image: optDImage, imageSetter: setOptDImage, imageUpload: handleOptionImageUpload(setOptDImage) },
+                        { key: 'E', value: optE, setter: setOptE, image: optEImage, imageSetter: setOptEImage, imageUpload: handleOptionImageUpload(setOptEImage), optional: true },
                       ].map((opt) => {
                         const isCorrect = correctOption === opt.key;
                         return (
                           <div
                             key={opt.key}
-                            className={`flex items-center gap-2 p-2 rounded-xl border transition-all ${
+                            className={`flex flex-wrap items-center gap-2 p-2 rounded-xl border transition-all ${
                               isCorrect
                                 ? 'bg-success-50/70 border-success-400 ring-1 ring-success-400'
                                 : 'bg-white border-neutral-300'
@@ -1154,9 +1334,25 @@ export default function TeacherExamsManagementPage() {
                               placeholder={`Teks Jawaban Opsi ${opt.key}${opt.optional ? ' (Opsional)...' : '...'}`}
                               value={opt.value}
                               onChange={(e) => opt.setter(e.target.value)}
-                              className="w-full text-xs bg-transparent border-0 focus:outline-hidden p-1 font-medium text-neutral-800"
-                              required={!opt.optional}
+                              className="min-w-[180px] flex-1 text-xs bg-transparent border-0 focus:outline-hidden p-1 font-medium text-neutral-800"
+                              required={!opt.optional && !opt.image}
                             />
+                            <div className="flex w-full items-center gap-2 pl-11">
+                              <input
+                                type="url"
+                                value={opt.image || ''}
+                                onChange={(e) => opt.imageSetter(e.target.value)}
+                                placeholder={`URL gambar opsi ${opt.key} (opsional)`}
+                                className="min-w-0 flex-1 rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-[10px] text-sky-900 outline-none focus:border-sky-500"
+                              />
+                              <label className="cursor-pointer rounded-md border border-sky-200 bg-white px-2 py-1.5 text-[10px] font-semibold text-sky-700 hover:bg-sky-50">
+                                Unggah
+                                <input type="file" accept="image/*" className="hidden" onChange={opt.imageUpload} />
+                              </label>
+                            </div>
+                            {opt.image && (
+                              <img src={opt.image} alt={`Gambar opsi ${opt.key}`} className="ml-11 max-h-16 max-w-24 rounded border border-sky-200 object-contain" />
+                            )}
 
                             {isCorrect && (
                               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-success-600 text-white shrink-0 mr-1 inline-flex items-center gap-1">
@@ -1209,17 +1405,17 @@ export default function TeacherExamsManagementPage() {
 
                     <div className="space-y-2.5">
                       {[
-                        { key: 'A', value: optA, setter: setOptA },
-                        { key: 'B', value: optB, setter: setOptB },
-                        { key: 'C', value: optC, setter: setOptC },
-                        { key: 'D', value: optD, setter: setOptD },
-                        { key: 'E', value: optE, setter: setOptE, optional: true },
+                        { key: 'A', value: optA, setter: setOptA, image: optAImage, imageSetter: setOptAImage, imageUpload: handleOptionImageUpload(setOptAImage) },
+                        { key: 'B', value: optB, setter: setOptB, image: optBImage, imageSetter: setOptBImage, imageUpload: handleOptionImageUpload(setOptBImage) },
+                        { key: 'C', value: optC, setter: setOptC, image: optCImage, imageSetter: setOptCImage, imageUpload: handleOptionImageUpload(setOptCImage) },
+                        { key: 'D', value: optD, setter: setOptD, image: optDImage, imageSetter: setOptDImage, imageUpload: handleOptionImageUpload(setOptDImage) },
+                        { key: 'E', value: optE, setter: setOptE, image: optEImage, imageSetter: setOptEImage, imageUpload: handleOptionImageUpload(setOptEImage), optional: true },
                       ].map((opt) => {
                         const isChecked = correctOptions.includes(opt.key);
                         return (
                           <div
                             key={opt.key}
-                            className={`flex items-center gap-2 p-2 rounded-xl border transition-all ${
+                            className={`flex flex-wrap items-center gap-2 p-2 rounded-xl border transition-all ${
                               isChecked
                                 ? 'bg-primary-50 border-primary-400 ring-1 ring-primary-400'
                                 : 'bg-white border-neutral-300'
@@ -1246,9 +1442,25 @@ export default function TeacherExamsManagementPage() {
                               placeholder={`Teks Pernyataan / Opsi ${opt.key}${opt.optional ? ' (Opsional)...' : '...'}`}
                               value={opt.value}
                               onChange={(e) => opt.setter(e.target.value)}
-                              className="w-full text-xs bg-transparent border-0 focus:outline-hidden p-1 font-medium text-neutral-800"
-                              required={!opt.optional}
+                              className="min-w-[180px] flex-1 text-xs bg-transparent border-0 focus:outline-hidden p-1 font-medium text-neutral-800"
+                              required={!opt.optional && !opt.image}
                             />
+                            <div className="flex w-full items-center gap-2 pl-11">
+                              <input
+                                type="url"
+                                value={opt.image || ''}
+                                onChange={(e) => opt.imageSetter(e.target.value)}
+                                placeholder={`URL gambar opsi ${opt.key} (opsional)`}
+                                className="min-w-0 flex-1 rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-[10px] text-sky-900 outline-none focus:border-sky-500"
+                              />
+                              <label className="cursor-pointer rounded-md border border-sky-200 bg-white px-2 py-1.5 text-[10px] font-semibold text-sky-700 hover:bg-sky-50">
+                                Unggah
+                                <input type="file" accept="image/*" className="hidden" onChange={opt.imageUpload} />
+                              </label>
+                            </div>
+                            {opt.image && (
+                              <img src={opt.image} alt={`Gambar opsi ${opt.key}`} className="ml-11 max-h-16 max-w-24 rounded border border-sky-200 object-contain" />
+                            )}
 
                             {isChecked && (
                               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary-600 text-white shrink-0 mr-1 inline-flex items-center gap-1">
@@ -1561,8 +1773,8 @@ export default function TeacherExamsManagementPage() {
           </div>
 
           {/* RIGHT COLUMN: Daftar Soal Tersimpan */}
-          <div className="lg:col-span-5 xl:col-span-4 space-y-4">
-            <Card className="border border-neutral-200 bg-white shadow-xs p-4 sm:p-5 space-y-4 sticky top-6">
+          <div className="space-y-4">
+            <Card className="border border-neutral-200 bg-white shadow-xs p-4 sm:p-5 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
                 <div>
                   <h3 className="text-xs sm:text-sm font-bold text-neutral-900 uppercase tracking-wider">
@@ -1572,20 +1784,45 @@ export default function TeacherExamsManagementPage() {
                     Total {examQuestions.length} Butir ({mcqCount} PG, {essayCount} Esai)
                   </p>
                 </div>
-                {examQuestions.length > 0 && (
+              </div>
+
+              {examQuestions.length > 0 && (
+                <div className="flex flex-col gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="flex flex-wrap items-end gap-2">
+                    <label className="text-[10px] font-bold text-neutral-500">
+                      Atur poin semua soal
+                      <input
+                        type="number"
+                        min="1"
+                        value={bulkPoints}
+                        onChange={(event) => setBulkPoints(event.target.value)}
+                        className="mt-1 block w-24 rounded-lg border border-neutral-300 bg-white px-2 py-1.5 text-xs font-bold outline-none focus:border-primary-500"
+                      />
+                    </label>
+                    <Button type="button" variant="outline" size="sm" onClick={handleApplyPointsToAll} className="cursor-pointer font-bold">
+                      Terapkan Poin
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => setIsQuickEditMode((current) => !current)}
+                      className={`rounded-lg border px-3 py-2 text-[10px] font-bold transition ${
+                        isQuickEditMode
+                          ? 'border-amber-300 bg-amber-50 text-amber-800'
+                          : 'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100'
+                      }`}
+                    >
+                      {isQuickEditMode ? 'Tutup Edit Cepat' : 'Edit Cepat Semua'}
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setIsQuickEditMode((current) => !current)}
-                    className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition ${
-                      isQuickEditMode
-                        ? 'border-amber-300 bg-amber-50 text-amber-800'
-                        : 'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100'
-                    }`}
+                    onClick={handleDeleteAllQuestions}
+                    className="rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-[10px] font-bold text-danger-700 transition hover:bg-danger-100"
                   >
-                    {isQuickEditMode ? 'Tutup Edit Cepat' : 'Edit Cepat Semua'}
+                    Hapus Semua Soal
                   </button>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Scrollable Questions List */}
               <div className="space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto pr-1">
@@ -1606,7 +1843,7 @@ export default function TeacherExamsManagementPage() {
                     </div>
                     {examQuestions.map((q, idx) => {
                       const optionMap = (q.options || []).reduce((result, option) => {
-                        result[option.key] = option.text;
+                        result[option.key] = option;
                         return result;
                       }, {});
                       const isChoiceQuestion = q.type === 'MCQ' || q.type === 'COMPLEX_MCQ';
@@ -1636,14 +1873,24 @@ export default function TeacherExamsManagementPage() {
                           {isChoiceQuestion && (
                             <div className="grid gap-1.5 sm:grid-cols-2">
                               {['A', 'B', 'C', 'D', 'E'].map((key) => (
-                                <div key={key} className="flex items-center gap-1.5">
+                                <div key={key} className="flex flex-wrap items-center gap-1.5">
                                   <span className="w-5 shrink-0 text-center text-[10px] font-bold text-neutral-500">{key}</span>
                                   <input
-                                    value={optionMap[key] || ''}
+                                    value={optionMap[key]?.text || ''}
                                     onChange={(event) => updateQuestionOptionInline(q.id, key, event.target.value)}
                                     className="min-w-0 flex-1 rounded-md border border-neutral-200 px-2 py-1.5 text-[11px] outline-none focus:border-primary-500"
                                     placeholder={`Opsi ${key}`}
                                   />
+                                  <input
+                                    type="url"
+                                    value={optionMap[key]?.imageUrl || ''}
+                                    onChange={(event) => updateQuestionOptionImageInline(q.id, key, event.target.value)}
+                                    className="w-full rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-[10px] outline-none focus:border-sky-500"
+                                    placeholder={`URL gambar opsi ${key} (opsional)`}
+                                  />
+                                  {optionMap[key]?.imageUrl && (
+                                    <img src={optionMap[key].imageUrl} alt={`Gambar opsi ${key}`} className="ml-6 max-h-12 max-w-20 rounded border border-sky-200 object-contain" />
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -1818,6 +2065,9 @@ export default function TeacherExamsManagementPage() {
                                 }`}
                               >
                                 <strong>{opt.key}.</strong> {opt.text}
+                                {opt.imageUrl && (
+                                  <img src={opt.imageUrl} alt={`Gambar opsi ${opt.key}`} className="mt-1 max-h-12 max-w-full rounded object-contain" />
+                                )}
                               </span>
                             );
                           })}
@@ -1891,6 +2141,14 @@ POIN: 5`}
                   Format lama bernomor seperti <strong>1. Soal</strong>, <strong>A) Opsi</strong>,
                   <strong>Kunci: B</strong>, dan <strong>Poin: 5</strong> tetap didukung.
                 </div>
+                <label className="flex cursor-pointer flex-col gap-1 rounded-xl border-2 border-dashed border-primary-200 bg-primary-50/50 p-4 text-center hover:bg-primary-50">
+                  <span className="text-xs font-bold text-primary-800">Pilih file Word (.docx)</span>
+                  <span className="text-[10px] text-primary-600">
+                    Sistem mencoba mendeteksi stimulus, soal, opsi, kunci, poin, dan gambar tertanam.
+                  </span>
+                  {docxFileName && <span className="text-[10px] font-semibold text-emerald-700">{docxFileName}</span>}
+                  <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleImportDocx} className="hidden" />
+                </label>
                 <textarea
                   value={importText}
                   onChange={(event) => setImportText(event.target.value)}
