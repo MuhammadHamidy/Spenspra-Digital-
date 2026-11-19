@@ -447,7 +447,7 @@ export default function TeacherExamsManagementPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeQuestionEditorExam]);
 
-  const resetQuestionForm = () => {
+  const resetQuestionForm = (keepPoints = false, customPoints = null) => {
     setEditingQuestionId(null);
     setNewQuestionType('MCQ');
     setIsStimulusOpen(false);
@@ -468,8 +468,13 @@ export default function TeacherExamsManagementPage() {
       { id: 2, left: '', right: '' },
       { id: 3, left: '', right: '' },
     ]);
-    setMcqPoints(10);
-    setEssayPoints(10);
+    if (customPoints !== null && Number(customPoints) > 0) {
+      setMcqPoints(Number(customPoints));
+      setEssayPoints(Number(customPoints));
+    } else if (!keepPoints) {
+      setMcqPoints(10);
+      setEssayPoints(10);
+    }
     setEssayRubric('');
     setSaveSuccessMsg('');
   };
@@ -479,12 +484,8 @@ export default function TeacherExamsManagementPage() {
     const qs = await elearningApi.getExamQuestions(exam.id);
     const list = qs || [];
     setExamQuestions(list);
-    resetQuestionForm();
-
-    // Otomatis sinkronisasi soal lokal ke database server jika ada
-    if (list.length > 0 && exam?.id) {
-      elearningApi.saveExamQuestions(exam.id, list).catch(() => {});
-    }
+    const lastPts = list.length > 0 ? Number(list[0]?.points) || 10 : 10;
+    resetQuestionForm(false, lastPts);
   };
 
   const handleEditQuestion = (q) => {
@@ -633,7 +634,7 @@ export default function TeacherExamsManagementPage() {
       }
 
       setTimeout(() => setSaveSuccessMsg(''), 4000);
-      resetQuestionForm();
+      resetQuestionForm(true, targetPoints);
     } catch (err) {
       alert('Gagal menyimpan soal: ' + err.message);
     } finally {

@@ -16,6 +16,9 @@ type repository struct {
 
 func NewRepository(db *gorm.DB) domain.Repository {
 	_ = db.Exec("ALTER TABLE cbt_student_answers DROP CONSTRAINT IF EXISTS cbt_student_answers_question_id_fkey").Error
+	_ = db.Exec("ALTER TABLE cbt_student_answers ALTER COLUMN selected_option TYPE TEXT").Error
+	_ = db.Exec("ALTER TABLE cbt_questions ALTER COLUMN correct_answer TYPE TEXT").Error
+	_ = db.Exec("ALTER TABLE cbt_questions ALTER COLUMN question_type TYPE VARCHAR(50)").Error
 
 	_ = db.AutoMigrate(
 		&domain.LearningMaterial{},
@@ -222,16 +225,12 @@ func (r *repository) SaveQuestion(ctx context.Context, q *domain.CBTQuestion) er
 
 func (r *repository) SaveQuestions(ctx context.Context, examID string, questions []domain.CBTQuestion) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Delete previous questions of this exam
-		if err := tx.Table("cbt_questions").Where("exam_id = ?", examID).Delete(&domain.CBTQuestion{}).Error; err != nil {
-			return err
-		}
-
 		if len(questions) == 0 {
-			return nil
+			return tx.Table("cbt_questions").Where("exam_id = ?", examID).Delete(&domain.CBTQuestion{}).Error
 		}
 
 		now := time.Now()
+		keepIDs := make([]string, 0, len(questions))
 		for i := range questions {
 			if questions[i].ID == "" {
 				questions[i].ID = "q-" + uuid.NewString()[:8]
@@ -244,12 +243,38 @@ func (r *repository) SaveQuestions(ctx context.Context, examID string, questions
 				questions[i].CorrectAnswer = "-"
 			}
 			if questions[i].ScoreWeight <= 0 {
-				questions[i].ScoreWeight = 1.0
+				questions[i].ScoreWeight = 10.0
 			}
-			questions[i].CreatedAt = now
+			if questions[i].CreatedAt.IsZero() {
+				questions[i].CreatedAt = now
+			}
+			keepIDs = append(keepIDs, questions[i].ID)
 		}
 
-		return tx.Table("cbt_questions").Create(&questions).Error
+		// Hapus hanya butir soal yang sudah tidak ada di daftar soal ujian ini (jangan hapus soal yang masih dipakai agar jawaban siswa tetap utuh)
+		if err := tx.Table("cbt_questions").Where("exam_id = ? AND id NOT IN ?", examID, keepIDs).Delete(&domain.CBTQuestion{}).Error; err != nil {
+			return err
+		}
+
+		// Upsert setiap butir soal
+		return tx.Table("cbt_questions").
+			Clauses(clause.OnConflict{
+				Columns: []clause.Column{{Name: "id"}},
+				DoUpdates: clause.AssignmentColumns([]string{
+					"exam_id",
+					"question_number",
+					"question_type",
+					"question_text",
+					"image_url",
+					"option_a",
+					"option_b",
+					"option_c",
+					"option_d",
+					"option_e",
+					"correct_answer",
+					"score_weight",
+				}),
+			}).Create(&questions).Error
 	})
 }
 
@@ -367,6 +392,10 @@ func (r *repository) SaveStudentAnswer(ctx context.Context, ans *domain.CBTStude
 
 func (r *repository) BatchSaveStudentAnswers(ctx context.Context, sessionID string, answers []domain.CBTStudentAnswer) error {
 	for i := range answers {
+		// Jangan timpa jawaban yang sudah tersimpan di database dengan string kosong jika payload parsial
+		if answers[i].SelectedOption == "" && answers[i].EssayAnswer == "" {
+			continue
+		}
 		answers[i].SessionID = sessionID
 		if answers[i].ID == "" {
 			answers[i].ID = "ans-" + uuid.NewString()[:8]

@@ -304,6 +304,8 @@ export default function LiveProctoringMonitoringPage() {
     let totalEarned = 0;
     let autoCorrectCount = 0;
     let autoTotalCount = 0;
+    let essayCount = 0;
+    let answeredCount = 0;
 
     examQuestions.forEach((q, idx) => {
       const qPoints = Number(q.points) > 0 ? Number(q.points) : 10;
@@ -314,6 +316,9 @@ export default function LiveProctoringMonitoringPage() {
       if (qType === 'MCQ') {
         autoTotalCount++;
         const studentOpt = typeof ans === 'string' ? ans : (ans?.selectedOption || ans?.selected_option || '');
+        if (studentOpt && String(studentOpt).trim() !== '') {
+          answeredCount++;
+        }
         const correctOpt = q.correctOption || q.correct_option || 'A';
         if (studentOpt && studentOpt.trim().toUpperCase() === correctOpt.trim().toUpperCase()) {
           totalEarned += qPoints;
@@ -324,10 +329,13 @@ export default function LiveProctoringMonitoringPage() {
         let studentOpts = [];
         if (Array.isArray(ans?.selectedOptions)) {
           studentOpts = ans.selectedOptions;
-        } else if (typeof ans?.selectedOption === 'string' && ans.selectedOption) {
-          studentOpts = ans.selectedOption.split(',').map((s) => s.trim());
-        } else if (typeof ans === 'string' && ans) {
-          studentOpts = ans.split(',').map((s) => s.trim());
+        } else if (typeof ans?.selectedOption === 'string' && ans.selectedOption && !ans.selectedOption.startsWith('{')) {
+          studentOpts = ans.selectedOption.split(',').map((s) => s.trim()).filter(Boolean);
+        } else if (typeof ans === 'string' && ans && !ans.startsWith('{')) {
+          studentOpts = ans.split(',').map((s) => s.trim()).filter(Boolean);
+        }
+        if (studentOpts.length > 0) {
+          answeredCount++;
         }
         const correctOpts = Array.isArray(q.correctOptions) && q.correctOptions.length > 0
           ? q.correctOptions
@@ -344,6 +352,9 @@ export default function LiveProctoringMonitoringPage() {
         const sNorm = String(rawStudent || '').trim().toUpperCase();
         const isStudentTrue = sNorm === 'TRUE' || sNorm === 'BENAR' || sNorm === 'T' || rawStudent === true;
         const isStudentFalse = sNorm === 'FALSE' || sNorm === 'SALAH' || sNorm === 'F' || rawStudent === false;
+        if (isStudentTrue || isStudentFalse) {
+          answeredCount++;
+        }
 
         const rawCorrect = q.trueFalseAnswer !== undefined ? (q.trueFalseAnswer ? 'TRUE' : 'FALSE') : (q.correctOption || 'TRUE');
         const cNorm = String(rawCorrect || '').trim().toUpperCase();
@@ -364,6 +375,12 @@ export default function LiveProctoringMonitoringPage() {
         }
         matchingAns = matchingAns || {};
         const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
+        const hasAnyMatched = pairs.length > 0
+          ? pairs.some((p) => Boolean(matchingAns[p.id] || matchingAns[String(p.id)]))
+          : Object.keys(matchingAns).length > 0;
+        if (hasAnyMatched) {
+          answeredCount++;
+        }
         if (pairs.length > 0) {
           let matched = 0;
           pairs.forEach((p) => {
@@ -377,13 +394,32 @@ export default function LiveProctoringMonitoringPage() {
           if (ratio === 1) autoCorrectCount++;
         }
       } else if (qType === 'ESSAY') {
+        essayCount++;
+        const essayText = typeof ans === 'string'
+          ? ans
+          : (ans?.essayAnswer || ans?.essay_answer || ans?.text || ans?.answer || ans?.content || '');
+        if (essayText && String(essayText).trim() !== '') {
+          answeredCount++;
+        }
         const essayScore = Number(essayScores[q.id]) || 0;
         totalEarned += Math.min(qPoints, Math.max(0, essayScore));
       }
     });
 
+    const totalQuestions = examQuestions.length;
+    const unansweredCount = Math.max(0, totalQuestions - answeredCount);
     const finalScore = totalMax > 0 ? Math.round((totalEarned / totalMax) * 100) : 100;
-    return { totalMax, totalEarned, finalScore, autoCorrectCount, autoTotalCount };
+    return {
+      totalMax,
+      totalEarned,
+      finalScore,
+      autoCorrectCount,
+      autoTotalCount,
+      essayCount,
+      totalQuestions,
+      answeredCount,
+      unansweredCount,
+    };
   }, [examQuestions, studentAnswers, essayScores]);
 
   const handleSaveEssayScore = async () => {
@@ -593,7 +629,17 @@ export default function LiveProctoringMonitoringPage() {
 
   // JIKA SEDANG MEMERIKSA JAWABAN SISWA: Tampilkan sebagai Halaman Penuh Mandiri (Bukan Modal Pop-up)
   if (activeStudentAnswers) {
-    const { totalMax, totalEarned, finalScore, autoCorrectCount, autoTotalCount } = scoreBreakdown;
+    const {
+      totalMax,
+      totalEarned,
+      finalScore,
+      autoCorrectCount,
+      autoTotalCount,
+      essayCount,
+      totalQuestions,
+      answeredCount,
+      unansweredCount,
+    } = scoreBreakdown;
 
     return (
       <div className="space-y-6 max-w-5xl mx-auto pb-24 animate-in fade-in duration-200">
@@ -647,7 +693,7 @@ export default function LiveProctoringMonitoringPage() {
         </div>
 
         {/* KPI Stats Cards Siswa */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
           <div className="p-4 bg-white rounded-xl border border-neutral-200 space-y-1">
             <p className="text-[11px] font-semibold text-neutral-500">Mata Pelajaran</p>
             <p className="text-base font-bold text-neutral-900 truncate">{selectedExam?.subject || selectedExam?.title}</p>
@@ -663,14 +709,25 @@ export default function LiveProctoringMonitoringPage() {
             </p>
           </div>
           <div className="p-4 bg-white rounded-xl border border-neutral-200 space-y-1">
+            <p className="text-[11px] font-semibold text-neutral-500">Soal Dijawab Siswa</p>
+            <p className="text-base font-bold text-neutral-900">{answeredCount} / {totalQuestions} Soal</p>
+            <p className="text-[10px] text-neutral-500">
+              {unansweredCount > 0 ? `${unansweredCount} soal tidak dijawab` : 'Semua soal terjawab'}
+            </p>
+          </div>
+          <div className="p-4 bg-white rounded-xl border border-neutral-200 space-y-1">
             <p className="text-[11px] font-semibold text-neutral-500">Jawaban Objektif Benar</p>
             <p className="text-base font-bold text-primary-700">{autoCorrectCount} / {autoTotalCount} Butir</p>
-            <p className="text-[10px] text-neutral-400">PG, PGK, B/S, Jodoh</p>
+            <p className="text-[10px] text-neutral-400">
+              {essayCount > 0 ? `+ ${essayCount} Soal Esai (Total ${totalQuestions} Soal)` : 'PG, PGK, B/S, Jodoh'}
+            </p>
           </div>
-          <div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-1">
+          <div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-1 col-span-2 sm:col-span-1">
             <p className="text-[11px] font-semibold text-emerald-800">Skor Akhir Siswa</p>
             <p className="text-xl font-black text-emerald-700">{finalScore} / 100</p>
-            <p className="text-[10px] text-emerald-800 font-medium">{totalEarned} dari {totalMax} total poin</p>
+            <p className="text-[10px] text-emerald-800 font-medium">
+              {totalEarned} dari {totalMax} total poin ({totalQuestions} soal)
+            </p>
           </div>
         </div>
 

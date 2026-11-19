@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS cbt_questions (
     id VARCHAR(36) PRIMARY KEY,
     exam_id VARCHAR(36) NOT NULL REFERENCES cbt_exams(id) ON DELETE CASCADE,
     question_number INT DEFAULT 1,
-    question_type VARCHAR(20) DEFAULT 'PILIHAN_GANDA',
+    question_type VARCHAR(50) DEFAULT 'PILIHAN_GANDA',
     question_text TEXT NOT NULL,
     image_url TEXT,
     option_a TEXT,
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS cbt_questions (
     option_c TEXT,
     option_d TEXT,
     option_e TEXT,
-    correct_answer VARCHAR(10) NOT NULL,
+    correct_answer TEXT NOT NULL,
     score_weight NUMERIC(5,2) DEFAULT 1.0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -139,7 +139,7 @@ CREATE TABLE IF NOT EXISTS cbt_student_answers (
     id VARCHAR(36) PRIMARY KEY,
     session_id VARCHAR(36) NOT NULL REFERENCES cbt_student_sessions(id) ON DELETE CASCADE,
     question_id VARCHAR(36) NOT NULL REFERENCES cbt_questions(id) ON DELETE CASCADE,
-    selected_option VARCHAR(10),
+    selected_option TEXT,
     essay_answer TEXT,
     is_doubtful BOOLEAN DEFAULT FALSE,
     is_correct BOOLEAN DEFAULT FALSE,

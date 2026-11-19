@@ -265,18 +265,23 @@ export default function CBTExamRunnerPage({ params }) {
   const handleToggleComplexOption = (key) => {
     if (!currentQ || isLocked) return;
     const isCurrentDoubtful = doubtfuls[currentQ.id] || false;
-    const currentList = Array.isArray(answers[currentQ.id]?.selectedOptions)
-      ? answers[currentQ.id].selectedOptions
-      : [];
+    const prevAns = answers[currentQ.id] || {};
+    const currentList = Array.isArray(prevAns.selectedOptions)
+      ? prevAns.selectedOptions
+      : (typeof prevAns.selectedOption === 'string' && prevAns.selectedOption && !prevAns.selectedOption.startsWith('{')
+          ? prevAns.selectedOption.split(',').map((s) => s.trim()).filter(Boolean)
+          : []);
     const nextList = currentList.includes(key)
       ? currentList.filter((k) => k !== key)
       : [...currentList, key];
+    const serialized = nextList.join(',');
 
     const newAnswers = {
       ...answers,
       [currentQ.id]: {
-        ...answers[currentQ.id],
+        ...prevAns,
         selectedOptions: nextList,
+        selectedOption: serialized,
         isDoubtful: isCurrentDoubtful,
       },
     };
@@ -288,7 +293,7 @@ export default function CBTExamRunnerPage({ params }) {
       examId,
       activeStudentId,
       currentQ.id,
-      nextList.join(','),
+      serialized,
       '',
       isCurrentDoubtful
     );
@@ -325,14 +330,23 @@ export default function CBTExamRunnerPage({ params }) {
   const handleSelectMatchingPair = (pairId, rightVal) => {
     if (!currentQ || isLocked) return;
     const isCurrentDoubtful = doubtfuls[currentQ.id] || false;
-    const prevMatching = answers[currentQ.id]?.matchingAnswers || {};
+    const prevAns = answers[currentQ.id] || {};
+    let prevMatching = prevAns.matchingAnswers;
+    if (!prevMatching && typeof prevAns.selectedOption === 'string' && prevAns.selectedOption.startsWith('{')) {
+      try {
+        prevMatching = JSON.parse(prevAns.selectedOption);
+      } catch (_) {}
+    }
+    prevMatching = prevMatching || {};
     const nextMatching = { ...prevMatching, [pairId]: rightVal, [String(pairId)]: rightVal };
+    const serialized = JSON.stringify(nextMatching);
 
     const newAnswers = {
       ...answers,
       [currentQ.id]: {
-        ...answers[currentQ.id],
+        ...prevAns,
         matchingAnswers: nextMatching,
+        selectedOption: serialized,
         isDoubtful: isCurrentDoubtful,
       },
     };
@@ -344,7 +358,7 @@ export default function CBTExamRunnerPage({ params }) {
       examId,
       activeStudentId,
       currentQ.id,
-      JSON.stringify(nextMatching),
+      serialized,
       '',
       isCurrentDoubtful
     );
@@ -626,12 +640,19 @@ export default function CBTExamRunnerPage({ params }) {
       return Boolean(ans.selectedOption && String(ans.selectedOption).trim() !== '');
     }
     if (q.type === 'COMPLEX_MCQ') {
-      return Array.isArray(ans.selectedOptions) && ans.selectedOptions.length > 0;
+      if (Array.isArray(ans.selectedOptions) && ans.selectedOptions.length > 0) return true;
+      return Boolean(ans.selectedOption && String(ans.selectedOption).trim() !== '');
     }
     if (q.type === 'MATCHING') {
-      const mAns = ans.matchingAnswers || {};
+      let mAns = ans.matchingAnswers;
+      if (!mAns && typeof ans.selectedOption === 'string' && ans.selectedOption.startsWith('{')) {
+        try {
+          mAns = JSON.parse(ans.selectedOption);
+        } catch (_) {}
+      }
+      mAns = mAns || {};
       const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
-      return pairs.length > 0 && pairs.every((p) => Boolean(mAns[p.id] || mAns[String(p.id)]));
+      return pairs.length > 0 && pairs.some((p) => Boolean(mAns[p.id] || mAns[String(p.id)]));
     }
     if (q.type === 'ESSAY') {
       return Boolean(ans.essayAnswer && String(ans.essayAnswer).trim() !== '');
@@ -1000,9 +1021,12 @@ export default function CBTExamRunnerPage({ params }) {
               {currentQ?.type === 'COMPLEX_MCQ' && (
                 <div className="space-y-2.5 pt-1">
                   {currentQ?.options?.map((opt) => {
-                    const selectedList = Array.isArray(answers[currentQ.id]?.selectedOptions)
-                      ? answers[currentQ.id].selectedOptions
-                      : [];
+                    const curAns = answers[currentQ.id] || {};
+                    const selectedList = Array.isArray(curAns.selectedOptions)
+                      ? curAns.selectedOptions
+                      : (typeof curAns.selectedOption === 'string' && curAns.selectedOption && !curAns.selectedOption.startsWith('{')
+                          ? curAns.selectedOption.split(',').map((s) => s.trim()).filter(Boolean)
+                          : []);
                     const isSelected = selectedList.includes(opt.key);
 
                     return (
@@ -1107,7 +1131,15 @@ export default function CBTExamRunnerPage({ params }) {
                     }
 
                     return pairs.map((pair, pIdx) => {
-                      const selectedRight = answers[currentQ.id]?.matchingAnswers?.[pair.id] ?? answers[currentQ.id]?.matchingAnswers?.[String(pair.id)] ?? '';
+                      const curAns = answers[currentQ.id] || {};
+                      let mMap = curAns.matchingAnswers;
+                      if (!mMap && typeof curAns.selectedOption === 'string' && curAns.selectedOption.startsWith('{')) {
+                        try {
+                          mMap = JSON.parse(curAns.selectedOption);
+                        } catch (_) {}
+                      }
+                      mMap = mMap || {};
+                      const selectedRight = mMap[pair.id] ?? mMap[String(pair.id)] ?? '';
 
                       return (
                         <div

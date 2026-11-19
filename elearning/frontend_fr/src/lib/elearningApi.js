@@ -1476,9 +1476,22 @@ export const elearningApi = {
 
     if (session) {
       if (!session.answers) session.answers = {};
+      const prevAns = session.answers[questionId] || {};
+      let parsedMatching = prevAns.matchingAnswers;
+      let parsedOptions = prevAns.selectedOptions;
+      if (typeof selectedOption === 'string' && selectedOption.trim().startsWith('{')) {
+        try {
+          parsedMatching = JSON.parse(selectedOption);
+        } catch (_) {}
+      } else if (typeof selectedOption === 'string' && selectedOption.includes(',')) {
+        parsedOptions = selectedOption.split(',').map((s) => s.trim()).filter(Boolean);
+      }
       session.answers[questionId] = {
+        ...prevAns,
         questionId,
         selectedOption,
+        ...(parsedOptions ? { selectedOptions: parsedOptions } : {}),
+        ...(parsedMatching ? { matchingAnswers: parsedMatching } : {}),
         essayAnswer,
         isDoubtful,
         updatedAt: new Date().toISOString(),
@@ -1632,16 +1645,18 @@ export const elearningApi = {
       ...(inMemoryAnswers || {}),
     };
 
-    // Hitung skor otomatis untuk soal objektif (PG, PG Kompleks, Benar/Salah, Menjodohkan)
+    // Hitung skor otomatis untuk seluruh butir soal ujian
     const questions = await elearningApi.getExamQuestions(examId);
     let correctCount = 0;
     let totalAutoGraded = 0;
     let totalEssay = 0;
     let totalAutoPoints = 0;
+    let totalExamPoints = 0;
     let earnedAutoPoints = 0;
 
     const reviewItems = questions.map((q, idx) => {
       const qPoints = Number(q.points) > 0 ? Number(q.points) : 10;
+      totalExamPoints += qPoints;
       const ans = mergedAnswers[q.id] || {};
       let isCorrect = false;
       let studentAnswerDisplay = '-';
@@ -1650,8 +1665,8 @@ export const elearningApi = {
       if (q.type === 'MCQ') {
         totalAutoGraded += 1;
         totalAutoPoints += qPoints;
-        const studentOptKey = ans.selectedOption || '';
-        const correctOptKey = q.correctOption || '';
+        const studentOptKey = (ans.selectedOption || '').trim().toUpperCase();
+        const correctOptKey = (q.correctOption || '').trim().toUpperCase();
         isCorrect = Boolean(studentOptKey && studentOptKey === correctOptKey);
         if (isCorrect) {
           correctCount += 1;
@@ -1664,10 +1679,16 @@ export const elearningApi = {
       } else if (q.type === 'COMPLEX_MCQ') {
         totalAutoGraded += 1;
         totalAutoPoints += qPoints;
-        const studentOpts = Array.isArray(ans.selectedOptions) ? ans.selectedOptions : [];
-        const correctOpts = Array.isArray(q.correctOptions) ? q.correctOptions : (q.correctOption ? [q.correctOption] : []);
-        const sortedStudent = [...studentOpts].sort().join(',');
-        const sortedCorrect = [...correctOpts].sort().join(',');
+        const studentOpts = Array.isArray(ans.selectedOptions) && ans.selectedOptions.length > 0
+          ? ans.selectedOptions
+          : (typeof ans.selectedOption === 'string' && ans.selectedOption && !ans.selectedOption.startsWith('{')
+              ? ans.selectedOption.split(',').map((s) => s.trim()).filter(Boolean)
+              : []);
+        const correctOpts = Array.isArray(q.correctOptions) && q.correctOptions.length > 0
+          ? q.correctOptions
+          : (q.correctOption ? [q.correctOption] : []);
+        const sortedStudent = [...studentOpts].map((s) => s.toUpperCase()).sort().join(',');
+        const sortedCorrect = [...correctOpts].map((s) => s.toUpperCase()).sort().join(',');
         isCorrect = Boolean(sortedStudent && sortedStudent === sortedCorrect);
         if (isCorrect) {
           correctCount += 1;
@@ -1690,7 +1711,13 @@ export const elearningApi = {
       } else if (q.type === 'MATCHING') {
         totalAutoGraded += 1;
         totalAutoPoints += qPoints;
-        const matchingAns = ans.matchingAnswers || {};
+        let matchingAns = ans.matchingAnswers;
+        if (!matchingAns && typeof ans.selectedOption === 'string' && ans.selectedOption.startsWith('{')) {
+          try {
+            matchingAns = JSON.parse(ans.selectedOption);
+          } catch (_) {}
+        }
+        matchingAns = matchingAns || {};
         const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
         let matchedCorrect = 0;
         const pairDetails = pairs.map((p) => {
@@ -1731,8 +1758,11 @@ export const elearningApi = {
       };
     });
 
+    const totalQuestionsCount = questions.length;
     const score = totalAutoGraded > 0
-      ? (totalAutoPoints > 0 ? Math.round((earnedAutoPoints / totalAutoPoints) * 100) : Math.round((correctCount / totalAutoGraded) * 100))
+      ? (totalExamPoints > 0
+          ? Math.round((earnedAutoPoints / totalExamPoints) * 100)
+          : Math.round((correctCount / Math.max(1, totalQuestionsCount)) * 100))
       : null;
 
     if (session) {

@@ -1199,11 +1199,45 @@ func (h *ELearningHandler) FinishStudentExam(c *fiber.Ctx) error {
 				SessionID:  id,
 				QuestionID: qID,
 			}
-			if m, ok := raw.(map[string]interface{}); ok {
+			if strVal, ok := raw.(string); ok && strings.TrimSpace(strVal) != "" {
+				ans.SelectedOption = strings.TrimSpace(strVal)
+			} else if m, ok := raw.(map[string]interface{}); ok {
 				if opt, ok := m["selectedOption"].(string); ok && opt != "" {
 					ans.SelectedOption = opt
 				} else if opt, ok := m["selected_option"].(string); ok && opt != "" {
 					ans.SelectedOption = opt
+				}
+				// Fallback untuk Pilihan Ganda Kompleks (selectedOptions array)
+				if ans.SelectedOption == "" {
+					if optsRaw, ok := m["selectedOptions"].([]interface{}); ok && len(optsRaw) > 0 {
+						parts := make([]string, 0, len(optsRaw))
+						for _, item := range optsRaw {
+							if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+								parts = append(parts, strings.TrimSpace(s))
+							}
+						}
+						if len(parts) > 0 {
+							ans.SelectedOption = strings.Join(parts, ",")
+						}
+					}
+				}
+				// Fallback untuk Menjodohkan / Pencocokan (matchingAnswers map)
+				if ans.SelectedOption == "" {
+					if matchMap, ok := m["matchingAnswers"].(map[string]interface{}); ok && len(matchMap) > 0 {
+						if b, err := json.Marshal(matchMap); err == nil {
+							ans.SelectedOption = string(b)
+						}
+					}
+				}
+				// Fallback untuk Benar / Salah (trueFalseAnswer bool)
+				if ans.SelectedOption == "" {
+					if tf, ok := m["trueFalseAnswer"].(bool); ok {
+						if tf {
+							ans.SelectedOption = "TRUE"
+						} else {
+							ans.SelectedOption = "FALSE"
+						}
+					}
 				}
 				if ess, ok := m["essayAnswer"].(string); ok && ess != "" {
 					ans.EssayAnswer = ess
@@ -1216,7 +1250,9 @@ func (h *ELearningHandler) FinishStudentExam(c *fiber.Ctx) error {
 					ans.IsDoubtful = d
 				}
 			}
-			answerList = append(answerList, ans)
+			if ans.SelectedOption != "" || ans.EssayAnswer != "" {
+				answerList = append(answerList, ans)
+			}
 		}
 	}
 
