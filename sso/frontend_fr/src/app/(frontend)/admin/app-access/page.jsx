@@ -304,6 +304,16 @@ export default function AppAccessMatrixPage() {
           if (!updated.erapor || updated.erapor === 'NONE') updated.erapor = 'GURU';
           if (!updated.eperpus || updated.eperpus === 'NONE') updated.eperpus = 'GURU';
         }
+      } else if (key === 'elearning') {
+        // Admin Belajar/CBT untuk guru disimpan sebagai PROKTOR agar
+        // role yang diteruskan ke aplikasi Belajar tidak kembali menjadi GURU.
+        if (newRole === 'ADMIN' && ['GURU', 'TENAGA_KEPENDIDIKAN'].includes(updated.ssoRole)) {
+          updated.ssoRole = 'PROKTOR';
+        } else if (newRole === 'SISWA') {
+          updated.ssoRole = 'SISWA';
+        } else if (newRole === 'GURU' && updated.ssoRole === 'PROKTOR') {
+          updated.ssoRole = 'GURU';
+        }
       }
 
       return {
@@ -334,7 +344,8 @@ export default function AppAccessMatrixPage() {
     } else if (ssoRole === 'SISWA') {
       updatedRole = 'SISWA';
     } else if (ssoRole === 'GURU') {
-      if (eperpus === 'ADMIN') updatedRole = 'ADMIN_PERPUS';
+      if (elearning === 'ADMIN') updatedRole = 'PROKTOR';
+      else if (eperpus === 'ADMIN') updatedRole = 'ADMIN_PERPUS';
       else if (erapor === 'ADMIN') updatedRole = 'ADMIN_RAPOR';
       else if (presensi === 'ADMIN') updatedRole = 'ADMIN_ABSENSI';
       else updatedRole = 'GURU';
