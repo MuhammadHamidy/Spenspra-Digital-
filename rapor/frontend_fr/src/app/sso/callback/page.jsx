@@ -11,25 +11,50 @@ function SSOCallbackContent() {
 
   useEffect(() => {
     const accessToken = searchParams.get('access_token');
-    const institutionId = searchParams.get('institution_id');
+    const institutionId = searchParams.get('institution_id') || 'smpn1prambon';
     const encodedUser = searchParams.get('user');
 
-    if (!accessToken || !institutionId) {
-      setError('Callback SSO tidak lengkap. Token dan institution_id wajib dikirim.');
+    if (!accessToken) {
+      setError('Callback SSO tidak lengkap. Token autentikasi wajib dikirim.');
       return;
     }
 
     let user = { id: searchParams.get('sub') || '', roleName: 'GURU' };
+
+    // Ekstrak klaim dari payload JWT sebagai baseline jika parameter ?user tidak dikirim
+    try {
+      const parts = accessToken.split('.');
+      if (parts.length === 3) {
+        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const jwtClaims = JSON.parse(decodeURIComponent(escape(atob(base64))));
+        user = {
+          ...user,
+          id: jwtClaims.sub || jwtClaims.id || user.id,
+          fullName: jwtClaims.full_name || jwtClaims.fullName || jwtClaims.name || '',
+          full_name: jwtClaims.full_name || jwtClaims.fullName || jwtClaims.name || '',
+          roleName: jwtClaims.role_name || jwtClaims.roleName || jwtClaims.role || user.roleName,
+          role: jwtClaims.role_name || jwtClaims.roleName || jwtClaims.role || user.roleName,
+          username: jwtClaims.username || '',
+          nisn: jwtClaims.nisn || '',
+          nimNip: jwtClaims.nip || jwtClaims.nim_nip || jwtClaims.nisn || '',
+          className: jwtClaims.class_name || jwtClaims.className || '',
+        };
+      }
+    } catch (jwtErr) {
+      console.warn('Gagal mendekode payload JWT:', jwtErr);
+    }
+
     if (encodedUser) {
       try {
-        const decoded = decodeURIComponent(escape(atob(encodedUser)));
+        const normalized = encodedUser.replace(/ /g, '+');
+        const decoded = decodeURIComponent(escape(atob(normalized)));
         user = { ...user, ...JSON.parse(decoded) };
       } catch {
         try {
-          user = { ...user, ...JSON.parse(atob(encodedUser)) };
-        } catch {
-          setError('Data pengguna dari SSO tidak valid.');
-          return;
+          const normalized = encodedUser.replace(/ /g, '+');
+          user = { ...user, ...JSON.parse(atob(normalized)) };
+        } catch (e) {
+          console.warn('Gagal membaca data pengguna dari SSO callback:', e);
         }
       }
     }

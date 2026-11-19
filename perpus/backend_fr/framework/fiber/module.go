@@ -92,11 +92,19 @@ func NewFiber(cfg *Config) *fiber.App {
 	app.Use(recover.New())
 	app.Use(helmet.New())
 
-	if cfg.CORSAllowedOrigins != "" {
-		app.Use(cors.New(cors.Config{
-			AllowOrigins: cfg.CORSAllowedOrigins,
-		}))
+	corsOrigins := cfg.CORSAllowedOrigins
+	if corsOrigins == "*" {
+		corsOrigins = ""
 	}
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: corsOrigins,
+		AllowOriginsFunc: func(origin string) bool {
+			return true
+		},
+		AllowCredentials: true,
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-User-Id, X-Institution-Id, X-Requested-With",
+		AllowMethods:     "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD",
+	}))
 
 	if cfg.EnableCompress {
 		app.Use(compress.New())

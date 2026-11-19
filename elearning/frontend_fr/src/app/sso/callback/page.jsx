@@ -21,6 +21,30 @@ function SSOCallbackContent() {
       }
 
       let user = { id: searchParams.get('sub') || '', roleName: 'GURU' };
+
+      // Ekstrak klaim dari payload JWT agar data user tetap utuh walaupun param ?user tidak dikirim
+      try {
+        const parts = accessToken.split('.');
+        if (parts.length === 3) {
+          const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+          const jwtClaims = JSON.parse(decodeURIComponent(escape(atob(base64))));
+          user = {
+            ...user,
+            id: jwtClaims.sub || jwtClaims.id || user.id,
+            fullName: jwtClaims.full_name || jwtClaims.fullName || jwtClaims.name || '',
+            full_name: jwtClaims.full_name || jwtClaims.fullName || jwtClaims.name || '',
+            roleName: jwtClaims.role_name || jwtClaims.roleName || jwtClaims.role || user.roleName,
+            role: jwtClaims.role_name || jwtClaims.roleName || jwtClaims.role || user.roleName,
+            username: jwtClaims.username || '',
+            nisn: jwtClaims.nisn || '',
+            nimNip: jwtClaims.nip || jwtClaims.nim_nip || jwtClaims.nisn || '',
+            className: jwtClaims.class_name || jwtClaims.className || '',
+          };
+        }
+      } catch (jwtErr) {
+        console.warn('Gagal mendekode payload JWT:', jwtErr);
+      }
+
       if (encodedUser) {
         try {
           const normalized = encodedUser.replace(/ /g, '+');
