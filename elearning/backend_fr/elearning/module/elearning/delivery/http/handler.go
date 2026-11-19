@@ -34,6 +34,36 @@ func canManageAll(role string) bool {
 	return r == "ADMIN" || r == "SUPER_ADMIN" || r == "ADMIN_ELEARNING"
 }
 
+func cleanTeacherName(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.ReplaceAll(s, ".", " ")
+	s = strings.ReplaceAll(s, ",", " ")
+	return strings.Join(strings.Fields(s), " ")
+}
+
+func isOwnedByActor(c *fiber.Ctx, teacherID, teacherName string) bool {
+	uid := strings.ToLower(actorID(c))
+	uname := cleanTeacherName(c.Get("X-User-Name"))
+	tID := strings.ToLower(strings.TrimSpace(teacherID))
+	tName := cleanTeacherName(teacherName)
+
+	if uid != "" && uid != "user-elearning-default" && tID != "" && tID != "user-elearning-default" {
+		if uid == tID {
+			return true
+		}
+		if uname != "" && uname != "bapak/ibu guru" && tName != "" && tName != "bapak/ibu guru" && uname == tName {
+			return true
+		}
+		return false
+	}
+
+	if uname != "" && uname != "bapak/ibu guru" && tName != "" && tName != "bapak/ibu guru" {
+		return uname == tName
+	}
+
+	return false
+}
+
 func (h *ELearningHandler) requireExamOwner(c *fiber.Ctx, exam *domain.CBTExam) *fiber.Error {
 	role := actorRole(c)
 	if canManageAll(role) {
@@ -41,6 +71,9 @@ func (h *ELearningHandler) requireExamOwner(c *fiber.Ctx, exam *domain.CBTExam) 
 	}
 	if role != "" && !isTeacherRole(role) {
 		return fiber.NewError(http.StatusForbidden, "hanya guru atau staf pengajar yang dapat mengelola ujian")
+	}
+	if exam != nil && !isOwnedByActor(c, exam.TeacherID, exam.TeacherName) {
+		return fiber.NewError(http.StatusForbidden, "akses ditolak: hanya guru pembuat soal ujian ini yang dapat mengelola soal dan pengaturannya")
 	}
 	return nil
 }
@@ -94,6 +127,16 @@ func (h *ELearningHandler) ListMaterials(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
 	}
+	role := actorRole(c)
+	if isTeacherRole(role) && !canManageAll(role) && (actorID(c) != "" || strings.TrimSpace(c.Get("X-User-Name")) != "") {
+		filtered := list[:0]
+		for _, m := range list {
+			if isOwnedByActor(c, m.TeacherID, m.TeacherName) {
+				filtered = append(filtered, m)
+			}
+		}
+		list = filtered
+	}
 	return c.Status(http.StatusOK).JSON(responses.Success(list, "Data materi berhasil dimuat"))
 }
 
@@ -101,6 +144,16 @@ func (h *ELearningHandler) CreateMaterial(c *fiber.Ctx) error {
 	var req domain.LearningMaterial
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(responses.Fail("INVALID_PAYLOAD", err.Error()))
+	}
+	if strings.TrimSpace(req.TeacherID) == "" || isTeacherRole(actorRole(c)) {
+		if uid := actorID(c); uid != "" {
+			req.TeacherID = uid
+		}
+	}
+	if strings.TrimSpace(req.TeacherName) == "" {
+		if uName := strings.TrimSpace(c.Get("X-User-Name")); uName != "" {
+			req.TeacherName = uName
+		}
 	}
 	if err := h.useCase.AddMaterial(c.Context(), &req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(responses.Fail("VALIDATION_ERROR", err.Error()))
@@ -123,6 +176,16 @@ func (h *ELearningHandler) ListAssignments(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
 	}
+	role := actorRole(c)
+	if isTeacherRole(role) && !canManageAll(role) && (actorID(c) != "" || strings.TrimSpace(c.Get("X-User-Name")) != "") {
+		filtered := list[:0]
+		for _, a := range list {
+			if isOwnedByActor(c, a.TeacherID, a.TeacherName) {
+				filtered = append(filtered, a)
+			}
+		}
+		list = filtered
+	}
 	return c.Status(http.StatusOK).JSON(responses.Success(list, "Data penugasan berhasil dimuat"))
 }
 
@@ -130,6 +193,16 @@ func (h *ELearningHandler) CreateAssignment(c *fiber.Ctx) error {
 	var req domain.LearningAssignment
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(responses.Fail("INVALID_PAYLOAD", err.Error()))
+	}
+	if strings.TrimSpace(req.TeacherID) == "" || isTeacherRole(actorRole(c)) {
+		if uid := actorID(c); uid != "" {
+			req.TeacherID = uid
+		}
+	}
+	if strings.TrimSpace(req.TeacherName) == "" {
+		if uName := strings.TrimSpace(c.Get("X-User-Name")); uName != "" {
+			req.TeacherName = uName
+		}
 	}
 	if err := h.useCase.AddAssignment(c.Context(), &req); err != nil {
 		return c.Status(http.StatusBadRequest).JSON(responses.Fail("VALIDATION_ERROR", err.Error()))
@@ -392,15 +465,10 @@ func (h *ELearningHandler) ListExams(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
 	}
 	role := actorRole(c)
-	if isTeacherRole(role) && actorID(c) != "" {
+	if isTeacherRole(role) && !canManageAll(role) && (actorID(c) != "" || strings.TrimSpace(c.Get("X-User-Name")) != "") {
 		filtered := list[:0]
 		for _, exam := range list {
-			isUAS := strings.Contains(strings.ToLower(exam.ClassCode), "tingkat") ||
-				strings.Contains(strings.ToLower(exam.ClassCode), "semua") ||
-				strings.HasPrefix(strings.ToUpper(exam.Token), "ASAS") ||
-				strings.Contains(strings.ToUpper(exam.Title), "ASAS") ||
-				strings.Contains(strings.ToUpper(exam.Title), "UAS")
-			if exam.TeacherID == "" || exam.TeacherID == actorID(c) || isUAS || canManageAll(role) {
+			if isOwnedByActor(c, exam.TeacherID, exam.TeacherName) {
 				filtered = append(filtered, exam)
 			}
 		}

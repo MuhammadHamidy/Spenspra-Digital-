@@ -100,7 +100,7 @@ function LoginForm() {
         fullName: user?.fullName || user?.full_name || user?.name || '',
         roleName: roleName,
         peran: roleName,
-        className: user?.className || user?.kelas || '',
+        className: user?.className || user?.class_name || user?.kelas || '',
         nimNip: user?.nimNip || user?.nip || user?.nisn || '',
         courseNames: user?.courseNames || user?.course_names || user?.courses || [],
         courseIds: user?.courseIds || user?.course_ids || [],

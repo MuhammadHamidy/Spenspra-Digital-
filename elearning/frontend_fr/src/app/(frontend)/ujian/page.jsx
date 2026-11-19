@@ -7,7 +7,7 @@ import Button from '@/components/Button';
 import StatusBadge from '@/components/StatusBadge';
 import Input from '@/components/Input';
 import ConfirmModal from '@/components/ConfirmModal';
-import { elearningApi } from '@/lib/elearningApi';
+import { elearningApi, isItemForStudent } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
 export default function StudentExamsHubPage() {
@@ -95,44 +95,9 @@ export default function StudentExamsHubPage() {
   const studentClassNorm = normalizeClass(studentClass);
 
   const filteredExams = useMemo(() => {
-    return exams.filter((ex) => {
-      // 1. Jika ujian bertipe UAS / ASAS Tingkat Terpusat
-      const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
-      if (isUas) {
-        if (!studentClassNorm) return false;
-
-        // Cek jika rombel siswa terdaftar di daftar target kelas UAS
-        if (Array.isArray(ex.targetClasses) && ex.targetClasses.length > 0) {
-          if (ex.targetClasses.some((tc) => normalizeClass(tc) === studentClassNorm)) {
-            return true;
-          }
-        }
-
-        // Cek jika jenjang tingkat siswa cocok (misal kelas 7A -> tingkat 7)
-        if (ex.targetGradeLevel) {
-          if (studentClassNorm.startsWith(String(ex.targetGradeLevel))) {
-            return true;
-          }
-        }
-      }
-
-      const examClassRaw = ex.className || ex.class_code || ex.classCode || '';
-      const examClassNorm = normalizeClass(examClassRaw);
-
-      // Jika ujian diset untuk semua rombel
-      if (!examClassNorm || examClassNorm === 'semua' || examClassNorm === 'all' || examClassNorm === 'umum') {
-        return true;
-      }
-
-      // Jika siswa belum memiliki data kelas, jangan bocorkan ujian kelas spesifik
-      if (!studentClassNorm) {
-        return false;
-      }
-
-      // Strict matching: Siswa kelas 7A HANYA boleh mengakses ujian kelas 7A, bukan kelas 9A
-      return examClassNorm === studentClassNorm;
-    });
-  }, [exams, studentClassNorm]);
+    if (!user) return [];
+    return exams.filter((ex) => isItemForStudent(ex, user));
+  }, [exams, user]);
 
   // Evaluasi jadwal pengerjaan sesuai jam ujian secara real-time
   const getExamLiveStatus = (exam) => {

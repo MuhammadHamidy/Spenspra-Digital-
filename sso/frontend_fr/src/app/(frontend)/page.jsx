@@ -252,7 +252,7 @@ export default function MainPage() {
       roleName: belajarRole,
       peran: belajarRole,
       nimNip: user?.nimNip || user?.nip || user?.nisn || '',
-      className: user?.className || user?.kelas || '',
+      className: user?.className || user?.class_name || user?.kelas || '',
       courseNames: user?.courseNames || user?.course_names || user?.courses || [],
       courseIds: user?.courseIds || user?.course_ids || [],
       classCodes: user?.classCodes || user?.class_codes || user?.classes || [],

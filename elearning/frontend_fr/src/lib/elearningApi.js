@@ -226,6 +226,129 @@ function setLocal(key, value) {
   } catch {}
 }
 
+export function normalizeClassCode(c) {
+  if (!c) return '';
+  let s = String(c)
+    .toLowerCase()
+    .trim()
+    .replace(/^kelas\s*/i, '')
+    .replace(/^rombel\s*/i, '')
+    .replace(/[^a-z0-9]/g, '');
+  if (s.startsWith('viii')) s = '8' + s.slice(4);
+  else if (s.startsWith('vii')) s = '7' + s.slice(3);
+  else if (s.startsWith('ix')) s = '9' + s.slice(2);
+  return s;
+}
+
+export function extractGradeLevelDigit(c) {
+  if (!c) return '';
+  const str = String(c).toUpperCase();
+  if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VIII|8)\b|\bVIII[-A-Z]|\b8[A-H]\b|\[ASAS:8\]/.test(str)) return '8';
+  if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VII|7)\b|\bVII[-A-Z]|\b7[A-H]\b|\[ASAS:7\]/.test(str)) return '7';
+  if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:IX|9)\b|\bIX[-A-Z]|\b9[A-H]\b|\[ASAS:9\]/.test(str)) return '9';
+  if (/^(?:8|VIII)$/.test(str.trim())) return '8';
+  if (/^(?:7|VII)$/.test(str.trim())) return '7';
+  if (/^(?:9|IX)$/.test(str.trim())) return '9';
+  const norm = normalizeClassCode(c);
+  const m = norm.match(/^([789])/);
+  return m ? m[1] : '';
+}
+
+function cleanTeacherNameStr(n) {
+  return String(n || '')
+    .toLowerCase()
+    .replace(/[.,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function isItemForStudent(item, user) {
+  if (!item || !user) return false;
+  const rawStudentClass =
+    user.className ||
+    user.class_name ||
+    user.kelas ||
+    user.rombel ||
+    (Array.isArray(user.classCodes) && user.classCodes.length > 0 ? user.classCodes[0] : '') ||
+    '';
+  const studentClassNorm = normalizeClassCode(rawStudentClass);
+  const studentLevel = extractGradeLevelDigit(rawStudentClass);
+
+  if (!studentClassNorm && !studentLevel) return false;
+
+  if (Array.isArray(item.targetClasses) && item.targetClasses.length > 0) {
+    return item.targetClasses.some((tc) => normalizeClassCode(tc) === studentClassNorm);
+  }
+
+  const itemClassRaw = String(item.className || item.class_code || item.classCode || '');
+  const isGradeLevelItem =
+    item.examCategory === 'SEMESTER_UAS' ||
+    item.isCoordinatorExam ||
+    Boolean(item.targetGradeLevel) ||
+    /tingkat|semua rombel|semua kelas/i.test(itemClassRaw);
+
+  if (isGradeLevelItem) {
+    const itemLevel =
+      extractGradeLevelDigit(item.targetGradeLevel) ||
+      extractGradeLevelDigit(itemClassRaw) ||
+      extractGradeLevelDigit(item.rawDescription) ||
+      extractGradeLevelDigit(item.title);
+    if (!itemLevel || !studentLevel) return false;
+    return itemLevel === studentLevel;
+  }
+
+  const itemClassNorm = normalizeClassCode(itemClassRaw);
+  if (!itemClassNorm) return false;
+  return itemClassNorm === studentClassNorm;
+}
+
+export function isItemOwnedByTeacher(item, user) {
+  if (!item || !user) return false;
+  const myIds = [user.id, user.person_id, user.personId, user.nimNip, user.nip, user.username]
+    .filter(Boolean)
+    .map((v) => String(v).trim().toLowerCase());
+  const myName = cleanTeacherNameStr(user.fullName || user.full_name || user.name || '');
+
+  const itemTeacherId = String(item.teacherId || item.teacher_id || '')
+    .trim()
+    .toLowerCase();
+  const itemTeacherName = cleanTeacherNameStr(item.teacherName || item.teacher_name || '');
+
+  if (itemTeacherId && itemTeacherId !== 'user-elearning-default') {
+    if (myIds.includes(itemTeacherId)) return true;
+    if (myName && itemTeacherName && itemTeacherName !== 'bapak/ibu guru' && itemTeacherName === myName) {
+      return true;
+    }
+    return false;
+  }
+
+  if (itemTeacherName && itemTeacherName !== 'bapak/ibu guru') {
+    return Boolean(myName && itemTeacherName === myName);
+  }
+
+  return false;
+}
+
+function filterItemsByCurrentUserScope(items, params = {}) {
+  if (!Array.isArray(items)) return [];
+  if (params?.skipScopeFilter) return items;
+
+  const currentUser = tokenStorage.getUser();
+  if (!currentUser) return items;
+
+  const role = String(currentUser.roleName || currentUser.role || currentUser.role_name || '').toUpperCase();
+  const isAdmin = role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'ADMIN_ELEARNING' || role.includes('KEPALA');
+  if (isAdmin) return items;
+
+  const isSiswa = role.includes('SISWA') || role.includes('STUDENT');
+  if (isSiswa) {
+    return items.filter((item) => isItemForStudent(item, currentUser));
+  }
+
+  // Guru / Pendidik: hanya melihat dan mengelola soal/ujian/materi/tugas yang dibuatnya sendiri
+  return items.filter((item) => isItemOwnedByTeacher(item, currentUser));
+}
+
 export function mapExamItem(e) {
   if (!e) return null;
   const className = e.className || e.class_code || e.classCode || '';
@@ -269,11 +392,11 @@ export function mapExamItem(e) {
   if (asasTagMatch) {
     gradeLevel = asasTagMatch[1];
   } else if (e.targetGradeLevel || e.target_grade_level) {
-    gradeLevel = String(e.targetGradeLevel || e.target_grade_level);
+    gradeLevel = extractGradeLevelDigit(e.targetGradeLevel || e.target_grade_level) || String(e.targetGradeLevel || e.target_grade_level);
   } else {
-    const gradeMatch = className.match(/(?:tingkat|tk\.?|kelas)\s*([789])/i) || title.match(/(?:tingkat|tk\.?|kelas)\s*([789])/i);
-    if (gradeMatch) {
-      gradeLevel = gradeMatch[1];
+    const extracted = extractGradeLevelDigit(className) || extractGradeLevelDigit(title);
+    if (extracted) {
+      gradeLevel = extracted;
     } else if (isUas) {
       gradeLevel = '7';
     }
@@ -309,6 +432,8 @@ export function mapExamItem(e) {
     subject: e.subject || e.course_name || e.courseName || '',
     subjectCode: e.subjectCode || e.course_id || e.courseId || 'MAPEL',
     durationMinutes: Number(e.durationMinutes || e.duration_minutes || 60),
+    teacherId: e.teacherId || e.teacher_id || '',
+    teacher_id: e.teacher_id || e.teacherId || '',
     teacherName: e.teacherName || e.teacher_name || 'Bapak/Ibu Guru',
     token,
     startDateTime: startDT,
@@ -336,12 +461,17 @@ export const elearningApi = {
   // =================== MATERI ===================
   getMaterials: async (params = {}) => {
     const res = await fetchJson('/materials');
-    if (res.success && res.data) return res.data;
-    const local = getLocal('materials', INITIAL_MATERIALS);
-    if (params.className) {
-      return local.filter((m) => !m.className || m.className === params.className);
+    let rawList = [];
+    if (res.success && Array.isArray(res.data)) {
+      rawList = res.data;
+    } else {
+      rawList = getLocal('materials', INITIAL_MATERIALS);
     }
-    return local;
+    const scoped = filterItemsByCurrentUserScope(rawList, params);
+    if (params.className) {
+      return scoped.filter((m) => !m.className || normalizeClassCode(m.className || m.class_code) === normalizeClassCode(params.className));
+    }
+    return scoped;
   },
 
   getMaterialById: async (id) => {
@@ -352,16 +482,26 @@ export const elearningApi = {
   },
 
   createMaterial: async (payload) => {
+    const currentUser = tokenStorage.getUser();
+    const tId = payload.teacherId || payload.teacher_id || currentUser?.id || currentUser?.nimNip || currentUser?.nip || currentUser?.username || '';
+    const tName = payload.teacherName || payload.teacher_name || currentUser?.fullName || currentUser?.full_name || currentUser?.name || 'Bapak/Ibu Guru';
+    const fullPayload = {
+      ...payload,
+      teacherId: tId,
+      teacher_id: tId,
+      teacherName: tName,
+      teacher_name: tName,
+    };
     const res = await fetchJson('/materials', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(fullPayload),
     });
     const local = getLocal('materials', INITIAL_MATERIALS);
     const newMaterial = {
       id: `mat-${Date.now()}`,
       createdAt: new Date().toISOString(),
       viewsCount: 0,
-      ...payload,
+      ...fullPayload,
     };
     setLocal('materials', [newMaterial, ...local]);
     return res.success ? res.data : newMaterial;
@@ -390,6 +530,10 @@ export const elearningApi = {
       subject: t.subject || t.subject_name || t.course_name || t.courseName || 'Mata Pelajaran',
       subjectCode: t.subjectCode || t.subject_code || t.course_code || 'MAPEL',
       className: t.className || t.class_name || t.class_code || t.classCode || '',
+      teacherId: t.teacherId || t.teacher_id || '',
+      teacher_id: t.teacher_id || t.teacherId || '',
+      teacherName: t.teacherName || t.teacher_name || 'Bapak/Ibu Guru',
+      teacher_name: t.teacher_name || t.teacherName || 'Bapak/Ibu Guru',
       dueDate: t.dueDate || t.due_date || t.deadline || t.endDateTime || t.end_time || '',
       maxScore: Number(t.maxScore || t.max_score || 100),
       description: t.description || t.instruction || '',
@@ -402,10 +546,11 @@ export const elearningApi = {
       createdAt: t.createdAt || t.created_at || new Date().toISOString(),
     }));
 
+    const scoped = filterItemsByCurrentUserScope(normalized, params);
     if (params.className) {
-      return normalized.filter((t) => !t.className || t.className === params.className);
+      return scoped.filter((t) => !t.className || normalizeClassCode(t.className) === normalizeClassCode(params.className));
     }
-    return normalized;
+    return scoped;
   },
 
   getAssignmentById: async (id) => {
@@ -416,9 +561,19 @@ export const elearningApi = {
   },
 
   createAssignment: async (payload) => {
+    const currentUser = tokenStorage.getUser();
+    const tId = payload.teacherId || payload.teacher_id || currentUser?.id || currentUser?.nimNip || currentUser?.nip || currentUser?.username || '';
+    const tName = payload.teacherName || payload.teacher_name || currentUser?.fullName || currentUser?.full_name || currentUser?.name || 'Bapak/Ibu Guru';
+    const fullPayload = {
+      ...payload,
+      teacherId: tId,
+      teacher_id: tId,
+      teacherName: tName,
+      teacher_name: tName,
+    };
     const res = await fetchJson('/assignments', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(fullPayload),
     });
     const local = getLocal('assignments', INITIAL_ASSIGNMENTS);
     const newAssignment = {
@@ -426,7 +581,7 @@ export const elearningApi = {
       createdAt: new Date().toISOString(),
       submittedCount: 0,
       status: 'ACTIVE',
-      ...payload,
+      ...fullPayload,
     };
     setLocal('assignments', [newAssignment, ...local]);
     return res.success ? res.data : newAssignment;
@@ -500,15 +655,19 @@ export const elearningApi = {
     const query = params.className ? `?class_name=${encodeURIComponent(params.className)}` : '';
     const res = await fetchJson(`/exams${query}`);
 
+    let mapped = [];
     if (res.success && Array.isArray(res.data)) {
-      return res.data.map(mapExamItem).filter(Boolean);
+      mapped = res.data.map(mapExamItem).filter(Boolean);
+    } else {
+      const local = getLocal('exams', INITIAL_EXAMS);
+      mapped = local.map(mapExamItem).filter(Boolean);
     }
-    const local = getLocal('exams', INITIAL_EXAMS);
-    const mappedLocal = local.map(mapExamItem).filter(Boolean);
+
+    const scoped = filterItemsByCurrentUserScope(mapped, params);
     if (params.className) {
-      return mappedLocal.filter((e) => e.className === params.className);
+      return scoped.filter((e) => normalizeClassCode(e.className) === normalizeClassCode(params.className));
     }
-    return mappedLocal;
+    return scoped;
   },
 
   getExamById: async (id) => {
@@ -520,6 +679,9 @@ export const elearningApi = {
   },
 
   createExam: async (payload) => {
+    const currentUser = tokenStorage.getUser();
+    const currentTeacherId = payload.teacherId || payload.teacher_id || currentUser?.id || currentUser?.nimNip || currentUser?.nip || currentUser?.username || '';
+    const currentTeacherName = payload.teacherName || payload.teacher_name || currentUser?.fullName || currentUser?.full_name || currentUser?.name || 'Bapak/Ibu Guru';
     const isUas = payload.examCategory === 'SEMESTER_UAS' || Boolean(payload.targetGradeLevel) || Boolean(payload.isCoordinatorExam);
     const generatedPin = payload.supervisorPin || (isUas ? generateRandomPin(6) : '');
     const showScore = payload.showScoreToStudent !== false ? 1 : 0;
@@ -547,7 +709,10 @@ export const elearningApi = {
       course_name: payload.subject || payload.course_name,
       course_id: payload.subjectCode || payload.course_id || 'MAPEL',
       duration_minutes: Number(payload.durationMinutes || payload.duration_minutes || 60),
-      teacher_name: payload.teacherName || payload.teacher_name || 'Bapak/Ibu Guru',
+      teacherId: currentTeacherId,
+      teacher_id: currentTeacherId,
+      teacherName: currentTeacherName,
+      teacher_name: currentTeacherName,
       token: (payload.token || '').toUpperCase(),
       exam_category: isUas ? 'SEMESTER_UAS' : 'REGULAR',
       target_grade_level: isUas ? (payload.targetGradeLevel || '7') : '',
