@@ -7,6 +7,7 @@ export function mapToDbRoleId(role) {
   if (r.includes('PERPUS')) return 'role-admin-perpus';
   if (r.includes('ABSENSI')) return 'role-admin-absensi';
   if (r.includes('WALI')) return 'role-wali-kelas';
+  if (r === 'PROKTOR' || r === 'ADMIN_PROKTOR' || r === 'KOORDINATOR_UAS') return 'role-proktor';
   if (r.includes('GURU')) return 'role-guru';
   if (r.includes('SISWA')) return 'role-siswa';
   if (r.includes('KEPALA')) return 'role-kepala-sekolah';
