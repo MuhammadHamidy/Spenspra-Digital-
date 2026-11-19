@@ -39,13 +39,15 @@ function parseQuestionImport(text) {
 
   const startQuestion = (line) => {
     const match = line.match(/^(?:soal\s*)?(\d+)\s*[\.\):\-]\s*(.+)$/i);
-    if (!match) return false;
+    const labeledMatch = line.match(/^(?:soal|pertanyaan)\s*[:\-]\s*(.+)$/i);
+    if (!match && !labeledMatch) return false;
     if (current?.questionText && current.options.length >= 2) questions.push(current);
     current = {
-      questionNumber: Number(match[1]),
-      questionText: match[2].trim(),
+      questionNumber: match ? Number(match[1]) : questions.length + 1,
+      questionText: (match ? match[2] : labeledMatch[1]).trim(),
       options: [],
       correctOption: 'A',
+      points: 10,
     };
     currentOption = null;
     return true;
@@ -58,6 +60,13 @@ function parseQuestionImport(text) {
     const answerMatch = line.match(/^(?:kunci|jawaban|answer)\s*[:\-]\s*([A-E])/i);
     if (answerMatch) {
       current.correctOption = answerMatch[1].toUpperCase();
+      currentOption = null;
+      return;
+    }
+
+    const pointsMatch = line.match(/^(?:poin|points|bobot|nilai)\s*[:=]\s*(\d+(?:[.,]\d+)?)\s*(?:poin)?$/i);
+    if (pointsMatch) {
+      current.points = Number(pointsMatch[1].replace(',', '.')) || 10;
       currentOption = null;
       return;
     }
@@ -86,7 +95,7 @@ function parseQuestionImport(text) {
     questionText: question.questionText,
     options: question.options,
     correctOption: question.correctOption,
-    points: 10,
+    points: question.points || 10,
   }));
 }
 
@@ -163,6 +172,7 @@ export default function TeacherExamsManagementPage() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
+  const [isQuickEditMode, setIsQuickEditMode] = useState(false);
 
   useEffect(() => {
     loadInitialData();
@@ -553,6 +563,40 @@ export default function TeacherExamsManagementPage() {
     resetQuestionForm(false, lastPts);
   };
 
+  const updateQuestionInline = (questionId, patch) => {
+    setExamQuestions((current) =>
+      current.map((question) => (question.id === questionId ? { ...question, ...patch } : question))
+    );
+  };
+
+  const updateQuestionOptionInline = (questionId, key, text) => {
+    setExamQuestions((current) =>
+      current.map((question) => {
+        if (question.id !== questionId) return question;
+        const existingOptions = question.options || [];
+        const hasOption = existingOptions.some((option) => option.key === key);
+        const options = hasOption
+          ? existingOptions.map((option) => (option.key === key ? { ...option, text } : option))
+          : [...existingOptions, { key, text }];
+        return { ...question, options };
+      })
+    );
+  };
+
+  const handleSaveAllQuestions = async () => {
+    if (!activeQuestionEditorExam || examQuestions.length === 0) return;
+    setIsSavingQuestion(true);
+    try {
+      await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, examQuestions);
+      setSaveSuccessMsg(`Seluruh ${examQuestions.length} butir soal berhasil disimpan ke server!`);
+      setTimeout(() => setSaveSuccessMsg(''), 4000);
+    } catch (e) {
+      alert('Gagal menyimpan seluruh soal: ' + e.message);
+    } finally {
+      setIsSavingQuestion(false);
+    }
+  };
+
   const handleEditQuestion = (q) => {
     setEditingQuestionId(q.id);
     const type = q.type || 'MCQ';
@@ -819,18 +863,7 @@ export default function TeacherExamsManagementPage() {
               <Button
                 variant="primary"
                 size="sm"
-                onClick={async () => {
-                  try {
-                    setIsSavingQuestion(true);
-                    await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, examQuestions);
-                    setSaveSuccessMsg(`Seluruh ${examQuestions.length} butir soal berhasil disimpan ke server!`);
-                    setTimeout(() => setSaveSuccessMsg(''), 4000);
-                  } catch (e) {
-                    alert('Gagal sinkronisasi: ' + e.message);
-                  } finally {
-                    setIsSavingQuestion(false);
-                  }
-                }}
+                onClick={handleSaveAllQuestions}
                 loading={isSavingQuestion}
                 className="cursor-pointer font-bold shadow-xs bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"
               >
@@ -1539,6 +1572,19 @@ export default function TeacherExamsManagementPage() {
                     Total {examQuestions.length} Butir ({mcqCount} PG, {essayCount} Esai)
                   </p>
                 </div>
+                {examQuestions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setIsQuickEditMode((current) => !current)}
+                    className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition ${
+                      isQuickEditMode
+                        ? 'border-amber-300 bg-amber-50 text-amber-800'
+                        : 'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100'
+                    }`}
+                  >
+                    {isQuickEditMode ? 'Tutup Edit Cepat' : 'Edit Cepat Semua'}
+                  </button>
+                )}
               </div>
 
               {/* Scrollable Questions List */}
@@ -1552,6 +1598,98 @@ export default function TeacherExamsManagementPage() {
                     <p className="text-[11px] text-neutral-400 leading-relaxed">
                       Silakan isi formulir di sebelah kiri untuk menyusun butir soal ujian ini.
                     </p>
+                  </div>
+                ) : isQuickEditMode ? (
+                  <div className="space-y-3">
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-[11px] leading-relaxed text-blue-900">
+                      Ubah soal, opsi, kunci, dan poin langsung di tabel ini. Klik <strong>Simpan Semua Perubahan</strong> setelah selesai.
+                    </div>
+                    {examQuestions.map((q, idx) => {
+                      const optionMap = (q.options || []).reduce((result, option) => {
+                        result[option.key] = option.text;
+                        return result;
+                      }, {});
+                      const isChoiceQuestion = q.type === 'MCQ' || q.type === 'COMPLEX_MCQ';
+                      return (
+                        <div key={q.id || idx} className="rounded-xl border border-neutral-200 bg-white p-3 shadow-2xs">
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <span className="rounded bg-neutral-800 px-2 py-0.5 text-[10px] font-bold text-white">#{idx + 1}</span>
+                            <span className="text-[10px] font-semibold text-neutral-500">
+                              {q.type === 'MCQ' ? 'Pilihan Ganda' : q.type === 'COMPLEX_MCQ' ? 'PG Kompleks' : q.type}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteQuestion(q.id)}
+                              className="ml-auto rounded p-1 text-danger-600 hover:bg-danger-50"
+                              title="Hapus soal"
+                            >
+                              <AppIcon name="close-cancel" color="red" size={13} />
+                            </button>
+                          </div>
+                          <textarea
+                            value={q.questionText || ''}
+                            onChange={(event) => updateQuestionInline(q.id, { questionText: event.target.value })}
+                            rows={2}
+                            className="mb-2 w-full rounded-lg border border-neutral-300 p-2 text-xs text-neutral-800 outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-200"
+                            placeholder="Teks pertanyaan"
+                          />
+                          {isChoiceQuestion && (
+                            <div className="grid gap-1.5 sm:grid-cols-2">
+                              {['A', 'B', 'C', 'D', 'E'].map((key) => (
+                                <div key={key} className="flex items-center gap-1.5">
+                                  <span className="w-5 shrink-0 text-center text-[10px] font-bold text-neutral-500">{key}</span>
+                                  <input
+                                    value={optionMap[key] || ''}
+                                    onChange={(event) => updateQuestionOptionInline(q.id, key, event.target.value)}
+                                    className="min-w-0 flex-1 rounded-md border border-neutral-200 px-2 py-1.5 text-[11px] outline-none focus:border-primary-500"
+                                    placeholder={`Opsi ${key}`}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+                            <label className="text-[10px] font-bold text-neutral-500">
+                              Kunci
+                              <input
+                                value={Array.isArray(q.correctOptions) ? q.correctOptions.join(', ') : q.correctOption || ''}
+                                onChange={(event) => {
+                                  const value = event.target.value.toUpperCase().replace(/[^A-E, ]/g, '');
+                                  updateQuestionInline(q.id, {
+                                    correctOption: q.type === 'COMPLEX_MCQ' ? value.replace(/\s/g, '') : value.trim().charAt(0),
+                                    correctOptions: q.type === 'COMPLEX_MCQ'
+                                      ? value.split(',').map((item) => item.trim()).filter(Boolean)
+                                      : undefined,
+                                  });
+                                }}
+                                className="mt-1 w-full rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs font-bold text-emerald-800 outline-none focus:border-emerald-500"
+                                placeholder="A"
+                              />
+                            </label>
+                            <label className="text-[10px] font-bold text-neutral-500">
+                              Poin
+                              <input
+                                type="number"
+                                min="1"
+                                value={q.points || 10}
+                                onChange={(event) => updateQuestionInline(q.id, { points: Number(event.target.value) || 1 })}
+                                className="mt-1 w-full rounded-md border border-primary-200 bg-primary-50 px-2 py-1.5 text-xs font-bold text-primary-800 outline-none focus:border-primary-500"
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={handleSaveAllQuestions}
+                      loading={isSavingQuestion}
+                      className="w-full cursor-pointer font-bold"
+                    >
+                      Simpan Semua Perubahan
+                    </Button>
                   </div>
                 ) : (
                   examQuestions.map((q, idx) => (
@@ -1727,7 +1865,7 @@ export default function TeacherExamsManagementPage() {
                 <div>
                   <h2 className="font-bold text-neutral-900">Impor Soal Pilihan Ganda</h2>
                   <p className="text-[11px] text-neutral-500">
-                    Bisa ditempel dari Word, Notepad, atau Excel. Kunci jawaban opsional.
+                    Tempel dari Word, Notepad, atau Excel dengan kolom soal, opsi, kunci, dan poin yang terpisah.
                   </p>
                 </div>
                 <button
@@ -1740,15 +1878,24 @@ export default function TeacherExamsManagementPage() {
               </div>
               <div className="p-5 space-y-3">
                 <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-[11px] text-blue-900">
-                  Format: <strong>1. Pertanyaan</strong>, lalu <strong>A) Opsi A</strong> sampai
-                  <strong> D) Opsi D</strong>. Tambahkan <strong>Kunci: B</strong> bila ingin
-                  menentukan jawaban benar; jika tidak, sistem memakai A sebagai default.
+                  Format yang disarankan (setiap bagian memiliki label sendiri):
+                  <pre className="mt-2 overflow-x-auto rounded-lg bg-white/70 p-2 font-mono text-[10px] leading-relaxed">
+{`SOAL: Ibu kota Indonesia adalah ...
+A: Bandung
+B: Jakarta
+C: Surabaya
+D: Medan
+KUNCI: B
+POIN: 5`}
+                  </pre>
+                  Format lama bernomor seperti <strong>1. Soal</strong>, <strong>A) Opsi</strong>,
+                  <strong>Kunci: B</strong>, dan <strong>Poin: 5</strong> tetap didukung.
                 </div>
                 <textarea
                   value={importText}
                   onChange={(event) => setImportText(event.target.value)}
                   rows={14}
-                  placeholder={'1. Ibu kota Indonesia adalah ...\nA) Bandung\nB) Jakarta\nC) Surabaya\nD) Medan\nKunci: B'}
+                  placeholder={'SOAL: Ibu kota Indonesia adalah ...\nA: Bandung\nB: Jakarta\nC: Surabaya\nD: Medan\nKUNCI: B\nPOIN: 5'}
                   className="w-full rounded-xl border border-neutral-300 p-3 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
                 <div className="flex justify-end gap-2">
