@@ -1368,14 +1368,14 @@ export default function LiveProctoringMonitoringPage() {
         </div>
 
         {/* Exam Selector */}
-        <div className="flex items-center gap-2 bg-neutral-50 p-2 rounded-[8px] border border-neutral-200 self-start md:self-center">
+        <div className="w-full md:w-auto flex items-center gap-2 bg-neutral-50 p-2 rounded-[8px] border border-neutral-200 self-start md:self-center">
           <span className="text-xs font-bold text-neutral-700 whitespace-nowrap pl-1">
             Sesi Ujian:
           </span>
           <select
             value={selectedExamId}
             onChange={(e) => setSelectedExamId(e.target.value)}
-            className="text-xs font-semibold px-3 py-1.5 rounded-[6px] border border-neutral-300 bg-white text-neutral-900 shadow-2xs focus:outline-hidden focus:border-primary-500 max-w-[280px] truncate"
+            className="flex-1 md:flex-none text-xs font-semibold px-3 py-1.5 rounded-[6px] border border-neutral-300 bg-white text-neutral-900 shadow-2xs focus:outline-hidden focus:border-primary-500 min-w-0 md:max-w-[280px] truncate"
           >
             {exams.map((ex) => (
               <option key={ex.id} value={ex.id}>
@@ -1522,17 +1522,165 @@ export default function LiveProctoringMonitoringPage() {
           </div>
         </div>
 
-        {/* Table Content */}
-        <div className="overflow-x-auto">
+        {/* MOBILE & TABLET VIEW (< lg): Responsive Student Cards */}
+        <div className="lg:hidden divide-y divide-neutral-100">
+          {loading ? (
+            <div className="py-8 text-center text-xs text-neutral-400">
+              Memuat data sinkronisasi kelas...
+            </div>
+          ) : filteredRoster.length === 0 ? (
+            <div className="py-8 text-center text-xs text-neutral-400">
+              Tidak ada siswa yang sesuai dengan filter ini.
+            </div>
+          ) : (
+            filteredRoster.map((s) => {
+              const isLocked = s.status === 'LOCKED';
+              const isSubmitted = s.status === 'SUBMITTED';
+              const isNotStarted = s.status === 'NOT_STARTED';
+              const violations = s.violations || [];
+              const actualViolations = violations.filter((v) => isActualCheatingViolation(v.type));
+              const lastViolation = actualViolations.length > 0
+                ? actualViolations[actualViolations.length - 1]
+                : (violations.length > 0 ? violations[violations.length - 1] : null);
+              const realViolCount = actualViolations.length > 0
+                ? actualViolations.length
+                : (violations.length === 0 ? Number(s.violationsCount || 0) : 0);
+
+              return (
+                <div
+                  key={s.sessionId || s.studentId}
+                  className={`p-4 space-y-3 ${
+                    isLocked ? 'bg-danger-50/40' : realViolCount > 0 ? 'bg-amber-50/20' : 'bg-white'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className={`w-8 h-8 rounded-[8px] flex items-center justify-center font-bold text-xs shrink-0 ${
+                          isLocked
+                            ? 'bg-danger-600 text-white'
+                            : isSubmitted
+                            ? 'bg-success-600 text-white'
+                            : isNotStarted
+                            ? 'bg-neutral-100 text-neutral-500'
+                            : 'bg-primary-600 text-white'
+                        }`}
+                      >
+                        {s.studentName.charAt(0)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-xs sm:text-sm text-neutral-900 truncate">
+                          {s.studentName}
+                        </p>
+                        <p className="text-[11px] text-neutral-500 font-medium">
+                          Kelas {s.className || selectedExam?.className || '-'} • <span className="font-mono">NISN: {s.nisn || '-'}</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0">
+                      {isLocked ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
+                          <AppIcon name="lock" color="red" size={11} />
+                          <span>TERKUNCI</span>
+                        </span>
+                      ) : isSubmitted ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <span>SELESAI {s.score !== null && s.score !== undefined ? `(${s.score})` : ''}</span>
+                        </span>
+                      ) : isNotStarted ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-500 border border-slate-200 whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                          <span>Belum Mulai</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                          <span>MENGERJAKAN</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Violation info row */}
+                  <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200/70 text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-bold border shrink-0 ${
+                          realViolCount >= (selectedExam?.maxViolations || 3)
+                            ? 'bg-rose-600 text-white border-rose-700'
+                            : realViolCount > 0
+                            ? 'bg-amber-100 text-amber-900 border-amber-300'
+                            : 'bg-slate-100 text-slate-500 border-slate-200'
+                        }`}
+                      >
+                        Pelanggaran: {realViolCount}x
+                      </span>
+                      {lastViolation ? (
+                        <span className="text-[11px] text-neutral-600 truncate">
+                          {formatViolationTypeLabel(lastViolation.type)} ({new Date(lastViolation.timestamp).toLocaleTimeString('id-ID')} WIB)
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-neutral-400">Tidak ada pelanggaran</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions row */}
+                  {(s.status !== 'NOT_STARTED' || violations.length > 0 || isLocked) && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {s.status !== 'NOT_STARTED' && (
+                        <Button
+                          variant="primary"
+                          size="xs"
+                          onClick={() => handleOpenStudentAnswers(s)}
+                          className="flex-1 font-bold cursor-pointer flex items-center justify-center gap-1.5 shadow-xs whitespace-nowrap"
+                        >
+                          <AppIcon name="edit" color="white" size={13} />
+                          <span>Periksa Jawaban</span>
+                        </Button>
+                      )}
+                      {violations.length > 0 && (
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          onClick={() => setActiveStudentAudit(s)}
+                          className="font-semibold cursor-pointer border-slate-300 hover:border-slate-400 hover:bg-slate-50 text-slate-700 shadow-2xs whitespace-nowrap"
+                        >
+                          Riwayat ({violations.length})
+                        </Button>
+                      )}
+                      {isLocked && (
+                        <Button
+                          variant="accent"
+                          size="xs"
+                          onClick={() => handleUnlockStudent(s)}
+                          className="font-bold cursor-pointer flex items-center justify-center gap-1.5 shadow-xs whitespace-nowrap"
+                        >
+                          <AppIcon name="unlock" color="grey" size={13} />
+                          <span>Buka Kunci</span>
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* DESKTOP VIEW (>= lg): Table Content */}
+        <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-neutral-50 text-neutral-500 font-bold border-b border-neutral-200 uppercase text-[10px] tracking-wider">
-                <th className="py-3 px-4">Nama Siswa</th>
-                <th className="py-3 px-4">Kelas</th>
-                <th className="py-3 px-4">Status Sesi</th>
-                <th className="py-3 px-4 text-center">Pelanggaran</th>
-                <th className="py-3 px-4">Log Pelanggaran Terakhir</th>
-                <th className="py-3 px-4 text-right">Aksi Pengawas</th>
+                <th className="py-3 px-4 whitespace-nowrap">Nama Siswa</th>
+                <th className="py-3 px-4 whitespace-nowrap">Kelas</th>
+                <th className="py-3 px-4 whitespace-nowrap">Status Sesi</th>
+                <th className="py-3 px-4 text-center whitespace-nowrap">Pelanggaran</th>
+                <th className="py-3 px-4 whitespace-nowrap">Log Pelanggaran Terakhir</th>
+                <th className="py-3 px-4 text-right whitespace-nowrap">Aksi Pengawas</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">

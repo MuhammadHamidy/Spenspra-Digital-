@@ -1,266 +1,320 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 
-const COLOR_MAP = {
-  white: '#FFFFFF',
-  blue: '#0076BE',
-  green: '#10B981',
-  red: '#EF4444',
-  black: '#1E293B',
-  grey: '#64748B',
-  gray: '#64748B',
+// Maps requested icon names to corresponding directory, filename prefix, and available colors inside /public/icon/
+const ICON_REGISTRY = {
+  dashboard: { folder: 'dashboard', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  presence: { folder: 'presence', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  attendance: { folder: 'presence', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  scan: { folder: 'presence', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  camera: { folder: 'presence', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  schedule: { folder: 'schedule', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  sessions: { folder: 'schedule', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  calendar: { folder: 'schedule', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  rekap: { folder: 'survey', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  survey: { folder: 'survey', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  edit: { folder: 'edit', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  pencil: { folder: 'edit', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  profile: { folder: 'profile', prefix: 'secondary-', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  user: { folder: 'profile', prefix: 'secondary-', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  course: { folder: 'course', prefix: 'outline-', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  courses: { folder: 'course', prefix: 'outline-', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  book: { folder: 'course', prefix: 'outline-', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  books: { folder: 'course', prefix: 'outline-', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  catalog: { folder: 'course', prefix: 'outline-', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  'document-book': { folder: 'document-book', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  student: { folder: 'student-profile', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  students: { folder: 'student-profile', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  member: { folder: 'student-profile', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  members: { folder: 'student-profile', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  'student-profile': { folder: 'student-profile', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  circulation: { folder: 'schedule', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  loans: { folder: 'schedule', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  borrow: { folder: 'schedule', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  return: { folder: 'edit', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  kiosk: { folder: 'presence', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  barcode: { folder: 'registration', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  print: { folder: 'survey', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  import: { folder: 'edit', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  insights: { folder: 'survey', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  resume: { folder: 'edit', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  logout: { folder: 'logout', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  home: { folder: 'home', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  admin: { folder: 'admin', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white'] },
+  register: { folder: 'registration', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  registration: { folder: 'registration', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  search: { folder: 'search', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  setting: { folder: 'setting', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  timer: { folder: 'timer', prefix: 'outline-', colors: ['black', 'grey', 'red', 'white'] },
+  clock: { folder: 'timer', prefix: 'outline-', colors: ['black', 'grey', 'red', 'white'] },
+  notification: { folder: 'notification', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  medal: { folder: 'medal', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  trophy: { folder: 'medal', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  award: { folder: 'medal', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  tick: { folder: 'tick', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  check: { folder: 'tick', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  'close-cancel': { folder: 'close-cancel', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  close: { folder: 'close-cancel', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  cancel: { folder: 'close-cancel', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  delete: { folder: 'delete', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  trash: { folder: 'delete', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  remove: { folder: 'delete', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  'circle-add': { folder: 'circle-add', prefix: '', colors: ['black', 'grey', 'red'] },
+  add: { folder: 'circle-add', prefix: '', colors: ['black', 'grey', 'red'] },
+  plus: { folder: 'circle-add', prefix: '', colors: ['black', 'grey', 'red'] },
+  caution: { folder: 'caution', prefix: 'outline-', colors: ['black', 'blue', 'grey', 'red', 'white'] },
+  warning: { folder: 'caution', prefix: 'outline-', colors: ['black', 'blue', 'grey', 'red', 'white'] },
+  star: { folder: 'star', prefix: 'outline-', colors: ['black', 'grey', 'red', 'white'] },
+  sync: { folder: 'sync', prefix: 'outline-', colors: ['black', 'grey', 'red', 'white'] },
+  refresh: { folder: 'sync', prefix: 'outline-', colors: ['black', 'grey', 'red', 'white'] },
+  dice: { folder: 'sync', prefix: 'outline-', colors: ['black', 'grey', 'red', 'white'] },
+  file: { folder: 'file', prefix: 'outline-', colors: ['black', 'grey', 'red', 'white'] },
+  document: { folder: 'file', prefix: 'outline-', colors: ['black', 'grey', 'red', 'white'] },
+  link: { folder: 'link', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  copy: { folder: 'copy', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  graduation: { folder: 'graduation', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  building: { folder: 'building', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  more: { folder: 'more', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  'arrow-left': { folder: 'arrow-left', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  'arrow-back': { folder: 'arrow-left', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
+  'arrow-right': { folder: 'arrow-right', prefix: '', colors: ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'] },
 };
 
-function renderVectorIcon(name, hexColor) {
-  switch (name) {
-    case 'sync':
-    case 'refresh':
-      return (
-        <path
-          d="M14.3334 4L14.7739 4.81292C15.0718 5.36252 15.2207 5.63732 15.1223 5.755C15.0238 5.87269 14.6994 5.77764 14.0507 5.58755C13.4021 5.39749 12.7136 5.29524 12 5.29524C8.134 5.29524 5 8.29706 5 12C5 13.2212 5.34088 14.3662 5.93647 15.3524M9.66666 20L9.22605 19.1871C8.92816 18.6375 8.77922 18.3626 8.87771 18.2449C8.9762 18.1273 9.30057 18.2223 9.94929 18.4124C10.5979 18.6025 11.2864 18.7047 12 18.7047C15.866 18.7047 19 15.7029 19 12C19 10.7788 18.6591 9.63379 18.0635 8.64761"
-          stroke={hexColor}
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      );
+const VALID_SIZES = [12, 16, 20, 24, 32];
+const VALID_COLORS = ['black', 'blue', 'green', 'grey', 'red', 'white', 'yellow'];
 
-    case 'human':
-    case 'people':
-    case 'profile':
-    case 'user':
-      return (
-        <>
-          <path
-            d="M5.24 10.5c-.75.45-2.73 1.37-1.53 2.52.59.56 1.25.96 2.07.96h8.44c.82 0 1.48-.4 2.07-.96 1.2-1.15-.78-2.07-1.53-2.52-1.77-1.05-4.01-1.05-5.78 0z"
-            stroke={hexColor}
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M12 5.5a3 3 0 11-6 0 3 3 0 016 0z"
-            stroke={hexColor}
-            strokeWidth="1.6"
-            strokeLinecap="round"
-          />
-        </>
-      );
+const COLOR_HEX_MAP = {
+  white: '#FFFFFF',
+  black: '#0F172A',
+  grey: '#64748B',
+  gray: '#64748B',
+  blue: '#2563EB',
+  purple: '#4B3B78',
+  indigo: '#4F46E5',
+  green: '#059669',
+  emerald: '#059669',
+  red: '#E11D48',
+  rose: '#E11D48',
+  yellow: '#D97706',
+  amber: '#D97706',
+  orange: '#EA580C',
+};
 
-    case 'course':
-    case 'courses':
-    case 'book':
-    case 'books':
-    case 'catalog':
-    case 'document-book':
-      return (
-        <path
-          d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-          stroke={hexColor}
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      );
+function getClosestSize(size) {
+  if (!size || size <= 14) return 12;
+  if (size <= 18) return 16;
+  if (size <= 22) return 20;
+  if (size <= 28) return 24;
+  return 32;
+}
 
-    case 'graduation':
-      return (
-        <>
-          <path
-            d="M12 14l9-5-9-5-9 5 9 5z"
-            stroke={hexColor}
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"
-            stroke={hexColor}
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </>
-      );
+function normalizeColor(color) {
+  if (!color) return 'blue';
+  const c = String(color).toLowerCase();
+  if (c === 'gray' || c === 'slate') return 'grey';
+  if (c === 'purple' || c === 'indigo') return 'blue';
+  if (c === 'emerald') return 'green';
+  if (c === 'amber' || c === 'orange') return 'yellow';
+  if (c === 'rose') return 'red';
+  if (VALID_COLORS.includes(c)) return c;
+  return 'blue';
+}
 
-    case 'building':
-    case 'school':
-      return (
-        <path
-          d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-          stroke={hexColor}
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      );
+function getStrokeColor(color) {
+  if (!color) return '#2563EB';
+  const c = String(color).toLowerCase();
+  return COLOR_HEX_MAP[c] || '#2563EB';
+}
 
-    case 'tick':
-    case 'check':
-    case 'circle-tick':
-      return (
-        <path
-          d="M5 13l4 4L19 7"
-          stroke={hexColor}
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      );
+function renderInlineVectorIcon(name, strokeColor, size, className, style) {
+  const n = String(name || '').toLowerCase();
+  const commonProps = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: strokeColor,
+    strokeWidth: 2.1,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    className: `inline-block flex-shrink-0 select-none ${className}`,
+    style: { width: size, height: size, verticalAlign: 'middle', ...style },
+  };
 
-    case 'caution':
-    case 'warning':
-      return (
-        <path
-          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-          stroke={hexColor}
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      );
-
-    case 'close-cancel':
-    case 'close':
-      return (
-        <path
-          d="M6 18L18 6M6 6l12 12"
-          stroke={hexColor}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      );
-
-    case 'upload':
-      return (
-        <path
-          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-          stroke={hexColor}
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      );
-
-    case 'download':
-      return (
-        <path
-          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-          stroke={hexColor}
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      );
-
-    case 'schedule':
-    case 'timer':
-    case 'sessions':
-    case 'circulation':
-    case 'loans':
-    case 'borrow':
-      return (
-        <path
-          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-          stroke={hexColor}
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      );
-
-    case 'star':
-      return (
-        <path
-          d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
-          stroke={hexColor}
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      );
-
-    case 'computer':
-    case 'keyboard':
-      return (
-        <path
-          d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-          stroke={hexColor}
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      );
-
-    case 'admin':
-    case 'teacher':
-    case 'guru':
-      return (
-        <path
-          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-          stroke={hexColor}
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      );
-
-    case 'student':
-    case 'students':
-    case 'member':
-    case 'members':
-    case 'student-profile':
-      return (
-        <>
-          <rect
-            x="3"
-            y="4"
-            width="18"
-            height="16"
-            rx="2"
-            stroke={hexColor}
-            strokeWidth="1.8"
-          />
-          <circle cx="8" cy="10" r="2" stroke={hexColor} strokeWidth="1.5" />
-          <path d="M6 16c0-1.5 1-2.5 2-2.5s2 1 2 2.5M13 9h5M13 13h3" stroke={hexColor} strokeWidth="1.5" strokeLinecap="round" />
-        </>
-      );
-
-    case 'search':
-      return (
-        <path
-          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-          stroke={hexColor}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      );
-
-    case 'qr_code':
-      return (
-        <path
-          d="M4 4h4v4H4V4zm12 0h4v4h-4V4zM4 16h4v4H4v-4zm12 3h4m-4-3h1m-1 6h4"
-          stroke={hexColor}
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      );
-
-    case 'barcode':
-      return (
-        <path
-          d="M3 4h2v16H3V4zm5 0h1v16H8V4zm4 0h3v16h-3V4zm6 0h1v16h-1V4zm3 0h1v16h-1V4z"
-          fill={hexColor}
-        />
-      );
-
-    default:
-      return null;
+  if (n === 'circle-add' || n === 'add' || n === 'plus') {
+    return (
+      <svg {...commonProps}>
+        <circle cx="12" cy="12" r="9" />
+        <line x1="12" y1="8" x2="12" y2="16" />
+        <line x1="8" y1="12" x2="16" y2="12" />
+      </svg>
+    );
   }
+  if (n === 'timer' || n === 'clock') {
+    return (
+      <svg {...commonProps}>
+        <circle cx="12" cy="12" r="9" />
+        <polyline points="12 7 12 12 15.5 14" />
+      </svg>
+    );
+  }
+  if (n === 'schedule' || n === 'calendar' || n === 'sessions' || n === 'circulation' || n === 'loans' || n === 'borrow') {
+    return (
+      <svg {...commonProps}>
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+        <line x1="16" y1="2" x2="16" y2="6" />
+        <line x1="8" y1="2" x2="8" y2="6" />
+        <line x1="3" y1="10" x2="21" y2="10" />
+      </svg>
+    );
+  }
+  if (n === 'caution' || n === 'warning') {
+    return (
+      <svg {...commonProps}>
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+        <line x1="12" y1="9" x2="12" y2="13" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+    );
+  }
+  if (n === 'tick' || n === 'check' || n === 'circle-tick') {
+    return (
+      <svg {...commonProps}>
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+    );
+  }
+  if (n === 'close-cancel' || n === 'close' || n === 'cancel') {
+    return (
+      <svg {...commonProps}>
+        <line x1="18" y1="6" x2="6" y2="18" />
+        <line x1="6" y1="6" x2="18" y2="18" />
+      </svg>
+    );
+  }
+  if (n === 'edit' || n === 'pencil' || n === 'return' || n === 'import' || n === 'resume') {
+    return (
+      <svg {...commonProps}>
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+      </svg>
+    );
+  }
+  if (n === 'delete' || n === 'trash' || n === 'remove') {
+    return (
+      <svg {...commonProps}>
+        <polyline points="3 6 5 6 21 6" />
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      </svg>
+    );
+  }
+  if (n === 'play' || n === 'open') {
+    return (
+      <svg {...commonProps}>
+        <polygon points="6 4 20 12 6 20 6 4" fill={strokeColor} />
+      </svg>
+    );
+  }
+  if (n === 'sync' || n === 'refresh' || n === 'dice') {
+    return (
+      <svg {...commonProps}>
+        <polyline points="23 4 23 10 17 10" />
+        <polyline points="1 20 1 14 7 14" />
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+      </svg>
+    );
+  }
+  if (n === 'medal' || n === 'trophy' || n === 'award') {
+    return (
+      <svg {...commonProps}>
+        <circle cx="12" cy="8" r="6" />
+        <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" />
+      </svg>
+    );
+  }
+  if (n === 'star') {
+    return (
+      <svg {...commonProps}>
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+      </svg>
+    );
+  }
+  if (n === 'lock') {
+    return (
+      <svg {...commonProps}>
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      </svg>
+    );
+  }
+  if (n === 'unlock') {
+    return (
+      <svg {...commonProps}>
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+        <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+      </svg>
+    );
+  }
+  if (n === 'search') {
+    return (
+      <svg {...commonProps}>
+        <circle cx="11" cy="11" r="8" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+    );
+  }
+  if (n === 'arrow-left' || n === 'arrow-back') {
+    return (
+      <svg {...commonProps}>
+        <line x1="19" y1="12" x2="5" y2="12" />
+        <polyline points="12 19 5 12 12 5" />
+      </svg>
+    );
+  }
+  if (n === 'arrow-right') {
+    return (
+      <svg {...commonProps}>
+        <line x1="5" y1="12" x2="19" y2="12" />
+        <polyline points="12 5 19 12 12 19" />
+      </svg>
+    );
+  }
+  if (n === 'student' || n === 'students' || n === 'profile' || n === 'user' || n === 'member' || n === 'members' || n === 'student-profile') {
+    return (
+      <svg {...commonProps}>
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+        <circle cx="12" cy="7" r="4" />
+      </svg>
+    );
+  }
+  if (n === 'book' || n === 'books' || n === 'course' || n === 'courses' || n === 'catalog' || n === 'document-book') {
+    return (
+      <svg {...commonProps}>
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+      </svg>
+    );
+  }
+  if (n === 'logout') {
+    return (
+      <svg {...commonProps}>
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+        <polyline points="16 17 21 12 16 7" />
+        <line x1="21" y1="12" x2="9" y2="12" />
+      </svg>
+    );
+  }
+
+  // Default document/survey/card icon
+  return (
+    <svg {...commonProps}>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" y1="13" x2="8" y2="13" />
+      <line x1="16" y1="17" x2="8" y2="17" />
+    </svg>
+  );
 }
 
 export default function AppIcon({
@@ -271,47 +325,36 @@ export default function AppIcon({
   style = {},
   alt = '',
 }) {
-  const normColor = String(color || 'blue').toLowerCase();
-  const hexColor = COLOR_MAP[normColor] || (color.startsWith('#') ? color : '#0076BE');
+  const [hasError, setHasError] = useState(false);
 
-  const vector = renderVectorIcon(name, hexColor);
-  if (vector) {
-    return (
-      <svg
-        width={size}
-        height={size}
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className={`inline-block flex-shrink-0 select-none ${className}`}
-        style={{
-          width: size,
-          height: size,
-          verticalAlign: 'middle',
-          ...style,
-        }}
-        aria-label={alt || name || 'icon'}
-      >
-        {vector}
-      </svg>
-    );
+  const config = ICON_REGISTRY[name];
+  const selectedColor = normalizeColor(color);
+  const selectedSize = getClosestSize(size);
+  const strokeColor = getStrokeColor(color);
+
+  const hasStaticColor = config && Array.isArray(config.colors) && config.colors.includes(selectedColor);
+
+  if (!config || !hasStaticColor || hasError) {
+    return renderInlineVectorIcon(name, strokeColor, size, className, style);
   }
 
-  // Graceful circular dot if unrecognized
+  const iconSrc = `/icon/${config.folder}/${config.prefix}${selectedColor}-${selectedSize}.svg`;
+
   return (
-    <span
-      className={`inline-flex items-center justify-center ${className}`}
-      style={{ width: size, height: size, ...style }}
-    >
-      <span
-        style={{
-          width: size * 0.5,
-          height: size * 0.5,
-          borderRadius: '50%',
-          backgroundColor: hexColor,
-        }}
-      />
-    </span>
+    <img
+      src={iconSrc}
+      alt={alt || name || 'icon'}
+      width={size}
+      height={size}
+      onError={() => setHasError(true)}
+      className={`inline-block flex-shrink-0 select-none ${className}`}
+      style={{
+        width: size,
+        height: size,
+        objectFit: 'contain',
+        verticalAlign: 'middle',
+        ...style,
+      }}
+    />
   );
 }
-

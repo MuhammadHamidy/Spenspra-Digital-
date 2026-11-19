@@ -2053,7 +2053,7 @@ export default function TeacherExamsManagementPage() {
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
       {/* Header & Tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
             Bank Soal & Jadwal e-Ujian (CBT)
           </h1>
@@ -2066,80 +2066,275 @@ export default function TeacherExamsManagementPage() {
           variant="primary"
           size="md"
           onClick={handleOpenCreateModal}
-          className="shadow-xs cursor-pointer flex items-center gap-1.5 font-bold"
+          className="w-full sm:w-auto justify-center shadow-xs cursor-pointer flex items-center gap-1.5 font-bold whitespace-nowrap shrink-0"
         >
           <AppIcon name="circle-add" color="white" size={16} />
           <span>Buat Jadwal Ujian</span>
         </Button>
       </div>
 
-      {/* Filter Tabs Segmented Control */}
-      <div className="bg-slate-100 p-1.5 rounded-2xl inline-flex items-center gap-1.5 border border-slate-200/90 shadow-2xs">
-        <button
-          type="button"
-          onClick={() => setExamFilterTab('ALL')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 ${
-            examFilterTab === 'ALL'
-              ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-          }`}
-        >
-          <span>Semua Ujian</span>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-            examFilterTab === 'ALL' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
-          }`}>
-            {exams.length}
-          </span>
-        </button>
+      {/* Filter Tabs Segmented Control (Responsive Horizontal Scroll on Mobile) */}
+      <div className="max-w-full overflow-x-auto pb-1">
+        <div className="bg-slate-100 p-1.5 rounded-2xl inline-flex items-center gap-1.5 border border-slate-200/90 shadow-2xs min-w-max">
+          <button
+            type="button"
+            onClick={() => setExamFilterTab('ALL')}
+            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
+              examFilterTab === 'ALL'
+                ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+            }`}
+          >
+            <span>Semua Ujian</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              examFilterTab === 'ALL' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
+            }`}>
+              {exams.length}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setExamFilterTab('SEMESTER_UAS')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 ${
-            examFilterTab === 'SEMESTER_UAS'
-              ? 'bg-[#4B3B78] text-white shadow-xs'
-              : 'text-slate-600 hover:text-[#4B3B78] hover:bg-white/60'
-          }`}
-        >
-          <AppIcon name="medal" color={examFilterTab === 'SEMESTER_UAS' ? 'white' : 'blue'} size={14} />
-          <span>UAS / ASAS Semester</span>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-            examFilterTab === 'SEMESTER_UAS' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
-          }`}>
-            {uasCount}
-          </span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setExamFilterTab('SEMESTER_UAS')}
+            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
+              examFilterTab === 'SEMESTER_UAS'
+                ? 'bg-[#4B3B78] text-white shadow-xs'
+                : 'text-slate-600 hover:text-[#4B3B78] hover:bg-white/60'
+            }`}
+          >
+            <AppIcon name="medal" color={examFilterTab === 'SEMESTER_UAS' ? 'white' : 'blue'} size={14} />
+            <span>UAS / ASAS Semester</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              examFilterTab === 'SEMESTER_UAS' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
+            }`}>
+              {uasCount}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setExamFilterTab('REGULAR')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 ${
-            examFilterTab === 'REGULAR'
-              ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-          }`}
-        >
-          <AppIcon name="course" color={examFilterTab === 'REGULAR' ? 'purple' : 'grey'} size={14} />
-          <span>Ujian Reguler / Harian</span>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-            examFilterTab === 'REGULAR' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
-          }`}>
-            {regularCount}
-          </span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setExamFilterTab('REGULAR')}
+            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
+              examFilterTab === 'REGULAR'
+                ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+            }`}
+          >
+            <AppIcon name="course" color={examFilterTab === 'REGULAR' ? 'purple' : 'grey'} size={14} />
+            <span>Ujian Reguler / Harian</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              examFilterTab === 'REGULAR' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
+            }`}>
+              {regularCount}
+            </span>
+          </button>
+        </div>
       </div>
 
-      {/* Spacious 5-Column Exam Table */}
-      <Card noPadding className="overflow-hidden border border-neutral-200 bg-white shadow-xs rounded-2xl">
+      {/* MOBILE & TABLET VIEW (< lg): Clean Responsive Cards without text collisions */}
+      <div className="lg:hidden space-y-4">
+        {loading ? (
+          <Card className="p-8 text-center text-neutral-400 border border-neutral-200 bg-white rounded-2xl">
+            <div className="flex flex-col items-center justify-center gap-2">
+              <AppIcon name="sync" color="grey" size={24} className="animate-spin" />
+              <p className="text-xs font-medium">Memuat daftar ujian...</p>
+            </div>
+          </Card>
+        ) : filteredExams.length === 0 ? (
+          <Card className="p-8 text-center text-neutral-400 border border-neutral-200 bg-white rounded-2xl">
+            <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
+              <AppIcon name="document-book" color="grey" size={32} />
+              <p className="text-xs font-bold text-neutral-700">Belum Ada Jadwal Ujian CBT</p>
+              <p className="text-[11px] text-neutral-400">
+                Klik tombol &ldquo;Buat Jadwal Ujian&rdquo; di atas untuk membuat sesi ujian baru.
+              </p>
+            </div>
+          </Card>
+        ) : (
+          filteredExams.map((ex) => {
+            const currentStatus = getExamStatus(ex);
+            const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+            const examDateStr = ex.scheduledDate || (ex.startDateTime ? ex.startDateTime.split('T')[0] : '');
+
+            return (
+              <Card
+                key={ex.id}
+                noPadding
+                className="p-4 sm:p-5 border border-neutral-200 bg-white shadow-xs rounded-2xl space-y-4"
+              >
+                {/* Top bar: Category Badge + Status Pill */}
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  {isUas ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-primary-50 text-primary-700 border border-primary-200 whitespace-nowrap">
+                      <AppIcon name="medal" color="blue" size={13} />
+                      <span>ASAS TK. {ex.targetGradeLevel || '7'}</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-neutral-100 text-neutral-700 border border-neutral-200 whitespace-nowrap">
+                      <AppIcon name="course" color="grey" size={13} />
+                      <span>Ujian Reguler</span>
+                    </span>
+                  )}
+
+                  {currentStatus === 'ACTIVE' ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                      <span className="relative flex h-2 w-2 shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                      <span>Sedang Berlangsung</span>
+                    </span>
+                  ) : currentStatus === 'UPCOMING' ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+                      <span>Akan Datang</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">
+                      <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0"></span>
+                      <span>Selesai</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Title & Subject/Class */}
+                <div className="space-y-1">
+                  <h3 className="font-bold text-sm sm:text-base text-neutral-900 leading-snug break-words">
+                    {ex.title}
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-600 font-medium">
+                    <span className="text-primary-700 font-bold">{ex.subject}</span>
+                    <span className="text-neutral-300">•</span>
+                    <span>
+                      {isUas ? `Semua Rombel Tk. ${ex.targetGradeLevel}` : `Kelas ${ex.className}`}
+                    </span>
+                  </div>
+                  {ex.description && (
+                    <p className="text-[11px] text-neutral-400 line-clamp-2 pt-0.5">
+                      {ex.description}
+                    </p>
+                  )}
+                </div>
+
+                {/* 2-Column Info Box: Jadwal & Token/PIN */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-semibold text-neutral-800">
+                      <AppIcon name="schedule" color="grey" size={14} />
+                      <span className="whitespace-nowrap">{formatDateDisplay(examDateStr)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-neutral-600 font-mono text-[11px]">
+                      <AppIcon name="timer" color="grey" size={14} />
+                      <span className="whitespace-nowrap">{ex.startTime || '08:00'} - {ex.endTime || '09:30'} WIB</span>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-200/80 text-slate-700 font-sans font-bold text-[10px] whitespace-nowrap">
+                        {ex.durationMinutes || 90} Mnt
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap sm:flex-col sm:items-end justify-between gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200/80">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Token</span>
+                      <span className="px-2 py-0.5 rounded-md font-mono font-bold text-xs bg-white text-slate-800 border border-slate-300 tracking-wider select-all">
+                        {ex.token}
+                      </span>
+                    </div>
+                    {ex.supervisorPin && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">PIN</span>
+                        <span className="px-2 py-0.5 rounded-md font-mono font-bold text-xs bg-emerald-50 text-emerald-800 border border-emerald-300 tracking-wider select-all">
+                          {ex.supervisorPin}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Action Buttons Footer */}
+                <div className="pt-1 flex flex-wrap items-center gap-2">
+                  {currentStatus !== 'ACTIVE' ? (
+                    <button
+                      type="button"
+                      disabled={activatingExamId === ex.id}
+                      onClick={() => handleStartExamNow(ex)}
+                      className="flex-1 min-w-[110px] px-3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs border border-emerald-700/40 transition-all cursor-pointer whitespace-nowrap"
+                    >
+                      {activatingExamId === ex.id ? (
+                        <>
+                          <AppIcon name="sync" color="white" size={13} className="animate-spin" />
+                          <span>Mengaktifkan...</span>
+                        </>
+                      ) : (
+                        <>
+                          <AppIcon name="play" color="white" size={13} />
+                          <span>Aktifkan</span>
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleEndExamNow(ex)}
+                      className="flex-1 min-w-[100px] px-3 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs border border-rose-700/40 transition-all cursor-pointer whitespace-nowrap"
+                    >
+                      <AppIcon name="close-cancel" color="white" size={13} />
+                      <span>Tutup Sesi</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenQuestionEditor(ex)}
+                    className="flex-1 min-w-[125px] px-3.5 py-2.5 rounded-xl bg-[#4B3B78] hover:bg-[#3D2E66] active:bg-[#30264F] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs border border-[#3D2E66]/50 transition-all cursor-pointer whitespace-nowrap"
+                  >
+                    <AppIcon name="edit" color="white" size={14} />
+                    <span>Kelola Soal</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => router.push('/guru/monitoring')}
+                    className="px-3 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-blue-50 hover:border-blue-400 text-slate-700 hover:text-blue-700 font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all cursor-pointer whitespace-nowrap"
+                  >
+                    <AppIcon name="survey" color="blue" size={15} />
+                    <span>Hasil</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditModal(ex)}
+                    className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-amber-50 hover:border-amber-400 text-slate-600 hover:text-amber-700 shadow-2xs transition-all cursor-pointer flex items-center justify-center shrink-0"
+                    title="Edit Jadwal & Konfigurasi"
+                  >
+                    <AppIcon name="edit" color="grey" size={15} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteExam(ex.id, ex.title)}
+                    className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-400 text-slate-600 hover:text-rose-700 shadow-2xs transition-all cursor-pointer flex items-center justify-center shrink-0"
+                    title="Hapus Ujian"
+                  >
+                    <AppIcon name="delete" color="red" size={15} />
+                  </button>
+                </div>
+              </Card>
+            );
+          })
+        )}
+      </div>
+
+      {/* DESKTOP VIEW (>= lg): Balanced 5-Column Exam Table with Zero Text Collisions */}
+      <Card noPadding className="hidden lg:block overflow-hidden border border-neutral-200 bg-white shadow-xs rounded-2xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-neutral-50/90 text-neutral-500 font-bold border-b border-neutral-200 uppercase text-[10px] tracking-wider">
-                <th className="py-3.5 px-5 min-w-[280px]">Sesi Ujian & Sasaran</th>
-                <th className="py-3.5 px-5 min-w-[200px]">Jadwal & Waktu</th>
-                <th className="py-3.5 px-5 min-w-[170px]">Akses CBT</th>
-                <th className="py-3.5 px-5 min-w-[150px]">Status</th>
-                <th className="py-3.5 px-5 text-right min-w-[240px]">Aksi</th>
+                <th className="py-3.5 px-4">Sesi Ujian & Sasaran</th>
+                <th className="py-3.5 px-4 whitespace-nowrap">Jadwal & Waktu</th>
+                <th className="py-3.5 px-4 whitespace-nowrap">Akses CBT</th>
+                <th className="py-3.5 px-4 whitespace-nowrap">Status</th>
+                <th className="py-3.5 px-4 text-right whitespace-nowrap">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
@@ -2173,35 +2368,33 @@ export default function TeacherExamsManagementPage() {
                   return (
                     <tr key={ex.id} className="hover:bg-neutral-50/60 transition-colors">
                       {/* 1. Sesi Ujian & Sasaran */}
-                      <td className="py-4 px-5">
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2 flex-wrap">
+                      <td className="py-3.5 px-4 max-w-[300px]">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             {isUas ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-primary-50 text-primary-700 border border-primary-200">
-                                <AppIcon name="medal" color="blue" size={12} />
-                                ASAS TK. {ex.targetGradeLevel || '7'}
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-primary-50 text-primary-700 border border-primary-200 whitespace-nowrap">
+                                <AppIcon name="medal" color="blue" size={11} />
+                                <span>ASAS TK. {ex.targetGradeLevel || '7'}</span>
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-neutral-100 text-neutral-600 border border-neutral-200">
-                                <AppIcon name="course" color="grey" size={12} />
-                                Reguler
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-neutral-100 text-neutral-600 border border-neutral-200 whitespace-nowrap">
+                                <AppIcon name="course" color="grey" size={11} />
+                                <span>Reguler</span>
                               </span>
                             )}
-                            <h3 className="font-bold text-sm text-neutral-900 leading-snug">
-                              {ex.title}
-                            </h3>
-                          </div>
-
-                          <div className="flex items-center gap-2 text-xs text-neutral-500 font-medium">
-                            <span className="text-primary-700 font-semibold">{ex.subject}</span>
+                            <span className="text-xs font-bold text-primary-700 whitespace-nowrap">{ex.subject}</span>
                             <span className="text-neutral-300">•</span>
-                            <span className="text-neutral-600">
-                              {isUas ? `Serentak Seluruh Rombel Tk. ${ex.targetGradeLevel}` : `Kelas ${ex.className}`}
+                            <span className="text-[11px] text-neutral-600 font-medium whitespace-nowrap">
+                              {isUas ? `Semua Rombel Tk. ${ex.targetGradeLevel}` : `Kelas ${ex.className}`}
                             </span>
                           </div>
 
+                          <h3 className="font-bold text-sm text-neutral-900 leading-snug truncate" title={ex.title}>
+                            {ex.title}
+                          </h3>
+
                           {ex.description && (
-                            <p className="text-[11px] text-neutral-400 line-clamp-1">
+                            <p className="text-[11px] text-neutral-400 truncate max-w-[280px]" title={ex.description}>
                               {ex.description}
                             </p>
                           )}
@@ -2209,34 +2402,35 @@ export default function TeacherExamsManagementPage() {
                       </td>
 
                       {/* 2. Jadwal & Waktu */}
-                      <td className="py-4 px-5">
+                      <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="space-y-1 text-xs">
                           <div className="flex items-center gap-1.5 font-semibold text-neutral-800">
                             <AppIcon name="schedule" color="grey" size={14} />
                             <span>{formatDateDisplay(examDateStr)}</span>
                           </div>
-                          <div className="flex items-center gap-1.5 text-neutral-500 font-mono text-[11px]">
+                          <div className="flex items-center gap-1.5 text-neutral-600 font-mono text-[11px]">
                             <AppIcon name="timer" color="grey" size={14} />
                             <span>{ex.startTime || '08:00'} - {ex.endTime || '09:30'} WIB</span>
-                            <span className="text-neutral-300">•</span>
-                            <span>{ex.durationMinutes || 90} Mnt</span>
+                            <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-sans font-bold text-[10px] border border-slate-200/80">
+                              {ex.durationMinutes || 90} Mnt
+                            </span>
                           </div>
                         </div>
                       </td>
 
                       {/* 3. Akses CBT */}
-                      <td className="py-4 px-5">
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Token</span>
-                            <span className="px-2.5 py-1 rounded-lg font-mono font-bold text-xs bg-slate-100 text-slate-800 border border-slate-300 shadow-2xs tracking-wider select-all">
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider w-10">Token</span>
+                            <span className="px-2 py-0.5 rounded-md font-mono font-bold text-xs bg-slate-100 text-slate-800 border border-slate-300 shadow-2xs tracking-wider select-all">
                               {ex.token}
                             </span>
                           </div>
                           {ex.supervisorPin && (
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">PIN</span>
-                              <span className="px-2.5 py-0.5 rounded-lg font-mono font-bold text-[11px] bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs tracking-wider select-all">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider w-10">PIN</span>
+                              <span className="px-2 py-0.5 rounded-md font-mono font-bold text-[11px] bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs tracking-wider select-all">
                                 {ex.supervisorPin}
                               </span>
                             </div>
@@ -2244,38 +2438,38 @@ export default function TeacherExamsManagementPage() {
                         </div>
                       </td>
 
-                      {/* 4. Status Badge (Bukan Button) */}
-                      <td className="py-4 px-5">
+                      {/* 4. Status Badge (Single Line, Non-Wrapping) */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
                         {currentStatus === 'ACTIVE' ? (
-                          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs select-none">
-                            <span className="relative flex h-2 w-2">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs select-none whitespace-nowrap">
+                            <span className="relative flex h-2 w-2 shrink-0">
                               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                             </span>
                             <span>Sedang Berlangsung</span>
                           </span>
                         ) : currentStatus === 'UPCOMING' ? (
-                          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/90 shadow-2xs select-none">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/90 shadow-2xs select-none whitespace-nowrap">
                             <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
                             <span>Akan Datang</span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200/90 shadow-2xs select-none">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200/90 shadow-2xs select-none whitespace-nowrap">
                             <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0"></span>
                             <span>Selesai</span>
                           </span>
                         )}
                       </td>
 
-                      {/* 5. Aksi (Grup Tombol Berafordansi Jelas) */}
-                      <td className="py-4 px-5 text-right">
-                        <div className="inline-flex items-center justify-end gap-2">
+                      {/* 5. Aksi (Grup Tombol Berafordansi Jelas & Non-Wrapping) */}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center justify-end gap-1.5">
                           {currentStatus !== 'ACTIVE' ? (
                             <button
                               type="button"
                               disabled={activatingExamId === ex.id}
                               onClick={() => handleStartExamNow(ex)}
-                              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] border border-emerald-700/40 transition-all duration-150 cursor-pointer"
+                              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] border border-emerald-700/40 transition-all duration-150 cursor-pointer whitespace-nowrap shrink-0"
                               title="Aktifkan & buka sesi ujian sekarang untuk siswa"
                             >
                               {activatingExamId === ex.id ? (
@@ -2294,7 +2488,7 @@ export default function TeacherExamsManagementPage() {
                             <button
                               type="button"
                               onClick={() => handleEndExamNow(ex)}
-                              className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] border border-rose-700/40 transition-all duration-150 cursor-pointer"
+                              className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] border border-rose-700/40 transition-all duration-150 cursor-pointer whitespace-nowrap shrink-0"
                               title="Tutup & selesaikan sesi ujian sekarang"
                             >
                               <AppIcon name="close-cancel" color="white" size={13} />
@@ -2305,7 +2499,7 @@ export default function TeacherExamsManagementPage() {
                           <button
                             type="button"
                             onClick={() => handleOpenQuestionEditor(ex)}
-                            className="px-3.5 py-2 rounded-xl bg-[#4B3B78] hover:bg-[#3D2E66] active:bg-[#30264F] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] border border-[#3D2E66]/50 transition-all duration-150 cursor-pointer"
+                            className="px-3 py-2 rounded-xl bg-[#4B3B78] hover:bg-[#3D2E66] active:bg-[#30264F] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] border border-[#3D2E66]/50 transition-all duration-150 cursor-pointer whitespace-nowrap shrink-0"
                             title="Kelola Butir Soal"
                           >
                             <AppIcon name="edit" color="white" size={14} />
@@ -2315,29 +2509,29 @@ export default function TeacherExamsManagementPage() {
                           <button
                             type="button"
                             onClick={() => router.push('/guru/monitoring')}
-                            className="px-3 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-blue-50 hover:border-blue-400 text-slate-700 hover:text-blue-700 font-bold text-xs flex items-center gap-1.5 shadow-2xs hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-150 cursor-pointer"
+                            className="px-2.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-blue-50 hover:border-blue-400 text-slate-700 hover:text-blue-700 font-bold text-xs flex items-center gap-1.5 shadow-2xs hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-150 cursor-pointer whitespace-nowrap shrink-0"
                             title="Lihat hasil pengerjaan & lembar jawaban siswa"
                           >
-                            <AppIcon name="survey" color="blue" size={15} />
-                            <span className="hidden sm:inline">Hasil</span>
+                            <AppIcon name="survey" color="blue" size={14} />
+                            <span>Hasil</span>
                           </button>
 
                           <button
                             type="button"
                             onClick={() => handleOpenEditModal(ex)}
-                            className="p-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-amber-50 hover:border-amber-400 text-slate-600 hover:text-amber-700 shadow-2xs hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-150 cursor-pointer flex items-center justify-center"
+                            className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-amber-50 hover:border-amber-400 text-slate-600 hover:text-amber-700 shadow-2xs hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0"
                             title="Edit Jadwal & Konfigurasi"
                           >
-                            <AppIcon name="edit" color="grey" size={15} />
+                            <AppIcon name="edit" color="grey" size={14} />
                           </button>
 
                           <button
                             type="button"
                             onClick={() => handleDeleteExam(ex.id, ex.title)}
-                            className="p-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-400 text-slate-600 hover:text-rose-700 shadow-2xs hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-150 cursor-pointer flex items-center justify-center"
+                            className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-400 text-slate-600 hover:text-rose-700 shadow-2xs hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-150 cursor-pointer flex items-center justify-center shrink-0"
                             title="Hapus Ujian"
                           >
-                            <AppIcon name="delete" color="red" size={15} />
+                            <AppIcon name="delete" color="red" size={14} />
                           </button>
                         </div>
                       </td>

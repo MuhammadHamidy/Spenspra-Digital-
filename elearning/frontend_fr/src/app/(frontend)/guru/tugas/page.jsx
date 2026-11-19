@@ -7,6 +7,7 @@ import Input from '@/components/Input';
 import Modal from '@/components/Modal';
 import ConfirmModal from '@/components/ConfirmModal';
 import StatusBadge from '@/components/StatusBadge';
+import AppIcon from '@/components/AppIcon';
 import { elearningApi } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
@@ -278,7 +279,7 @@ export default function TeacherAssignmentsManagementPage() {
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
             Bank Tugas & Penilaian Siswa
           </h1>
@@ -291,25 +292,112 @@ export default function TeacherAssignmentsManagementPage() {
           variant="primary"
           size="md"
           onClick={handleOpenCreateModal}
-          className="shadow-sm"
+          className="w-full sm:w-auto justify-center shadow-sm flex items-center gap-1.5 whitespace-nowrap shrink-0"
         >
-          + Buat Tugas Baru
+          <AppIcon name="circle-add" color="white" size={16} />
+          <span>Buat Tugas Baru</span>
         </Button>
       </div>
 
-      {/* Assignment Table */}
-      <Card noPadding className="overflow-hidden border border-neutral-200 bg-white">
+      {/* MOBILE & TABLET VIEW (< lg): Responsive Cards */}
+      <div className="lg:hidden space-y-3.5">
+        {loading ? (
+          <Card className="p-8 text-center text-xs text-neutral-400 border border-neutral-200 bg-white">
+            Memuat daftar tugas...
+          </Card>
+        ) : assignments.length === 0 ? (
+          <Card className="p-8 text-center text-xs text-neutral-400 border border-neutral-200 bg-white">
+            Belum ada penugasan yang dibuat.
+          </Card>
+        ) : (
+          assignments.map((item) => (
+            <Card key={item.id} noPadding className="p-4 border border-neutral-200 bg-white space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="font-bold text-secondary-700">{item.subject || 'Mata Pelajaran'}</span>
+                  <span className="text-neutral-300">•</span>
+                  <span className="text-neutral-600 font-medium">
+                    {item.className ? `Kelas ${item.className}` : 'Semua Kelas'}
+                  </span>
+                </div>
+                <StatusBadge status={item.status || 'ACTIVE'} label={item.status === 'COMPLETED' ? 'Selesai' : 'Aktif'} />
+              </div>
+
+              <div className="space-y-1">
+                <p className="font-bold text-sm text-neutral-900 break-words">{item.title}</p>
+                {item.description && (
+                  <p className="text-xs text-neutral-500 line-clamp-2">{item.description}</p>
+                )}
+                {item.attachmentName && (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-primary-600 font-semibold pt-0.5">
+                    <AppIcon name="link" color="blue" size={12} />
+                    <span>{item.attachmentName}</span>
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 text-xs">
+                <div className="flex items-center gap-1.5 text-neutral-600">
+                  <AppIcon name="schedule" color="grey" size={13} />
+                  <span>{formatDueDateSafe(item.dueDate)}</span>
+                </div>
+                <span className="font-bold text-primary-600 whitespace-nowrap">
+                  {item.submittedCount || 0} / {item.totalStudents || 32} Siswa
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <Button
+                  variant="primary"
+                  size="xs"
+                  onClick={() => handleOpenGrading(item)}
+                  className="flex-1 font-bold whitespace-nowrap"
+                >
+                  Periksa & Nilai
+                </Button>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={() => handleOpenEditModal(item)}
+                  className="whitespace-nowrap"
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant={item.status === 'COMPLETED' ? 'outline' : 'ghost'}
+                  size="xs"
+                  onClick={() => handleToggleStatus(item)}
+                  className="text-[11px] whitespace-nowrap"
+                >
+                  {item.status === 'COMPLETED' ? 'Buka' : 'Tutup'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => handleDeleteAssignment(item)}
+                  className="text-danger-600 hover:text-danger-800 hover:bg-danger-50 text-[11px] whitespace-nowrap"
+                >
+                  Hapus
+                </Button>
+              </div>
+            </Card>
+          ))
+        )}
+      </div>
+
+      {/* DESKTOP VIEW (>= lg): Assignment Table */}
+      <Card noPadding className="hidden lg:block overflow-hidden border border-neutral-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-neutral-50 text-neutral-500 font-bold border-b border-neutral-200 uppercase text-[10px] tracking-wider">
                 <th className="py-3 px-4">Judul Penugasan</th>
-                <th className="py-3 px-4">Mapel</th>
-                <th className="py-3 px-4">Kelas</th>
-                <th className="py-3 px-4">Tenggat Waktu</th>
-                <th className="py-3 px-4 text-center">Progres Pengumpulan</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-right">Aksi</th>
+                <th className="py-3 px-4 whitespace-nowrap">Mapel</th>
+                <th className="py-3 px-4 whitespace-nowrap">Kelas</th>
+                <th className="py-3 px-4 whitespace-nowrap">Tenggat Waktu</th>
+                <th className="py-3 px-4 text-center whitespace-nowrap">Progres Pengumpulan</th>
+                <th className="py-3 px-4 whitespace-nowrap">Status</th>
+                <th className="py-3 px-4 text-right whitespace-nowrap">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
@@ -336,33 +424,34 @@ export default function TeacherAssignmentsManagementPage() {
                       )}
                       {item.attachmentName && (
                         <span className="inline-flex items-center gap-1 text-[10px] text-primary-600 font-medium">
-                          📎 {item.attachmentName}
+                          <AppIcon name="link" color="blue" size={11} />
+                          <span>{item.attachmentName}</span>
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className="py-3 px-4 text-secondary-700 font-bold">{item.subject || 'Mata Pelajaran'}</td>
-                  <td className="py-3 px-4 text-neutral-700 font-medium">
+                  <td className="py-3 px-4 text-secondary-700 font-bold whitespace-nowrap">{item.subject || 'Mata Pelajaran'}</td>
+                  <td className="py-3 px-4 text-neutral-700 font-medium whitespace-nowrap">
                     {item.className ? `Kelas ${item.className}` : 'Semua Kelas'}
                   </td>
-                  <td className="py-3 px-4 text-neutral-600">
+                  <td className="py-3 px-4 text-neutral-600 whitespace-nowrap">
                     {formatDueDateSafe(item.dueDate)}
                   </td>
-                  <td className="py-3 px-4 text-center">
+                  <td className="py-3 px-4 text-center whitespace-nowrap">
                     <span className="font-bold text-primary-600">
                       {item.submittedCount || 0} / {item.totalStudents || 32} Siswa
                     </span>
                   </td>
-                  <td className="py-3 px-4">
+                  <td className="py-3 px-4 whitespace-nowrap">
                     <StatusBadge status={item.status || 'ACTIVE'} label={item.status === 'COMPLETED' ? 'Selesai' : 'Aktif'} />
                   </td>
-                  <td className="py-3 px-4 text-right">
-                    <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                  <td className="py-3 px-4 text-right whitespace-nowrap">
+                    <div className="inline-flex items-center justify-end gap-1.5">
                       <Button
                         variant="primary"
                         size="xs"
                         onClick={() => handleOpenGrading(item)}
-                        className="font-bold"
+                        className="font-bold whitespace-nowrap"
                         title="Periksa dan beri nilai lembar kerja siswa"
                       >
                         Periksa & Nilai
@@ -371,6 +460,7 @@ export default function TeacherAssignmentsManagementPage() {
                         variant="outline"
                         size="xs"
                         onClick={() => handleOpenEditModal(item)}
+                        className="whitespace-nowrap"
                         title="Edit rincian tugas"
                       >
                         Edit
@@ -379,7 +469,7 @@ export default function TeacherAssignmentsManagementPage() {
                         variant={item.status === 'COMPLETED' ? 'outline' : 'ghost'}
                         size="xs"
                         onClick={() => handleToggleStatus(item)}
-                        className="text-[11px]"
+                        className="text-[11px] whitespace-nowrap"
                         title={item.status === 'COMPLETED' ? 'Buka kembali pengumpulan tugas' : 'Tutup pengumpulan tugas'}
                       >
                         {item.status === 'COMPLETED' ? 'Buka' : 'Tutup'}
@@ -388,7 +478,7 @@ export default function TeacherAssignmentsManagementPage() {
                         variant="ghost"
                         size="xs"
                         onClick={() => handleDeleteAssignment(item)}
-                        className="text-danger-600 hover:text-danger-800 hover:bg-danger-50 text-[11px]"
+                        className="text-danger-600 hover:text-danger-800 hover:bg-danger-50 text-[11px] whitespace-nowrap"
                         title="Hapus tugas ini"
                       >
                         Hapus

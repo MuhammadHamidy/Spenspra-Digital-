@@ -6,6 +6,7 @@ import Button from '@/components/Button';
 import Input from '@/components/Input';
 import Modal from '@/components/Modal';
 import ConfirmModal from '@/components/ConfirmModal';
+import AppIcon from '@/components/AppIcon';
 import { elearningApi } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
@@ -142,7 +143,7 @@ export default function TeacherMaterialsManagementPage() {
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
             Kelola Materi Pembelajaran Kelas
           </h1>
@@ -155,24 +156,72 @@ export default function TeacherMaterialsManagementPage() {
           variant="primary"
           size="md"
           onClick={handleOpenCreateModal}
-          className="shadow-sm"
+          className="w-full sm:w-auto justify-center shadow-sm flex items-center gap-1.5 whitespace-nowrap shrink-0"
         >
-          + Tambah Materi Baru
+          <AppIcon name="circle-add" color="white" size={16} />
+          <span>Tambah Materi Baru</span>
         </Button>
       </div>
 
-      {/* Materials Table */}
-      <Card noPadding className="overflow-hidden border border-neutral-200 bg-white">
+      {/* MOBILE VIEW (< md): Responsive Cards */}
+      <div className="md:hidden space-y-3">
+        {loading ? (
+          <Card className="p-8 text-center text-xs text-neutral-400 border border-neutral-200 bg-white">
+            Memuat daftar materi...
+          </Card>
+        ) : materials.length === 0 ? (
+          <Card className="p-8 text-center text-xs text-neutral-400 border border-neutral-200 bg-white">
+            Belum ada materi pembelajaran yang diunggah.
+          </Card>
+        ) : (
+          materials.map((m) => (
+            <Card key={m.id} noPadding className="p-4 border border-neutral-200 bg-white space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 space-y-0.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-100 text-neutral-700">
+                      {m.type}
+                    </span>
+                    <span className="text-xs font-bold text-primary-600">{m.subject}</span>
+                    <span className="text-neutral-300">•</span>
+                    <span className="text-xs text-neutral-600 font-medium">Kelas {m.className}</span>
+                  </div>
+                  <p className="font-bold text-sm text-neutral-900 break-words pt-1">{m.title}</p>
+                  {m.description && (
+                    <p className="text-xs text-neutral-500 line-clamp-2">{m.description}</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-neutral-100 text-xs">
+                <span className="text-neutral-400">
+                  {new Date(m.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(m.id, m.title)}
+                  className="px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50/70 text-rose-700 hover:bg-rose-100 transition-colors font-bold text-xs cursor-pointer flex items-center gap-1 whitespace-nowrap"
+                >
+                  <AppIcon name="delete" color="red" size={13} />
+                  <span>Hapus</span>
+                </button>
+              </div>
+            </Card>
+          ))
+        )}
+      </div>
+
+      {/* DESKTOP VIEW (>= md): Materials Table */}
+      <Card noPadding className="hidden md:block overflow-hidden border border-neutral-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-neutral-50 text-neutral-500 font-bold border-b border-neutral-200 uppercase text-[10px] tracking-wider">
                 <th className="py-3 px-4">Judul Materi</th>
-                <th className="py-3 px-4">Mata Pelajaran</th>
-                <th className="py-3 px-4">Rombel</th>
-                <th className="py-3 px-4">Tipe Berkas</th>
-                <th className="py-3 px-4">Tanggal Unggah</th>
-                <th className="py-3 px-4 text-right">Aksi</th>
+                <th className="py-3 px-4 whitespace-nowrap">Mata Pelajaran</th>
+                <th className="py-3 px-4 whitespace-nowrap">Rombel</th>
+                <th className="py-3 px-4 whitespace-nowrap">Tipe Berkas</th>
+                <th className="py-3 px-4 whitespace-nowrap">Tanggal Unggah</th>
+                <th className="py-3 px-4 text-right whitespace-nowrap">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
@@ -197,23 +246,24 @@ export default function TeacherMaterialsManagementPage() {
                         <p className="text-[11px] text-neutral-400 truncate max-w-[260px]">{m.description}</p>
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-primary-600 font-bold">{m.subject}</td>
-                    <td className="py-3 px-4 font-medium text-neutral-600">Kelas {m.className}</td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 text-primary-600 font-bold whitespace-nowrap">{m.subject}</td>
+                    <td className="py-3 px-4 font-medium text-neutral-600 whitespace-nowrap">Kelas {m.className}</td>
+                    <td className="py-3 px-4 whitespace-nowrap">
                       <span className="px-2 py-0.5 rounded-[999px] text-[10px] font-bold bg-neutral-100 text-neutral-700">
                         {m.type}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-neutral-500">
+                    <td className="py-3 px-4 text-neutral-500 whitespace-nowrap">
                       {new Date(m.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </td>
-                    <td className="py-3 px-4 text-right">
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
                       <button
                         type="button"
                         onClick={() => handleDelete(m.id, m.title)}
-                        className="px-2 py-1 rounded-[6px] text-danger-600 hover:bg-danger-50 transition-colors font-medium text-xs cursor-pointer"
+                        className="px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50/60 text-rose-700 hover:bg-rose-100 transition-colors font-bold text-xs cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
                       >
-                        Hapus
+                        <AppIcon name="delete" color="red" size={13} />
+                        <span>Hapus</span>
                       </button>
                     </td>
                   </tr>
