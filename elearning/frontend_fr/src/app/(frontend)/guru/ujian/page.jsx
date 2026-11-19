@@ -508,7 +508,16 @@ export default function TeacherExamsManagementPage() {
       setOptD(optMap['D'] || '');
       setOptE(optMap['E'] || '');
       setCorrectOption(q.correctOption || 'A');
-      setCorrectOptions(Array.isArray(q.correctOptions) && q.correctOptions.length > 0 ? q.correctOptions : [q.correctOption || 'A']);
+      let initCorrectOpts = [];
+      if (Array.isArray(q.correctOptions) && q.correctOptions.length > 0) {
+        initCorrectOpts = q.correctOptions;
+      } else if (typeof q.correctOption === 'string' && q.correctOption && q.correctOption !== '-') {
+        initCorrectOpts = q.correctOption.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+      } else if (typeof q.correct_answer === 'string' && q.correct_answer && q.correct_answer !== '-') {
+        initCorrectOpts = q.correct_answer.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+      }
+      if (initCorrectOpts.length === 0) initCorrectOpts = ['A'];
+      setCorrectOptions(initCorrectOpts);
     } else if (type === 'TRUE_FALSE') {
       setTrueFalseAnswer(q.trueFalseAnswer !== undefined ? q.trueFalseAnswer : (q.correctOption === 'TRUE' || q.correctOption === 'BENAR'));
     } else if (type === 'MATCHING') {
@@ -601,7 +610,11 @@ export default function TeacherExamsManagementPage() {
         stimulusText: stimulusText.trim() || undefined,
         imageUrl: imageUrl.trim() || undefined,
         options: optionsList,
-        correctOption: newQuestionType === 'MCQ' ? correctOption : (newQuestionType === 'TRUE_FALSE' ? (trueFalseAnswer ? 'TRUE' : 'FALSE') : ''),
+        correctOption: newQuestionType === 'MCQ'
+          ? correctOption
+          : (newQuestionType === 'COMPLEX_MCQ'
+              ? (correctOptions && correctOptions.length > 0 ? correctOptions.join(',') : 'A')
+              : (newQuestionType === 'TRUE_FALSE' ? (trueFalseAnswer ? 'TRUE' : 'FALSE') : '')),
         correctOptions: newQuestionType === 'COMPLEX_MCQ' ? correctOptions : undefined,
         trueFalseAnswer: newQuestionType === 'TRUE_FALSE' ? trueFalseAnswer : undefined,
         matchingPairs: newQuestionType === 'MATCHING' ? validPairs : undefined,

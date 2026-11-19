@@ -898,7 +898,7 @@ export const elearningApi = {
     };
 
     return rawList.map((q, idx) => {
-      const localQ = localList[idx] || localList.find((lq) => lq.id === q.id) || {};
+      const localQ = localList.find((lq) => String(lq.id) === String(q.id)) || {};
       const rawText = q.questionText || q.question_text || '';
       const { cleanText, meta } = extractSpenspraMeta(rawText);
 
@@ -917,27 +917,47 @@ export const elearningApi = {
         options = localQ.options;
       }
 
-      const matchingPairs = (meta?.matchingPairs && meta.matchingPairs.length > 0)
+      const rawPairs = (meta?.matchingPairs && meta.matchingPairs.length > 0)
         ? meta.matchingPairs
         : ((Array.isArray(q.matchingPairs) && q.matchingPairs.length > 0)
             ? q.matchingPairs
             : (Array.isArray(localQ.matchingPairs) ? localQ.matchingPairs : []));
+      const matchingPairs = rawPairs.map((p, pIdx) => ({
+        ...p,
+        id: p.id !== undefined && p.id !== null && p.id !== '' ? p.id : pIdx + 1,
+        left: (p.left || '').trim(),
+        right: (p.right || '').trim(),
+      }));
 
-      const correctOptions = (meta?.correctOptions && meta.correctOptions.length > 0)
+      const rawCorrectStr = String(q.correctOption || q.correct_answer || localQ.correctOption || '').trim();
+
+      let correctOptions = (meta?.correctOptions && meta.correctOptions.length > 0)
         ? meta.correctOptions
         : ((Array.isArray(q.correctOptions) && q.correctOptions.length > 0)
             ? q.correctOptions
-            : (Array.isArray(localQ.correctOptions) ? localQ.correctOptions : []));
+            : (Array.isArray(localQ.correctOptions) && localQ.correctOptions.length > 0
+                ? localQ.correctOptions
+                : []));
+      if (qType === 'COMPLEX_MCQ' && rawCorrectStr && rawCorrectStr !== '-') {
+        const splitFromStr = rawCorrectStr.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+        if (splitFromStr.length > correctOptions.length) {
+          correctOptions = splitFromStr;
+        }
+      }
 
-      const trueFalseAnswer = meta?.trueFalseAnswer !== undefined
+      const trueFalseAnswer = typeof meta?.trueFalseAnswer === 'boolean'
         ? meta.trueFalseAnswer
-        : (q.trueFalseAnswer !== undefined
+        : (typeof q.trueFalseAnswer === 'boolean'
             ? q.trueFalseAnswer
-            : (localQ.trueFalseAnswer !== undefined
+            : (typeof localQ.trueFalseAnswer === 'boolean'
                 ? localQ.trueFalseAnswer
-                : (q.correctOption === 'TRUE' || q.correctOption === 'BENAR' || q.correct_answer === 'TRUE' || q.correct_answer === 'BENAR')));
+                : (rawCorrectStr.toUpperCase() !== 'FALSE' && rawCorrectStr.toUpperCase() !== 'SALAH' && rawCorrectStr.toUpperCase() !== 'F')));
 
-      const correctOption = q.correctOption || q.correct_answer || localQ.correctOption || 'A';
+      const correctOption = qType === 'COMPLEX_MCQ' && correctOptions.length > 0
+        ? correctOptions.join(',')
+        : (qType === 'TRUE_FALSE'
+            ? (trueFalseAnswer ? 'TRUE' : 'FALSE')
+            : (rawCorrectStr || 'A'));
       const stimulusText = meta?.stimulusText || q.stimulusText || localQ.stimulusText || '';
       const essayRubric = meta?.essayRubric || q.essayRubric || q.essay_rubric || localQ.essayRubric || '';
 
@@ -1720,8 +1740,15 @@ export const elearningApi = {
         matchingAns = matchingAns || {};
         const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
         let matchedCorrect = 0;
-        const pairDetails = pairs.map((p) => {
-          const studentVal = matchingAns[p.id] ?? matchingAns[String(p.id)] ?? '';
+        const pairDetails = pairs.map((p, pIdx) => {
+          const studentVal =
+            matchingAns[p.id] ??
+            matchingAns[String(p.id)] ??
+            matchingAns[`idx_${pIdx}`] ??
+            matchingAns[(p.left || '').trim()] ??
+            matchingAns[pIdx + 1] ??
+            matchingAns[String(pIdx + 1)] ??
+            '';
           const matchOk = Boolean(studentVal && studentVal.trim().toLowerCase() === (p.right || '').trim().toLowerCase());
           if (matchOk) matchedCorrect++;
           return `${p.left} ➔ ${studentVal || '(Kosong)'}${matchOk ? ' (✓)' : ' (✗)'}`;
@@ -1816,6 +1843,19 @@ export const elearningApi = {
       }
     } catch (_) {}
     return {};
+  },
+
+  updateSessionScore: async (sessionId, score) => {
+    if (!sessionId) return false;
+    try {
+      const res = await fetchJson(`/sessions/${sessionId}/finish`, {
+        method: 'POST',
+        body: JSON.stringify({ score: Number(score) || 0 }),
+      });
+      return Boolean(res?.success);
+    } catch (_) {
+      return false;
+    }
   },
 
 

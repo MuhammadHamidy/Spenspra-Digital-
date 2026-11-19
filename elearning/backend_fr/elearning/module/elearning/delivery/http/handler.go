@@ -775,6 +775,55 @@ func (in *CBTQuestionInput) ToDomain(examID string, index int) domain.CBTQuestio
 	if corr == "" {
 		corr = strings.ToUpper(strings.TrimSpace(in.CorrectAnswer))
 	}
+	if qType == "COMPLEX_MCQ" {
+		if len(in.CorrectOptions) > 0 {
+			cleanOpts := make([]string, 0, len(in.CorrectOptions))
+			for _, o := range in.CorrectOptions {
+				trimmed := strings.ToUpper(strings.TrimSpace(o))
+				if trimmed != "" {
+					cleanOpts = append(cleanOpts, trimmed)
+				}
+			}
+			in.CorrectOptions = cleanOpts
+			if len(cleanOpts) > 0 {
+				corr = strings.Join(cleanOpts, ",")
+			}
+		} else if corr != "" && corr != "-" {
+			parts := strings.Split(corr, ",")
+			cleanOpts := make([]string, 0, len(parts))
+			for _, p := range parts {
+				trimmed := strings.ToUpper(strings.TrimSpace(p))
+				if trimmed != "" {
+					cleanOpts = append(cleanOpts, trimmed)
+				}
+			}
+			in.CorrectOptions = cleanOpts
+		}
+	} else if qType == "TRUE_FALSE" {
+		if in.TrueFalseAnswer != nil {
+			if *in.TrueFalseAnswer {
+				corr = "TRUE"
+			} else {
+				corr = "FALSE"
+			}
+		} else {
+			isTrue := corr != "FALSE" && corr != "SALAH" && corr != "F"
+			in.TrueFalseAnswer = &isTrue
+			if isTrue {
+				corr = "TRUE"
+			} else {
+				corr = "FALSE"
+			}
+		}
+	} else if qType == "MATCHING" {
+		for idx := range in.MatchingPairs {
+			if in.MatchingPairs[idx].ID == nil || in.MatchingPairs[idx].ID == "" {
+				in.MatchingPairs[idx].ID = idx + 1
+			}
+			in.MatchingPairs[idx].Left = strings.TrimSpace(in.MatchingPairs[idx].Left)
+			in.MatchingPairs[idx].Right = strings.TrimSpace(in.MatchingPairs[idx].Right)
+		}
+	}
 	if corr == "" && qType != "ESSAY" && qType != "MATCHING" {
 		corr = "A"
 	}
@@ -868,10 +917,30 @@ func formatQuestionForFrontend(q domain.CBTQuestion) fiber.Map {
 	if matchingPairs == nil {
 		matchingPairs = []CBTMatchingPairInput{}
 	}
+	for idx := range matchingPairs {
+		if matchingPairs[idx].ID == nil || matchingPairs[idx].ID == "" {
+			matchingPairs[idx].ID = idx + 1
+		}
+	}
 
 	correctOptions := meta.CorrectOptions
+	if len(correctOptions) == 0 && qType == "COMPLEX_MCQ" && q.CorrectAnswer != "" && q.CorrectAnswer != "-" {
+		for _, part := range strings.Split(q.CorrectAnswer, ",") {
+			trimmed := strings.ToUpper(strings.TrimSpace(part))
+			if trimmed != "" {
+				correctOptions = append(correctOptions, trimmed)
+			}
+		}
+	}
 	if correctOptions == nil {
 		correctOptions = []string{}
+	}
+
+	tfAns := meta.TrueFalseAnswer
+	if tfAns == nil && qType == "TRUE_FALSE" && q.CorrectAnswer != "" {
+		caUpper := strings.ToUpper(strings.TrimSpace(q.CorrectAnswer))
+		isTrue := caUpper == "TRUE" || caUpper == "BENAR" || caUpper == "T"
+		tfAns = &isTrue
 	}
 
 	return fiber.Map{
@@ -896,7 +965,7 @@ func formatQuestionForFrontend(q domain.CBTQuestion) fiber.Map {
 		"correctOption":   q.CorrectAnswer,
 		"correct_answer":  q.CorrectAnswer,
 		"correctOptions":  correctOptions,
-		"trueFalseAnswer": meta.TrueFalseAnswer,
+		"trueFalseAnswer": tfAns,
 		"matchingPairs":   matchingPairs,
 		"essayRubric":     meta.EssayRubric,
 		"points":          pts,
@@ -908,7 +977,7 @@ func formatQuestionForFrontend(q domain.CBTQuestion) fiber.Map {
 func (h *ELearningHandler) GetExamQuestions(c *fiber.Ctx) error {
 	id := c.Params("id")
 	role := actorRole(c)
-	isTeacher := role == "GURU" || role == "ADMIN" || role == "SUPER_ADMIN"
+	isTeacher := isTeacherRole(role) || canManageAll(role)
 	if isTeacher {
 		exam, err := h.useCase.GetExamDetail(c.Context(), id)
 		if err != nil {

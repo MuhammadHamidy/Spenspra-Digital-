@@ -327,7 +327,7 @@ export default function CBTExamRunnerPage({ params }) {
   };
 
   // Handle Select Matching Pair (Menjodohkan / Pencocokan)
-  const handleSelectMatchingPair = (pairId, rightVal) => {
+  const handleSelectMatchingPair = (pairId, rightVal, leftText, pIdx) => {
     if (!currentQ || isLocked) return;
     const isCurrentDoubtful = doubtfuls[currentQ.id] || false;
     const prevAns = answers[currentQ.id] || {};
@@ -338,7 +338,19 @@ export default function CBTExamRunnerPage({ params }) {
       } catch (_) {}
     }
     prevMatching = prevMatching || {};
-    const nextMatching = { ...prevMatching, [pairId]: rightVal, [String(pairId)]: rightVal };
+    const nextMatching = { ...prevMatching };
+    if (pairId !== undefined && pairId !== null && pairId !== '') {
+      nextMatching[pairId] = rightVal;
+      nextMatching[String(pairId)] = rightVal;
+    }
+    if (leftText) {
+      nextMatching[String(leftText).trim()] = rightVal;
+    }
+    if (pIdx !== undefined && pIdx !== null) {
+      nextMatching[pIdx + 1] = rightVal;
+      nextMatching[String(pIdx + 1)] = rightVal;
+      nextMatching[`idx_${pIdx}`] = rightVal;
+    }
     const serialized = JSON.stringify(nextMatching);
 
     const newAnswers = {
@@ -652,7 +664,14 @@ export default function CBTExamRunnerPage({ params }) {
       }
       mAns = mAns || {};
       const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
-      return pairs.length > 0 && pairs.some((p) => Boolean(mAns[p.id] || mAns[String(p.id)]));
+      return pairs.length > 0 && pairs.some((p, pIdx) => Boolean(
+        mAns[p.id] ||
+        mAns[String(p.id)] ||
+        mAns[`idx_${pIdx}`] ||
+        mAns[(p.left || '').trim()] ||
+        mAns[pIdx + 1] ||
+        mAns[String(pIdx + 1)]
+      ));
     }
     if (q.type === 'ESSAY') {
       return Boolean(ans.essayAnswer && String(ans.essayAnswer).trim() !== '');
@@ -1139,7 +1158,15 @@ export default function CBTExamRunnerPage({ params }) {
                         } catch (_) {}
                       }
                       mMap = mMap || {};
-                      const selectedRight = mMap[pair.id] ?? mMap[String(pair.id)] ?? '';
+                      const pairKey = pair.id !== undefined && pair.id !== null && pair.id !== '' ? pair.id : pIdx + 1;
+                      const selectedRight =
+                        mMap[pairKey] ??
+                        mMap[String(pairKey)] ??
+                        mMap[`idx_${pIdx}`] ??
+                        mMap[(pair.left || '').trim()] ??
+                        mMap[pIdx + 1] ??
+                        mMap[String(pIdx + 1)] ??
+                        '';
 
                       return (
                         <div
@@ -1159,7 +1186,7 @@ export default function CBTExamRunnerPage({ params }) {
                             <span className="text-neutral-400 font-bold hidden sm:inline">↔</span>
                             <select
                               value={selectedRight}
-                              onChange={(e) => handleSelectMatchingPair(pair.id, e.target.value)}
+                              onChange={(e) => handleSelectMatchingPair(pairKey, e.target.value, pair.left, pIdx)}
                               className={`w-full text-xs sm:text-sm p-2.5 rounded-lg border font-medium transition-colors cursor-pointer ${
                                 selectedRight
                                   ? 'bg-violet-50 border-violet-400 text-violet-950 font-semibold ring-1 ring-violet-400/20'

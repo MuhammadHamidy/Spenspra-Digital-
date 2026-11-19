@@ -2,6 +2,10 @@ package postgresql
 
 import (
 	"context"
+	"encoding/json"
+	"math"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -364,14 +368,193 @@ func (r *repository) UnlockSession(ctx context.Context, sessionID string) error 
 		}).Error
 }
 
+type repoMatchingPair struct {
+	ID    interface{} `json:"id"`
+	Left  string      `json:"left"`
+	Right string      `json:"right"`
+}
+
+type repoQuestionMeta struct {
+	Type            string             `json:"type"`
+	CorrectOptions  []string           `json:"correctOptions"`
+	TrueFalseAnswer *bool              `json:"trueFalseAnswer"`
+	MatchingPairs   []repoMatchingPair `json:"matchingPairs"`
+	Points          float64            `json:"points"`
+}
+
+func (r *repository) calculateSessionScoreFromDB(ctx context.Context, sessionID string) (float64, bool) {
+	var sess domain.CBTStudentSession
+	if err := r.db.WithContext(ctx).Table("cbt_student_sessions").Where("id = ?", sessionID).First(&sess).Error; err != nil || sess.ExamID == "" {
+		return 0, false
+	}
+
+	var questions []domain.CBTQuestion
+	if err := r.db.WithContext(ctx).Table("cbt_questions").Where("exam_id = ?", sess.ExamID).Order("question_number asc").Find(&questions).Error; err != nil || len(questions) == 0 {
+		return 0, false
+	}
+
+	var answers []domain.CBTStudentAnswer
+	_ = r.db.WithContext(ctx).Table("cbt_student_answers").Where("session_id = ?", sessionID).Find(&answers).Error
+	ansMap := make(map[string]domain.CBTStudentAnswer, len(answers))
+	for _, a := range answers {
+		ansMap[a.QuestionID] = a
+	}
+
+	var totalMax float64
+	var totalEarned float64
+
+	for _, q := range questions {
+		var meta repoQuestionMeta
+		if idx := strings.Index(q.QuestionText, "<!--SPENSPRA_META:"); idx != -1 {
+			endIdx := strings.Index(q.QuestionText[idx:], "-->")
+			if endIdx != -1 {
+				metaRaw := q.QuestionText[idx+len("<!--SPENSPRA_META:") : idx+endIdx]
+				_ = json.Unmarshal([]byte(metaRaw), &meta)
+			}
+		}
+
+		qType := strings.ToUpper(strings.TrimSpace(q.QuestionType))
+		if meta.Type != "" {
+			qType = strings.ToUpper(strings.TrimSpace(meta.Type))
+		}
+		if qType == "PILIHAN_GANDA" || qType == "" {
+			qType = "MCQ"
+		}
+
+		pts := q.ScoreWeight
+		if meta.Points > 0 {
+			pts = meta.Points
+		}
+		if pts <= 0 {
+			pts = 10.0
+		}
+		totalMax += pts
+
+		ans, hasAns := ansMap[q.ID]
+		if !hasAns {
+			continue
+		}
+		sel := strings.TrimSpace(ans.SelectedOption)
+
+		switch qType {
+		case "MCQ":
+			corr := strings.ToUpper(strings.TrimSpace(q.CorrectAnswer))
+			if sel != "" && strings.ToUpper(sel) == corr {
+				totalEarned += pts
+			}
+		case "COMPLEX_MCQ":
+			corrOpts := meta.CorrectOptions
+			if len(corrOpts) == 0 && q.CorrectAnswer != "" && q.CorrectAnswer != "-" {
+				corrOpts = strings.Split(q.CorrectAnswer, ",")
+			}
+			var cClean []string
+			for _, c := range corrOpts {
+				t := strings.ToUpper(strings.TrimSpace(c))
+				if t != "" {
+					cClean = append(cClean, t)
+				}
+			}
+			var sClean []string
+			if sel != "" && !strings.HasPrefix(sel, "{") {
+				for _, s := range strings.Split(sel, ",") {
+					t := strings.ToUpper(strings.TrimSpace(s))
+					if t != "" {
+						sClean = append(sClean, t)
+					}
+				}
+			}
+			sort.Strings(cClean)
+			sort.Strings(sClean)
+			if len(sClean) > 0 && len(cClean) > 0 && strings.Join(sClean, ",") == strings.Join(cClean, ",") {
+				totalEarned += pts
+			}
+		case "TRUE_FALSE":
+			sUpper := strings.ToUpper(sel)
+			isStudentTrue := sUpper == "TRUE" || sUpper == "BENAR" || sUpper == "T"
+			isStudentFalse := sUpper == "FALSE" || sUpper == "SALAH" || sUpper == "F"
+			if !isStudentTrue && !isStudentFalse {
+				continue
+			}
+			isCorrectTrue := true
+			if meta.TrueFalseAnswer != nil {
+				isCorrectTrue = *meta.TrueFalseAnswer
+			} else if q.CorrectAnswer != "" {
+				cUpper := strings.ToUpper(strings.TrimSpace(q.CorrectAnswer))
+				isCorrectTrue = cUpper == "TRUE" || cUpper == "BENAR" || cUpper == "T"
+			}
+			if (isStudentTrue && isCorrectTrue) || (isStudentFalse && !isCorrectTrue) {
+				totalEarned += pts
+			}
+		case "MATCHING":
+			if sel == "" || !strings.HasPrefix(sel, "{") || len(meta.MatchingPairs) == 0 {
+				continue
+			}
+			var mAns map[string]string
+			if err := json.Unmarshal([]byte(sel), &mAns); err != nil {
+				continue
+			}
+			matched := 0
+			for pIdx, pair := range meta.MatchingPairs {
+				var idKey string
+				switch v := pair.ID.(type) {
+				case float64:
+					idKey = strings.TrimSuffix(strings.TrimSuffix(strings.TrimSpace(strings.ReplaceAll(json.Number(
+						func() string { b, _ := json.Marshal(v); return string(b) }(),
+					).String(), "", "")), ".0"), ".")
+				case string:
+					idKey = v
+				}
+				studentVal := mAns[idKey]
+				if studentVal == "" {
+					studentVal = mAns[strings.TrimSpace(pair.Left)]
+				}
+				if studentVal == "" {
+					idxKey := "idx_" + string(rune('0'+pIdx))
+					studentVal = mAns[idxKey]
+				}
+				if studentVal == "" {
+					numKey := string(rune('1' + pIdx))
+					studentVal = mAns[numKey]
+				}
+				if strings.TrimSpace(studentVal) != "" && strings.EqualFold(strings.TrimSpace(studentVal), strings.TrimSpace(pair.Right)) {
+					matched++
+				}
+			}
+			ratio := float64(matched) / float64(len(meta.MatchingPairs))
+			totalEarned += math.Round(ratio * pts)
+		case "ESSAY":
+			if ans.ScoreObtained > 0 {
+				totalEarned += math.Min(pts, ans.ScoreObtained)
+			}
+		}
+	}
+
+	if totalMax <= 0 {
+		return 0, false
+	}
+	return math.Round((totalEarned / totalMax) * 100), true
+}
+
 func (r *repository) SubmitExamSession(ctx context.Context, sessionID string, score float64) error {
 	now := time.Now()
+	finalScore := score
+	if calcScore, ok := r.calculateSessionScoreFromDB(ctx, sessionID); ok {
+		// Jika score dari siswa 0 atau berbeda karena browser siswa tidak memegang kunci jawaban, gunakan kalkulasi otoritatif database
+		// Namun jika guru mengirimkan nilai koreksi manual (score > calcScore karena nilai esai), gunakan nilai yang lebih tinggi / nilai guru
+		if score <= 0 || calcScore > 0 {
+			if score > calcScore {
+				finalScore = score
+			} else {
+				finalScore = calcScore
+			}
+		}
+	}
 	return r.db.WithContext(ctx).Table("cbt_student_sessions").
 		Where("id = ?", sessionID).
 		Updates(map[string]interface{}{
 			"status":       "SUBMITTED",
 			"submitted_at": now,
-			"score":        score,
+			"score":        finalScore,
 		}).Error
 }
 

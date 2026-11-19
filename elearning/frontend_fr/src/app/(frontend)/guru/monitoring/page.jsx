@@ -85,12 +85,16 @@ const normalizeQuestionType = (q) => {
 // Resolusi jawaban siswa dari berbagai format penyimpanan (ID, nomor urut, atau index)
 const resolveStudentAnswer = (q, idx, answersObj) => {
   if (!answersObj) return null;
+  const qNum = q.questionNumber || (idx + 1);
   const direct =
     answersObj[q.id] ??
     answersObj[String(q.id)] ??
-    answersObj[q.questionNumber] ??
+    answersObj[qNum] ??
+    answersObj[String(qNum)] ??
     answersObj[idx + 1] ??
     answersObj[String(idx + 1)] ??
+    answersObj[`q-${qNum}`] ??
+    answersObj[`q_${qNum}`] ??
     answersObj[`q-${idx + 1}`] ??
     answersObj[`q_${idx + 1}`];
   if (direct !== undefined && direct !== null) return direct;
@@ -101,7 +105,19 @@ const resolveStudentAnswer = (q, idx, answersObj) => {
   );
   if (byQuestionId) return byQuestionId;
 
-  if (values[idx] !== undefined) return values[idx];
+  const byQuestionNumber = values.find(
+    (v) => v && typeof v === 'object' && (
+      v.questionNumber === qNum ||
+      v.question_number === qNum ||
+      v.questionNumber === idx + 1 ||
+      v.question_number === idx + 1
+    )
+  );
+  if (byQuestionNumber) return byQuestionNumber;
+
+  if (Array.isArray(answersObj) && answersObj[idx] !== undefined) {
+    return answersObj[idx];
+  }
   return null;
 };
 
@@ -331,15 +347,17 @@ export default function LiveProctoringMonitoringPage() {
           studentOpts = ans.selectedOptions;
         } else if (typeof ans?.selectedOption === 'string' && ans.selectedOption && !ans.selectedOption.startsWith('{')) {
           studentOpts = ans.selectedOption.split(',').map((s) => s.trim()).filter(Boolean);
+        } else if (typeof ans?.selected_option === 'string' && ans.selected_option && !ans.selected_option.startsWith('{')) {
+          studentOpts = ans.selected_option.split(',').map((s) => s.trim()).filter(Boolean);
         } else if (typeof ans === 'string' && ans && !ans.startsWith('{')) {
           studentOpts = ans.split(',').map((s) => s.trim()).filter(Boolean);
         }
         if (studentOpts.length > 0) {
           answeredCount++;
         }
-        const correctOpts = Array.isArray(q.correctOptions) && q.correctOptions.length > 0
+        const correctOpts = (Array.isArray(q.correctOptions) && q.correctOptions.length > 0)
           ? q.correctOptions
-          : (q.correctOption ? [q.correctOption] : ['A']);
+          : ((q.correctOption || q.correct_answer || 'A').split(',').map((s) => s.trim()).filter(Boolean));
         const sSorted = [...studentOpts].filter(Boolean).map((s) => s.toUpperCase()).sort().join(',');
         const cSorted = [...correctOpts].filter(Boolean).map((s) => s.toUpperCase()).sort().join(',');
         if (sSorted && sSorted === cSorted) {
@@ -370,21 +388,40 @@ export default function LiveProctoringMonitoringPage() {
         if (!matchingAns && typeof ans?.selectedOption === 'string' && ans.selectedOption.startsWith('{')) {
           try { matchingAns = JSON.parse(ans.selectedOption); } catch (_) {}
         }
+        if (!matchingAns && typeof ans?.selected_option === 'string' && ans.selected_option.startsWith('{')) {
+          try { matchingAns = JSON.parse(ans.selected_option); } catch (_) {}
+        }
         if (!matchingAns && typeof ans === 'string' && ans.startsWith('{')) {
           try { matchingAns = JSON.parse(ans); } catch (_) {}
         }
         matchingAns = matchingAns || {};
         const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
         const hasAnyMatched = pairs.length > 0
-          ? pairs.some((p) => Boolean(matchingAns[p.id] || matchingAns[String(p.id)]))
+          ? pairs.some((p, pIdx) => {
+              const val =
+                matchingAns[p.id] ??
+                matchingAns[String(p.id)] ??
+                matchingAns[`idx_${pIdx}`] ??
+                matchingAns[(p.left || '').trim()] ??
+                matchingAns[pIdx + 1] ??
+                matchingAns[String(pIdx + 1)];
+              return Boolean(val);
+            })
           : Object.keys(matchingAns).length > 0;
         if (hasAnyMatched) {
           answeredCount++;
         }
         if (pairs.length > 0) {
           let matched = 0;
-          pairs.forEach((p) => {
-            const studentVal = matchingAns[p.id] ?? matchingAns[String(p.id)] ?? '';
+          pairs.forEach((p, pIdx) => {
+            const studentVal =
+              matchingAns[p.id] ??
+              matchingAns[String(p.id)] ??
+              matchingAns[`idx_${pIdx}`] ??
+              matchingAns[(p.left || '').trim()] ??
+              matchingAns[pIdx + 1] ??
+              matchingAns[String(pIdx + 1)] ??
+              '';
             if (studentVal && studentVal.trim().toLowerCase() === (p.right || '').trim().toLowerCase()) {
               matched++;
             }
@@ -454,11 +491,7 @@ export default function LiveProctoringMonitoringPage() {
       const effSessionId = activeStudentAnswers.sessionId || activeStudentAnswers.id;
       if (effSessionId && !String(effSessionId).startsWith('not-joined')) {
         try {
-          await fetch(`/api/elearning/sessions/${effSessionId}/finish`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ score: finalScore }),
-          });
+          await elearningApi.updateSessionScore(effSessionId, finalScore);
         } catch (_) {}
       }
 
@@ -798,14 +831,16 @@ export default function LiveProctoringMonitoringPage() {
                 let studentOpts = [];
                 if (Array.isArray(ans?.selectedOptions)) {
                   studentOpts = ans.selectedOptions;
-                } else if (typeof ans?.selectedOption === 'string' && ans.selectedOption) {
-                  studentOpts = ans.selectedOption.split(',').map((s) => s.trim());
-                } else if (typeof ans === 'string' && ans) {
-                  studentOpts = ans.split(',').map((s) => s.trim());
+                } else if (typeof ans?.selectedOption === 'string' && ans.selectedOption && !ans.selectedOption.startsWith('{')) {
+                  studentOpts = ans.selectedOption.split(',').map((s) => s.trim()).filter(Boolean);
+                } else if (typeof ans?.selected_option === 'string' && ans.selected_option && !ans.selected_option.startsWith('{')) {
+                  studentOpts = ans.selected_option.split(',').map((s) => s.trim()).filter(Boolean);
+                } else if (typeof ans === 'string' && ans && !ans.startsWith('{')) {
+                  studentOpts = ans.split(',').map((s) => s.trim()).filter(Boolean);
                 }
-                const correctOpts = Array.isArray(q.correctOptions) && q.correctOptions.length > 0
+                const correctOpts = (Array.isArray(q.correctOptions) && q.correctOptions.length > 0)
                   ? q.correctOptions
-                  : (q.correctOption ? [q.correctOption] : ['A']);
+                  : ((q.correctOption || q.correct_answer || 'A').split(',').map((s) => s.trim()).filter(Boolean));
                 const sSorted = [...studentOpts].filter(Boolean).map((s) => s.toUpperCase()).sort().join(',');
                 const cSorted = [...correctOpts].filter(Boolean).map((s) => s.toUpperCase()).sort().join(',');
                 const isAnswered = studentOpts.length > 0;
@@ -871,31 +906,51 @@ export default function LiveProctoringMonitoringPage() {
                 if (!matchingAns && typeof ans?.selectedOption === 'string' && ans.selectedOption.startsWith('{')) {
                   try { matchingAns = JSON.parse(ans.selectedOption); } catch (_) {}
                 }
+                if (!matchingAns && typeof ans?.selected_option === 'string' && ans.selected_option.startsWith('{')) {
+                  try { matchingAns = JSON.parse(ans.selected_option); } catch (_) {}
+                }
                 if (!matchingAns && typeof ans === 'string' && ans.startsWith('{')) {
                   try { matchingAns = JSON.parse(ans); } catch (_) {}
                 }
                 matchingAns = matchingAns || {};
                 const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
                 let matchedCorrect = 0;
-                pairs.forEach((p) => {
-                  const studentVal = matchingAns[p.id] ?? matchingAns[String(p.id)] ?? '';
+                let hasAnsweredAny = false;
+                pairs.forEach((p, pIdx) => {
+                  const studentVal =
+                    matchingAns[p.id] ??
+                    matchingAns[String(p.id)] ??
+                    matchingAns[`idx_${pIdx}`] ??
+                    matchingAns[(p.left || '').trim()] ??
+                    matchingAns[pIdx + 1] ??
+                    matchingAns[String(pIdx + 1)] ??
+                    '';
+                  if (studentVal) hasAnsweredAny = true;
                   if (studentVal && studentVal.trim().toLowerCase() === (p.right || '').trim().toLowerCase()) {
                     matchedCorrect++;
                   }
                 });
                 const earnedPoints = pairs.length > 0 ? Math.round((matchedCorrect / pairs.length) * qPoints) : 0;
 
-                statusBadge = (
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                    earnedPoints === qPoints
-                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                      : earnedPoints > 0
-                      ? 'bg-amber-100 text-amber-800 border-amber-300'
-                      : 'bg-danger-100 text-danger-800 border-danger-300'
-                  } border inline-flex items-center gap-1`}>
-                    <span>+{earnedPoints} / {qPoints} Poin ({matchedCorrect}/{pairs.length} Cocok)</span>
-                  </span>
-                );
+                if (!hasAnsweredAny) {
+                  statusBadge = (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-neutral-100 text-neutral-500 border border-neutral-200">
+                      Tidak Dijawab
+                    </span>
+                  );
+                } else {
+                  statusBadge = (
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                      earnedPoints === qPoints
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                        : earnedPoints > 0
+                        ? 'bg-amber-100 text-amber-800 border-amber-300'
+                        : 'bg-danger-100 text-danger-800 border-danger-300'
+                    } border inline-flex items-center gap-1`}>
+                      <span>+{earnedPoints} / {qPoints} Poin ({matchedCorrect}/{pairs.length} Cocok)</span>
+                    </span>
+                  );
+                }
               } else if (qType === 'ESSAY') {
                 const currentScore = essayScores[q.id];
                 const isScored = currentScore !== undefined && currentScore !== '' && currentScore !== null;
@@ -1027,14 +1082,16 @@ export default function LiveProctoringMonitoringPage() {
                         let studentOpts = [];
                         if (Array.isArray(ans?.selectedOptions)) {
                           studentOpts = ans.selectedOptions;
-                        } else if (typeof ans?.selectedOption === 'string' && ans.selectedOption) {
-                          studentOpts = ans.selectedOption.split(',').map((s) => s.trim());
-                        } else if (typeof ans === 'string' && ans) {
-                          studentOpts = ans.split(',').map((s) => s.trim());
+                        } else if (typeof ans?.selectedOption === 'string' && ans.selectedOption && !ans.selectedOption.startsWith('{')) {
+                          studentOpts = ans.selectedOption.split(',').map((s) => s.trim()).filter(Boolean);
+                        } else if (typeof ans?.selected_option === 'string' && ans.selected_option && !ans.selected_option.startsWith('{')) {
+                          studentOpts = ans.selected_option.split(',').map((s) => s.trim()).filter(Boolean);
+                        } else if (typeof ans === 'string' && ans && !ans.startsWith('{')) {
+                          studentOpts = ans.split(',').map((s) => s.trim()).filter(Boolean);
                         }
-                        const correctOpts = Array.isArray(q.correctOptions) && q.correctOptions.length > 0
+                        const correctOpts = (Array.isArray(q.correctOptions) && q.correctOptions.length > 0)
                           ? q.correctOptions
-                          : (q.correctOption ? [q.correctOption] : ['A']);
+                          : ((q.correctOption || q.correct_answer || 'A').split(',').map((s) => s.trim()).filter(Boolean));
 
                         return (
                           <>
@@ -1210,6 +1267,9 @@ export default function LiveProctoringMonitoringPage() {
                         if (!matchingAns && typeof ans?.selectedOption === 'string' && ans.selectedOption.startsWith('{')) {
                           try { matchingAns = JSON.parse(ans.selectedOption); } catch (_) {}
                         }
+                        if (!matchingAns && typeof ans?.selected_option === 'string' && ans.selected_option.startsWith('{')) {
+                          try { matchingAns = JSON.parse(ans.selected_option); } catch (_) {}
+                        }
                         if (!matchingAns && typeof ans === 'string' && ans.startsWith('{')) {
                           try { matchingAns = JSON.parse(ans); } catch (_) {}
                         }
@@ -1234,11 +1294,18 @@ export default function LiveProctoringMonitoringPage() {
                                 </thead>
                                 <tbody className="divide-y divide-neutral-200 bg-white">
                                   {pairs.map((p, pIdx) => {
-                                    const studentVal = matchingAns[p.id] ?? matchingAns[String(p.id)] ?? '';
+                                    const studentVal =
+                                      matchingAns[p.id] ??
+                                      matchingAns[String(p.id)] ??
+                                      matchingAns[`idx_${pIdx}`] ??
+                                      matchingAns[(p.left || '').trim()] ??
+                                      matchingAns[pIdx + 1] ??
+                                      matchingAns[String(pIdx + 1)] ??
+                                      '';
                                     const matchOk = Boolean(studentVal && studentVal.trim().toLowerCase() === (p.right || '').trim().toLowerCase());
 
                                     return (
-                                      <tr key={p.id || pIdx} className={matchOk ? 'bg-emerald-50/40' : 'bg-danger-50/30'}>
+                                      <tr key={p.id || pIdx} className={matchOk ? 'bg-emerald-50/40' : (studentVal ? 'bg-danger-50/30' : 'bg-neutral-50/40')}>
                                         <td className="py-2.5 px-3 text-center font-bold text-neutral-500">{pIdx + 1}</td>
                                         <td className="py-2.5 px-3 font-semibold text-neutral-900">{p.left}</td>
                                         <td className="py-2.5 px-3">
@@ -1257,10 +1324,14 @@ export default function LiveProctoringMonitoringPage() {
                                               <AppIcon name="tick" color="green" size={10} />
                                               <span>Cocok</span>
                                             </span>
-                                          ) : (
+                                          ) : studentVal ? (
                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-danger-100 text-danger-800 border border-danger-300">
                                               <AppIcon name="close-cancel" color="red" size={10} />
                                               <span>Tidak Cocok</span>
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-neutral-100 text-neutral-600 border border-neutral-200">
+                                              Kosong
                                             </span>
                                           )}
                                         </td>
