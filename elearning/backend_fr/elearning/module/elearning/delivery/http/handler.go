@@ -822,7 +822,8 @@ func (in *CBTQuestionInput) ToDomain(examID string, index int) domain.CBTQuestio
 	if corr == "" {
 		corr = strings.ToUpper(strings.TrimSpace(in.CorrectAnswer))
 	}
-	if qType == "COMPLEX_MCQ" {
+	switch qType {
+	case "COMPLEX_MCQ":
 		if len(in.CorrectOptions) > 0 {
 			cleanOpts := make([]string, 0, len(in.CorrectOptions))
 			for _, o := range in.CorrectOptions {
@@ -846,7 +847,7 @@ func (in *CBTQuestionInput) ToDomain(examID string, index int) domain.CBTQuestio
 			}
 			in.CorrectOptions = cleanOpts
 		}
-	} else if qType == "TRUE_FALSE" {
+	case "TRUE_FALSE":
 		if in.TrueFalseAnswer != nil {
 			if *in.TrueFalseAnswer {
 				corr = "TRUE"
@@ -862,7 +863,7 @@ func (in *CBTQuestionInput) ToDomain(examID string, index int) domain.CBTQuestio
 				corr = "FALSE"
 			}
 		}
-	} else if qType == "MATCHING" {
+	case "MATCHING":
 		for idx := range in.MatchingPairs {
 			if in.MatchingPairs[idx].ID == nil || in.MatchingPairs[idx].ID == "" {
 				in.MatchingPairs[idx].ID = idx + 1

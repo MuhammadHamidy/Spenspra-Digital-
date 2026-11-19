@@ -1334,7 +1334,7 @@ export default function TeacherExamsManagementPage() {
                               placeholder={`Teks Jawaban Opsi ${opt.key}${opt.optional ? ' (Opsional)...' : '...'}`}
                               value={opt.value}
                               onChange={(e) => opt.setter(e.target.value)}
-                              className="min-w-[180px] flex-1 text-xs bg-transparent border-0 focus:outline-hidden p-1 font-medium text-neutral-800"
+                              className="min-w-45 flex-1 text-xs bg-transparent border-0 focus:outline-hidden p-1 font-medium text-neutral-800"
                               required={!opt.optional && !opt.image}
                             />
                             <div className="flex w-full items-center gap-2 pl-11">
@@ -1442,7 +1442,7 @@ export default function TeacherExamsManagementPage() {
                               placeholder={`Teks Pernyataan / Opsi ${opt.key}${opt.optional ? ' (Opsional)...' : '...'}`}
                               value={opt.value}
                               onChange={(e) => opt.setter(e.target.value)}
-                              className="min-w-[180px] flex-1 text-xs bg-transparent border-0 focus:outline-hidden p-1 font-medium text-neutral-800"
+                              className="min-w-45 flex-1 text-xs bg-transparent border-0 focus:outline-hidden p-1 font-medium text-neutral-800"
                               required={!opt.optional && !opt.image}
                             />
                             <div className="flex w-full items-center gap-2 pl-11">
@@ -1752,7 +1752,7 @@ export default function TeacherExamsManagementPage() {
                     type="submit"
                     variant={editingQuestionId ? 'secondary' : 'primary'}
                     size="md"
-                    className="font-bold min-h-[42px] cursor-pointer flex items-center gap-1.5"
+                    className="font-bold min-h-10.5 cursor-pointer flex items-center gap-1.5"
                     loading={isSavingQuestion}
                   >
                     {editingQuestionId ? (
@@ -2078,9 +2078,9 @@ export default function TeacherExamsManagementPage() {
                         <div className="space-y-1 pt-1">
                           {q.matchingPairs.slice(0, 3).map((p, i) => (
                             <div key={i} className="text-[11px] flex items-center justify-between bg-white border border-violet-100 px-2 py-0.5 rounded">
-                              <span className="font-semibold text-neutral-800 truncate max-w-[120px]">{p.left}</span>
+                              <span className="font-semibold text-neutral-800 truncate max-w-30">{p.left}</span>
                               <span className="text-violet-500 font-bold px-1">↔</span>
-                              <span className="text-neutral-600 truncate max-w-[120px]">{p.right}</span>
+                              <span className="text-neutral-600 truncate max-w-30">{p.right}</span>
                             </div>
                           ))}
                           {q.matchingPairs.length > 3 && (
@@ -2247,12 +2247,12 @@ POIN: 5`}
                   }}
                   className={`p-4 rounded-2xl border-2 text-left transition-all duration-150 cursor-pointer flex items-start gap-3.5 ${
                     examCategory === 'SEMESTER_UAS'
-                      ? 'border-[#4B3B78] bg-[#4B3B78]/5 ring-2 ring-[#4B3B78]/20 shadow-xs text-slate-900'
+                      ? 'border-primary-500 bg-primary-500/5 ring-2 ring-primary-500/20 shadow-xs text-slate-900'
                       : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-600 shadow-2xs'
                   }`}
                 >
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${
-                    examCategory === 'SEMESTER_UAS' ? 'bg-[#4B3B78] text-white' : 'bg-slate-100 text-slate-500'
+                    examCategory === 'SEMESTER_UAS' ? 'bg-primary-500 text-white' : 'bg-slate-100 text-slate-500'
                   }`}>
                     <AppIcon name="medal" color={examCategory === 'SEMESTER_UAS' ? 'white' : 'blue'} size={18} />
                   </div>
@@ -2260,7 +2260,7 @@ POIN: 5`}
                     <div className="flex items-center justify-between gap-2">
                       <p className="font-bold text-xs sm:text-sm text-slate-900">Ujian UAS / ASAS Semester (Koordinator)</p>
                       <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                        examCategory === 'SEMESTER_UAS' ? 'border-[#4B3B78] bg-[#4B3B78]' : 'border-slate-300 bg-white'
+                        examCategory === 'SEMESTER_UAS' ? 'border-primary-500 bg-primary-500' : 'border-slate-300 bg-white'
                       }`}>
                         {examCategory === 'SEMESTER_UAS' && <span className="w-1.5 h-1.5 rounded-full bg-white"></span>}
                       </span>
@@ -2276,12 +2276,12 @@ POIN: 5`}
                   onClick={() => setExamCategory('REGULAR')}
                   className={`p-4 rounded-2xl border-2 text-left transition-all duration-150 cursor-pointer flex items-start gap-3.5 ${
                     examCategory === 'REGULAR'
-                      ? 'border-[#4B3B78] bg-[#4B3B78]/5 ring-2 ring-[#4B3B78]/20 shadow-xs text-slate-900'
+                      ? 'border-primary-500 bg-primary-500/5 ring-2 ring-primary-500/20 shadow-xs text-slate-900'
                       : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-600 shadow-2xs'
                   }`}
                 >
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${
-                    examCategory === 'REGULAR' ? 'bg-[#4B3B78] text-white' : 'bg-slate-100 text-slate-500'
+                    examCategory === 'REGULAR' ? 'bg-primary-500 text-white' : 'bg-slate-100 text-slate-500'
                   }`}>
                     <AppIcon name="course" color={examCategory === 'REGULAR' ? 'white' : 'blue'} size={18} />
                   </div>
@@ -2289,7 +2289,7 @@ POIN: 5`}
                     <div className="flex items-center justify-between gap-2">
                       <p className="font-bold text-xs sm:text-sm text-slate-900">Ujian Reguler / Harian</p>
                       <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                        examCategory === 'REGULAR' ? 'border-[#4B3B78] bg-[#4B3B78]' : 'border-slate-300 bg-white'
+                        examCategory === 'REGULAR' ? 'border-primary-500 bg-primary-500' : 'border-slate-300 bg-white'
                       }`}>
                         {examCategory === 'REGULAR' && <span className="w-1.5 h-1.5 rounded-full bg-white"></span>}
                       </span>
@@ -2339,7 +2339,7 @@ POIN: 5`}
                         setClassName(relevantClasses[0].name);
                       }
                     }}
-                    className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium"
+                    className="w-full text-xs p-2.5 rounded-md border border-neutral-300 bg-white font-medium"
                   >
                     {subjects.map((s) => (
                       <option key={s.id || s.code} value={s.name}>
@@ -2361,7 +2361,7 @@ POIN: 5`}
                   <select
                     value={targetGradeLevel}
                     onChange={(e) => setTargetGradeLevel(e.target.value)}
-                    className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-bold text-primary-700"
+                    className="w-full text-xs p-2.5 rounded-md border border-neutral-300 bg-white font-bold text-primary-700"
                   >
                     <option value="7">Tingkat 7 (Semua Kelas 7)</option>
                     <option value="8">Tingkat 8 (Semua Kelas 8)</option>
@@ -2378,7 +2378,7 @@ POIN: 5`}
                     value={className}
                     onChange={(e) => setClassName(e.target.value)}
                     disabled={subjects.length === 0}
-                    className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium disabled:bg-neutral-100 disabled:text-neutral-400"
+                    className="w-full text-xs p-2.5 rounded-md border border-neutral-300 bg-white font-medium disabled:bg-neutral-100 disabled:text-neutral-400"
                   >
                     {getClassesForSubject(subject).map((cls) => (
                       <option key={cls.id || cls.name} value={cls.name}>
@@ -2467,7 +2467,7 @@ POIN: 5`}
                 <select
                   value={maxViolations}
                   onChange={(e) => setMaxViolations(Number(e.target.value))}
-                  className="w-full text-xs p-2.5 rounded-[8px] border border-neutral-300 bg-white font-medium truncate"
+                  className="w-full text-xs p-2.5 rounded-md border border-neutral-300 bg-white font-medium truncate"
                 >
                   <option value={1}>1x (Zero Tolerance - Ketat)</option>
                   <option value={2}>2x Pelanggaran</option>
@@ -2565,7 +2565,7 @@ POIN: 5`}
                 placeholder="Instruksi tambahan bagi peserta sebelum memulai ujian..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full text-xs p-3 rounded-[8px] border border-neutral-300 leading-relaxed"
+                className="w-full text-xs p-3 rounded-md border border-neutral-300 leading-relaxed"
               />
             </div>
 
@@ -2574,7 +2574,7 @@ POIN: 5`}
                 type="button"
                 variant="outline"
                 size="md"
-                className="w-full sm:w-auto min-h-[42px]"
+                className="w-full sm:w-auto min-h-10.5"
                 disabled={isSubmitting}
                 onClick={() => {
                   setIsCreateModalOpen(false);
@@ -2587,7 +2587,7 @@ POIN: 5`}
                 type="submit"
                 variant="primary"
                 size="md"
-                className="w-full sm:w-auto min-h-[42px] font-bold shadow-xs flex items-center justify-center gap-2"
+                className="w-full sm:w-auto min-h-10.5 font-bold shadow-xs flex items-center justify-center gap-2"
                 loading={isSubmitting}
                 disabled={isSubmitting || subjects.length === 0}
               >
@@ -2666,8 +2666,8 @@ POIN: 5`}
             onClick={() => setExamFilterTab('SEMESTER_UAS')}
             className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
               examFilterTab === 'SEMESTER_UAS'
-                ? 'bg-[#4B3B78] text-white shadow-xs'
-                : 'text-slate-600 hover:text-[#4B3B78] hover:bg-white/60'
+                ? 'bg-primary-500 text-white shadow-xs'
+                : 'text-slate-600 hover:text-primary-500 hover:bg-white/60'
             }`}
           >
             <AppIcon name="medal" color={examFilterTab === 'SEMESTER_UAS' ? 'white' : 'blue'} size={14} />
@@ -2767,7 +2767,7 @@ POIN: 5`}
 
                 {/* Title & Subject/Class */}
                 <div className="space-y-1">
-                  <h3 className="font-bold text-sm sm:text-base text-neutral-900 leading-snug break-words">
+                  <h3 className="font-bold text-sm sm:text-base text-neutral-900 leading-snug wrap-break-word">
                     {ex.title}
                   </h3>
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-600 font-medium">
@@ -2825,7 +2825,7 @@ POIN: 5`}
                       type="button"
                       disabled={activatingExamId === ex.id}
                       onClick={() => handleStartExamNow(ex)}
-                      className="flex-1 min-w-[110px] px-3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs border border-emerald-700/40 transition-all cursor-pointer whitespace-nowrap"
+                      className="flex-1 min-w-27.5 px-3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs border border-emerald-700/40 transition-all cursor-pointer whitespace-nowrap"
                     >
                       {activatingExamId === ex.id ? (
                         <>
@@ -2843,7 +2843,7 @@ POIN: 5`}
                     <button
                       type="button"
                       onClick={() => handleEndExamNow(ex)}
-                      className="flex-1 min-w-[100px] px-3 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs border border-rose-700/40 transition-all cursor-pointer whitespace-nowrap"
+                      className="flex-1 min-w-25 px-3 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs border border-rose-700/40 transition-all cursor-pointer whitespace-nowrap"
                     >
                       <AppIcon name="close-cancel" color="white" size={13} />
                       <span>Tutup Sesi</span>
@@ -2853,7 +2853,7 @@ POIN: 5`}
                   <button
                     type="button"
                     onClick={() => handleOpenQuestionEditor(ex)}
-                    className="flex-1 min-w-[125px] px-3.5 py-2.5 rounded-xl bg-[#4B3B78] hover:bg-[#3D2E66] active:bg-[#30264F] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs border border-[#3D2E66]/50 transition-all cursor-pointer whitespace-nowrap"
+                    className="flex-1 min-w-31.25 px-3.5 py-2.5 rounded-xl bg-primary-500 hover:bg-primary-700 active:bg-primary-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs border border-primary-700/50 transition-all cursor-pointer whitespace-nowrap"
                   >
                     <AppIcon name="edit" color="white" size={14} />
                     <span>Kelola Soal</span>
@@ -2936,7 +2936,7 @@ POIN: 5`}
                   return (
                     <tr key={ex.id} className="hover:bg-neutral-50/60 transition-colors">
                       {/* 1. Sesi Ujian & Sasaran */}
-                      <td className="py-3.5 px-4 max-w-[300px]">
+                      <td className="py-3.5 px-4 max-w-75">
                         <div className="space-y-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {isUas ? (
@@ -2962,7 +2962,7 @@ POIN: 5`}
                           </h3>
 
                           {ex.description && (
-                            <p className="text-[11px] text-neutral-400 truncate max-w-[280px]" title={ex.description}>
+                            <p className="text-[11px] text-neutral-400 truncate max-w-70" title={ex.description}>
                               {ex.description}
                             </p>
                           )}
@@ -3067,7 +3067,7 @@ POIN: 5`}
                           <button
                             type="button"
                             onClick={() => handleOpenQuestionEditor(ex)}
-                            className="px-3 py-2 rounded-xl bg-[#4B3B78] hover:bg-[#3D2E66] active:bg-[#30264F] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] border border-[#3D2E66]/50 transition-all duration-150 cursor-pointer whitespace-nowrap shrink-0"
+                            className="px-3 py-2 rounded-xl bg-primary-500 hover:bg-primary-700 active:bg-primary-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] border border-primary-700/50 transition-all duration-150 cursor-pointer whitespace-nowrap shrink-0"
                             title="Kelola Butir Soal"
                           >
                             <AppIcon name="edit" color="white" size={14} />

@@ -763,10 +763,10 @@ export default function PenilaianUASPage() {
               <tr className="border-b border-slate-200 bg-slate-50 font-semibold text-slate-600">
                 <th className="py-2.5 px-3 w-12 text-center">No</th>
                 <th className="py-2.5 px-3 w-28">NISN</th>
-                <th className="py-2.5 px-3 min-w-[160px]">Nama Siswa</th>
+                <th className="py-2.5 px-3 min-w-40">Nama Siswa</th>
                 <th className="py-2.5 px-3 w-24 text-center">Nilai UAS</th>
                 <th className="py-2.5 px-3 w-20 text-center">Predikat</th>
-                <th className="py-2.5 px-3 min-w-[280px]">Deskripsi Capaian Akhir Semester</th>
+                <th className="py-2.5 px-3 min-w-70">Deskripsi Capaian Akhir Semester</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
