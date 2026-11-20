@@ -541,10 +541,11 @@ func (h *ELearningHandler) ListExams(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
 	}
 	role := actorRole(c)
-	if isTeacherRole(role) && !canManageAll(role) && (actorID(c) != "" || strings.TrimSpace(c.Get("X-User-Name")) != "") {
+	forRapor := c.Query("for_rapor") == "true"
+	if isTeacherRole(role) && !canManageAll(role) && !forRapor && (actorID(c) != "" || strings.TrimSpace(c.Get("X-User-Name")) != "") {
 		filtered := list[:0]
 		for _, exam := range list {
-			if isOwnedByActor(c, exam.TeacherID, exam.TeacherName) {
+			if exam.IsCoordinatorExam || exam.ExamCategory == "SEMESTER_UAS" || exam.TargetGradeLevel != "" || isOwnedByActor(c, exam.TeacherID, exam.TeacherName) {
 				filtered = append(filtered, exam)
 			}
 		}
@@ -1548,8 +1549,11 @@ func (h *ELearningHandler) GetLiveProctoring(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusNotFound).JSON(responses.Fail("NOT_FOUND", "ujian tidak ditemukan"))
 	}
-	if err := h.requireExamOwner(c, exam); err != nil {
-		return c.Status(err.Code).JSON(responses.Fail("FORBIDDEN", err.Message))
+	isSharedExam := exam.IsCoordinatorExam || exam.ExamCategory == "SEMESTER_UAS" || exam.TargetGradeLevel != "" || c.Query("for_rapor") == "true"
+	if !isSharedExam {
+		if err := h.requireExamOwner(c, exam); err != nil {
+			return c.Status(err.Code).JSON(responses.Fail("FORBIDDEN", err.Message))
+		}
 	}
 	data, err := h.useCase.GetLiveProctoring(c.Context(), id)
 	if err != nil {

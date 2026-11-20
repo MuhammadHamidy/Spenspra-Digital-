@@ -289,19 +289,27 @@ export default function PenilaianUASPage() {
         const curSubNameNorm = normStr(subjectName);
 
         const checkSubMatch = (ex) => {
-          const exSub = normStr(ex.subject);
-          const exCode = normStr(ex.subjectCode);
-          return (
-            (exCode && curSubCodeNorm && exCode === curSubCodeNorm) ||
-            (exSub && curSubNameNorm && (exSub.includes(curSubNameNorm) || curSubNameNorm.includes(exSub))) ||
-            (exCode && curSubNameNorm && curSubNameNorm.includes(exCode)) ||
-            (exSub && curSubCodeNorm && (exSub.includes(curSubCodeNorm) || curSubCodeNorm === exSub))
-          );
+          const exSub = normStr(ex.subject || ex.course_name || '');
+          const exCode = normStr(ex.subjectCode || ex.course_id || '');
+          const exTitle = normStr(ex.title || '');
+          const exDesc = normStr(ex.description || ex.rawDescription || '');
+
+          // Direct match on code or name
+          if (exCode && curSubCodeNorm && (exCode === curSubCodeNorm || exCode.includes(curSubCodeNorm) || curSubCodeNorm.includes(exCode))) return true;
+          if (exSub && curSubNameNorm && (exSub.includes(curSubNameNorm) || curSubNameNorm.includes(exSub))) return true;
+          if (exCode && curSubNameNorm && curSubNameNorm.includes(exCode)) return true;
+          if (exSub && curSubCodeNorm && (exSub.includes(curSubCodeNorm) || curSubCodeNorm === exSub)) return true;
+
+          // Check title and description for subject name or code
+          if (curSubNameNorm && (exTitle.includes(curSubNameNorm) || exDesc.includes(curSubNameNorm))) return true;
+          if (curSubCodeNorm && (exTitle.includes(curSubCodeNorm) || exDesc.includes(curSubCodeNorm))) return true;
+
+          return false;
         };
 
         const checkClassMatch = (ex) => {
-          const exNorm = normalizeClassCode(ex.className);
-          const isCoordinator = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+          const exNorm = normalizeClassCode(ex.className || ex.class_code || '');
+          const isCoordinator = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel) || /uas|asas/i.test(ex.title || '');
           const exGrade = extractGradeLevelDigit(ex.targetGradeLevel || ex.className || ex.title || ex.rawDescription || '');
 
           if (exNorm && exNorm === cNorm) return true;
@@ -314,6 +322,8 @@ export default function PenilaianUASPage() {
           if (ex.targetGradeLevel && classGrade && String(ex.targetGradeLevel) === classGrade) {
             return true;
           }
+          if (isCoordinator && !exGrade) return true;
+
           return false;
         };
 

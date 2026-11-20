@@ -102,7 +102,7 @@ func NewFiber(cfg *Config) *fiber.App {
 			return true
 		},
 		AllowCredentials: true,
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-User-Id, X-Institution-Id, X-Requested-With",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-User-Id, X-User-Role, X-User-Name, X-Institution-Id, X-Requested-With",
 		AllowMethods:     "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD",
 	}))
 

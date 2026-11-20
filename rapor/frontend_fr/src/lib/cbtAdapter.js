@@ -1,21 +1,76 @@
 import { tokenStorage } from './common/tokenStorage';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+function getCbtApiBases() {
+  const bases = [];
+  if (typeof window !== 'undefined') {
+    const origin = window.location.origin;
+    const host = window.location.hostname;
 
-async function fetchJson(endpoint, options = {}) {
-  const url = `${BASE_URL}${endpoint}`;
+    // 1. Lewat reverse proxy Nginx pada domain e-Rapor saat ini
+    bases.push(`${origin}/api/cbt`);
+
+    // 2. Domain publik produksi LMS/CBT Belajar
+    if (host.includes('spenspra.com')) {
+      bases.push('https://belajar.spenspra.com/api');
+    } else if (host.includes('spenspra.sch.id')) {
+      bases.push('https://belajar.spenspra.sch.id/api');
+    }
+
+    // 3. Lingkungan pengembangan localhost
+    if (host.includes('localhost') || host === '127.0.0.1') {
+      bases.push('http://localhost:8084/api');
+      bases.push('http://localhost:8080/api');
+      bases.push('http://belajar.localhost/api');
+      bases.push(`${origin}/api`);
+    }
+  }
+
+  if (process.env.NEXT_PUBLIC_ELEARNING_API_URL) {
+    bases.push(process.env.NEXT_PUBLIC_ELEARNING_API_URL);
+  }
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    bases.push(process.env.NEXT_PUBLIC_API_URL);
+  }
+
+  bases.push('http://localhost:8084/api');
+  bases.push('http://localhost:8080/api');
+
+  return [...new Set(bases.filter(Boolean))];
+}
+
+async function fetchCbtJson(endpoint, options = {}) {
+  const currentUser = tokenStorage.getUser();
+  const userId = currentUser?.id || currentUser?.nimNip || currentUser?.nip || currentUser?.username || '';
+  const userRole = (currentUser?.role || currentUser?.roleName || currentUser?.role_name || 'GURU').toUpperCase();
+  const userName = currentUser?.fullName || currentUser?.full_name || currentUser?.name || '';
   const token = tokenStorage.getToken();
+
   const headers = {
     'Content-Type': 'application/json',
+    ...(userId ? { 'X-User-Id': userId } : {}),
+    ...(userRole ? { 'X-User-Role': userRole } : {}),
+    ...(userName ? { 'X-User-Name': userName } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers || {}),
   };
-  try {
-    const res = await fetch(url, { ...options, headers });
-    return await res.json();
-  } catch (err) {
-    return { success: false, error: err.message };
+
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const candidateBases = getCbtApiBases();
+
+  for (const base of candidateBases) {
+    const url = `${base}${cleanEndpoint}`;
+    try {
+      const res = await fetch(url, { ...options, headers });
+      if (res.ok) {
+        const json = await res.json();
+        return json;
+      }
+    } catch (_) {
+      // Coba base URL berikutnya
+    }
   }
+
+  return { success: false, error: 'Tidak dapat terhubung ke server CBT' };
 }
 
 function getLocal(key, fallback = null) {
@@ -28,26 +83,60 @@ function getLocal(key, fallback = null) {
   }
 }
 
+function normalizeExamItem(e) {
+  if (!e) return null;
+  const isUas = e.examCategory === 'SEMESTER_UAS' || e.exam_category === 'SEMESTER_UAS' || Boolean(e.isCoordinatorExam) || Boolean(e.is_coordinator_exam) || Boolean(e.targetGradeLevel || e.target_grade_level);
+  return {
+    ...e,
+    id: String(e.id || ''),
+    title: e.title || '',
+    subject: e.subject || e.course_name || '',
+    course_name: e.course_name || e.subject || '',
+    subjectCode: e.subjectCode || e.course_id || 'MAPEL',
+    course_id: e.course_id || e.subjectCode || 'MAPEL',
+    className: e.className || e.class_code || '',
+    class_code: e.class_code || e.className || '',
+    examCategory: isUas ? 'SEMESTER_UAS' : (e.examCategory || e.exam_category || 'REGULAR'),
+    exam_category: isUas ? 'SEMESTER_UAS' : (e.exam_category || e.examCategory || 'REGULAR'),
+    isCoordinatorExam: isUas,
+    is_coordinator_exam: isUas,
+    targetGradeLevel: e.targetGradeLevel || e.target_grade_level || '',
+    target_grade_level: e.target_grade_level || e.targetGradeLevel || '',
+    targetClasses: Array.isArray(e.targetClasses) ? e.targetClasses : (Array.isArray(e.target_classes) ? e.target_classes : []),
+    token: e.token || '',
+    teacherName: e.teacherName || e.teacher_name || '',
+  };
+}
+
 export const cbtAdapter = {
   // Ambil seluruh daftar ujian CBT (dari server backend + cache browser)
   getExams: async () => {
     const local1 = getLocal('spenspra_exams', []);
     const local2 = getLocal('spenspra_elearning_exams', []);
+    const local3 = getLocal('exams', []);
     const localExams = [
       ...(Array.isArray(local1) ? local1 : []),
       ...(Array.isArray(local2) ? local2 : []),
+      ...(Array.isArray(local3) ? local3 : []),
     ];
 
     try {
-      const res = await fetchJson('/exams');
+      const res = await fetchCbtJson('/exams?for_rapor=true');
       if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
         const map = new Map();
-        localExams.forEach((e) => map.set(e.id, e));
-        res.data.forEach((e) => map.set(e.id, { ...(map.get(e.id) || {}), ...e }));
+        localExams.forEach((e) => {
+          const norm = normalizeExamItem(e);
+          if (norm?.id) map.set(norm.id, norm);
+        });
+        res.data.forEach((e) => {
+          const norm = normalizeExamItem(e);
+          if (norm?.id) map.set(norm.id, { ...(map.get(norm.id) || {}), ...norm });
+        });
         return Array.from(map.values());
       }
     } catch (_) {}
-    return localExams;
+
+    return localExams.map(normalizeExamItem).filter(Boolean);
   },
 
   // Ambil sesi ujian CBT untuk mendapatkan skor siswa
@@ -63,7 +152,7 @@ export const cbtAdapter = {
 
     let serverSessions = [];
     try {
-      const res = await fetchJson(`/exams/${examId}/monitoring`);
+      const res = await fetchCbtJson(`/exams/${examId}/monitoring?for_rapor=true`);
       if (res?.success && res?.data) {
         if (Array.isArray(res.data)) serverSessions = res.data;
         else if (Array.isArray(res.data.sessions)) serverSessions = res.data.sessions;
