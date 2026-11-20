@@ -152,21 +152,6 @@ export const DEFAULT_CLASSES = [
   { id: 'cls-9h', name: '9H', level: 9, academicYear: '2026/2027' },
 ];
 
-export const OFFICIAL_SUBJECTS = [
-  { id: 'crs-mtk', code: 'MAT', name: 'Matematika', category: 'Umum', color: 'indigo', icon: '📐', description: 'Pembelajaran Matematika Kurikulum Merdeka' },
-  { id: 'crs-bin', code: 'BIN', name: 'Bahasa Indonesia', category: 'Umum', color: 'emerald', icon: '📖', description: 'Literasi dan Bahasa Indonesia' },
-  { id: 'crs-ipa', code: 'IPA', name: 'Ilmu Pengetahuan Alam', category: 'Umum', color: 'teal', icon: '🔬', description: 'Eksperimen & Pengetahuan Alam Terpadu' },
-  { id: 'crs-ips', code: 'IPS', name: 'Ilmu Pengetahuan Sosial', category: 'Umum', color: 'amber', icon: '🌍', description: 'Studi Sosial, Geografi, dan Sejarah' },
-  { id: 'crs-big', code: 'BIG', name: 'Bahasa Inggris', category: 'Umum', color: 'purple', icon: '💬', description: 'English Communication & Literacy' },
-  { id: 'crs-pp',  code: 'PP',  name: 'Pendidikan Pancasila', category: 'Umum', color: 'rose', icon: '🏛️', description: 'Pendidikan Pancasila dan Kewarganegaraan' },
-  { id: 'crs-inf', code: 'INF', name: 'Informatika', category: 'Umum', color: 'sky', icon: '💻', description: 'Teknologi Informasi & Berpikir Komputasional' },
-  { id: 'crs-pai', code: 'PAI', name: 'Pendidikan Agama Islam', category: 'Umum', color: 'green', icon: '🕌', description: 'Pendidikan Agama Islam dan Budi Pekerti' },
-  { id: 'crs-pjok', code: 'PJOK', name: 'Pendidikan Jasmani', category: 'Umum', color: 'orange', icon: '⚽', description: 'Olahraga, Kebugaran Jasmani, dan Kesehatan' },
-  { id: 'crs-sbd', code: 'SBP', name: 'Seni Budaya & Prakarya', category: 'Umum', color: 'pink', icon: '🎨', description: 'Seni Rupa, Musik, Tari, dan Kriya Prakarya' },
-  { id: 'crs-bj',  code: 'BJ',  name: 'Bahasa Jawa', category: 'Muatan Lokal', color: 'yellow', icon: '📜', description: 'Muatan Lokal Bahasa dan Sastra Jawa' },
-  { id: 'crs-btq', code: 'BTQ', name: 'Baca Tulis Al-Qur\'an', category: 'Muatan Lokal', color: 'cyan', icon: '✨', description: 'Muatan Lokal BTQ & Keagamaan' },
-];
-
 // Filter to completely purge any legacy dummy or demo items from client localStorage
 const DUMMY_IDS = new Set([
   'mat-001', 'mat-002', 'mat-003', 'mat-004',
@@ -1024,9 +1009,12 @@ export const elearningApi = {
 
   // =================== MATA PELAJARAN (COURSES / SUBJECTS) ===================
   getSubjects: async () => {
-    // 1. Ambil dari SSO master courses & backend
-    const [ssoRes, beRes] = await Promise.all([
+    // Ambil dari master mata pelajaran yang dikelola Admin e-Rapor/SSO,
+    // bukan dari daftar mata pelajaran hardcode aplikasi.
+    const raporBase = getRaporApiBase();
+    const [ssoRes, raporRes, beRes] = await Promise.all([
       fetchSsoJson('/school/courses').catch(() => null),
+      fetchPublicJson(`${raporBase}/school/courses`).catch(() => null),
       fetchJson('/school/courses').catch(() => null),
     ]);
 
@@ -1035,16 +1023,17 @@ export const elearningApi = {
     else if (Array.isArray(ssoRes)) rawCourses.push(...ssoRes);
     else if (Array.isArray(ssoRes?.data?.courses)) rawCourses.push(...ssoRes.data.courses);
 
+    if (raporRes?.success && Array.isArray(raporRes.data)) rawCourses.push(...raporRes.data);
+    else if (Array.isArray(raporRes)) rawCourses.push(...raporRes);
+    else if (Array.isArray(raporRes?.data?.courses)) rawCourses.push(...raporRes.data.courses);
+
     if (beRes?.success && Array.isArray(beRes.data)) rawCourses.push(...beRes.data);
 
-    const customSubjects = getLocal('custom_subjects', []);
     const mergedMap = new Map();
-
-    // Official 12 Spenspra standard subjects as baseline
-    OFFICIAL_SUBJECTS.forEach((s) => mergedMap.set(s.code.toUpperCase(), { ...s }));
-
-    // Merge SSO subjects & custom subjects
-    [...rawCourses, ...customSubjects].forEach((c) => {
+    
+    // Gunakan hanya mata pelajaran yang terdaftar pada master SSO/e-Rapor.
+    // Jangan menambahkan daftar mapel hardcode sebagai fallback.
+    rawCourses.forEach((c) => {
       if (!c) return;
       const code = (c.code || c.course_code || c.id || '').toUpperCase();
       const name = c.name || c.course_name || c.title || code;

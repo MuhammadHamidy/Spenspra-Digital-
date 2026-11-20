@@ -29,7 +29,29 @@ const formatDateDisplay = (dateStr) => {
   }
 };
 
-const MATH_SYMBOLS = ['²', '³', '√', 'π', '∞', '≤', '≥', '≠', '≈', '×', '÷', '±', '∑', '∫', 'Δ', 'α', 'β', '°'];
+const MATH_SYMBOLS = [
+  '²', '³', '√', 'π', '∞', '≤', '≥', '≠', '≈', '×', '÷', '±', '½', '¼', '¾',
+  '∑', '∫', 'Δ', 'θ', 'α', 'β', 'γ', 'λ', 'μ', 'σ', 'Σ', '°', '∝', '∈', '∉', '∅',
+];
+
+function MathSymbolToolbar({ onInsert, label = 'Simbol matematika', compact = false }) {
+  return (
+    <div className={`flex flex-wrap items-center gap-1 ${compact ? 'pl-11 pt-1' : 'rounded-lg border border-slate-200 bg-slate-50 p-2'}`}>
+      {!compact && <span className="mr-1 text-[10px] font-bold text-slate-500">{label}:</span>}
+      {MATH_SYMBOLS.map((symbol) => (
+        <button
+          key={symbol}
+          type="button"
+          onClick={() => onInsert(symbol)}
+          className="min-w-7 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs font-semibold text-slate-700 hover:border-primary-300 hover:bg-primary-50"
+          title={`Tambahkan ${symbol}`}
+        >
+          {symbol}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function parseQuestionImport(text) {
   const lines = String(text || '')
@@ -154,9 +176,9 @@ export default function TeacherExamsManagementPage() {
   const [supervisorPin, setSupervisorPin] = useState(() => generateRandomPin(6));
   const [examFilterTab, setExamFilterTab] = useState('ALL'); // 'ALL' | 'SEMESTER_UAS' | 'REGULAR'
   const [title, setTitle] = useState('');
-  const [subject, setSubject] = useState('Matematika');
-  const [subjectCode, setSubjectCode] = useState('MAT');
-  const [className, setClassName] = useState('7A');
+  const [subject, setSubject] = useState('');
+  const [subjectCode, setSubjectCode] = useState('');
+  const [className, setClassName] = useState('');
   const [token, setToken] = useState('');
   const [examDate, setExamDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [startTime, setStartTime] = useState('08:00');
@@ -316,9 +338,9 @@ export default function TeacherExamsManagementPage() {
     setExamCategory(isUas ? 'SEMESTER_UAS' : 'REGULAR');
     setTargetGradeLevel(ex.targetGradeLevel || '7');
     setSupervisorPin(ex.supervisorPin || generateRandomPin(6));
-    setSubject(ex.subject || subjects[0]?.name || 'Matematika');
-    setSubjectCode(ex.subjectCode || subjects[0]?.code || 'MAT');
-    setClassName(ex.className || classes[0]?.name || '7A');
+    setSubject(ex.subject || subjects[0]?.name || '');
+    setSubjectCode(ex.subjectCode || subjects[0]?.code || '');
+    setClassName(ex.className || classes[0]?.name || '');
     setToken(ex.token || '');
     setDurationMinutes(ex.durationMinutes || 60);
     setMaxViolations(ex.maxViolations || 1);
@@ -1269,21 +1291,10 @@ export default function TeacherExamsManagementPage() {
                     className="w-full text-xs sm:text-sm p-3.5 rounded-xl border border-neutral-300 bg-white font-sans leading-relaxed focus:outline-hidden focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                     required
                   />
-                  <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2">
-                    <span className="mr-1 text-[10px] font-bold text-slate-500">Simbol matematika:</span>
-                    {MATH_SYMBOLS.map((symbol) => (
-                      <button
-                        key={symbol}
-                        type="button"
-                        onClick={() => setNewQuestionText((current) => `${current}${symbol}`)}
-                        className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:border-primary-300 hover:bg-primary-50"
-                        title={`Tambahkan ${symbol}`}
-                      >
-                        {symbol}
-                      </button>
-                    ))}
-                    <span className="ml-1 text-[10px] text-slate-400">Simbol lain dapat langsung ditempel dari Word/LaTeX.</span>
-                  </div>
+                  <MathSymbolToolbar
+                    onInsert={(symbol) => setNewQuestionText((current) => `${current}${symbol}`)}
+                  />
+                  <p className="text-[10px] text-slate-400">Simbol lain dapat langsung ditempel dari Word atau ditulis sebagai teks LaTeX/Unicode.</p>
                 </div>
 
                 {/* 4A. Form Khusus Pilihan Ganda Tunggal: Opsi A, B, C, D & 1 Kunci */}
@@ -1336,6 +1347,10 @@ export default function TeacherExamsManagementPage() {
                               onChange={(e) => opt.setter(e.target.value)}
                               className="min-w-45 flex-1 text-xs bg-transparent border-0 focus:outline-hidden p-1 font-medium text-neutral-800"
                               required={!opt.optional && !opt.image}
+                            />
+                            <MathSymbolToolbar
+                              compact
+                              onInsert={(symbol) => opt.setter((current) => `${current || ''}${symbol}`)}
                             />
                             <div className="flex w-full items-center gap-2 pl-11">
                               <input
@@ -1444,6 +1459,10 @@ export default function TeacherExamsManagementPage() {
                               onChange={(e) => opt.setter(e.target.value)}
                               className="min-w-45 flex-1 text-xs bg-transparent border-0 focus:outline-hidden p-1 font-medium text-neutral-800"
                               required={!opt.optional && !opt.image}
+                            />
+                            <MathSymbolToolbar
+                              compact
+                              onInsert={(symbol) => opt.setter((current) => `${current || ''}${symbol}`)}
                             />
                             <div className="flex w-full items-center gap-2 pl-11">
                               <input

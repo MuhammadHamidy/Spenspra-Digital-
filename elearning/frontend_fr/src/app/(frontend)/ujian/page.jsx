@@ -7,6 +7,7 @@ import Button from '@/components/Button';
 import StatusBadge from '@/components/StatusBadge';
 import Input from '@/components/Input';
 import ConfirmModal from '@/components/ConfirmModal';
+import AppIcon from '@/components/AppIcon';
 import { elearningApi, isItemForStudent } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
