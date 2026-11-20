@@ -129,7 +129,11 @@ export function StudentQuestionView({ question: q, number, showKey = false }) {
                   <span className="text-xs sm:text-sm text-neutral-800 leading-normal">{opt.text}</span>
                   {opt.imageUrl && <img src={opt.imageUrl} alt={`Opsi ${opt.key}`} className="mt-1 max-h-24 rounded object-contain" />}
                 </div>
-                {isKey && <span className="text-[10px] font-bold text-emerald-700 shrink-0 pr-2">KUNCI</span>}
+                {isKey && (
+                  <span className="text-[10px] font-bold text-emerald-700 shrink-0 pr-2">
+                    {q.keySource === 'WARNA_MERAH' ? '✓ KUNCI (Teks Merah)' : '✓ KUNCI'}
+                  </span>
+                )}
               </div>
             );
           })}
@@ -172,7 +176,11 @@ export function StudentQuestionView({ question: q, number, showKey = false }) {
                   <span className="text-xs sm:text-sm text-neutral-800">{opt.text}</span>
                   {opt.imageUrl && <img src={opt.imageUrl} alt={`Opsi ${opt.key}`} className="mt-1 max-h-24 rounded object-contain" />}
                 </div>
-                {isKey && <span className="text-[10px] font-bold text-emerald-700 shrink-0">KUNCI</span>}
+                {isKey && (
+                  <span className="text-[10px] font-bold text-emerald-700 shrink-0">
+                    {q.keySource === 'WARNA_MERAH' ? '✓ KUNCI (Teks Merah)' : '✓ KUNCI'}
+                  </span>
+                )}
               </div>
             );
           })}

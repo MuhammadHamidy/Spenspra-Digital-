@@ -12,6 +12,7 @@ import AppIcon from '@/components/AppIcon';
 import { elearningApi, generateRandomPin } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 import mammoth from 'mammoth';
+import JSZip from 'jszip';
 import {
   StudentPreviewModal,
   StudentQuestionView,
@@ -59,7 +60,108 @@ function MathSymbolToolbar({ onInsert, label = 'Simbol matematika', compact = fa
   );
 }
 
-function parseQuestionImport(text) {
+// Memeriksa apakah kode warna heksadesimal atau nama warna tergolong merah atau hijau (tanda kunci jawaban)
+function isAnswerColor(hexOrName) {
+  if (!hexOrName) return false;
+  const s = String(hexOrName).trim().toLowerCase();
+  if (['red', 'darkred', 'crimson', 'firebrick', 'green', 'darkgreen'].includes(s)) return true;
+  if (/^[0-9a-f]{6}$/.test(s)) {
+    const r = parseInt(s.slice(0, 2), 16);
+    const g = parseInt(s.slice(2, 4), 16);
+    const b = parseInt(s.slice(4, 6), 16);
+    // Warna merah dominan (misal #EE0000, #FF0000, #C00000, #ED1C24)
+    if (r > 150 && g < 115 && b < 115) return true;
+    if (r > 130 && r > g * 1.6 && r > b * 1.6) return true;
+    // Warna hijau dominan
+    if (g > 130 && g > r * 1.5 && g > b * 1.5) return true;
+  }
+  return false;
+}
+
+// Mengekstrak opsi jawaban yang diberi tinta merah/stabilo langsung dari XML Word (.docx)
+function extractColoredKeysFromDocxXml(docXml) {
+  if (!docXml) return { keysByNumber: {}, keysInOrder: [] };
+  const paragraphs = docXml.match(/<w:p\b[\s\S]*?<\/w:p>/g) || [];
+  let currentQNum = null;
+  const keysByNumber = {};
+  const keysInOrder = [];
+
+  paragraphs.forEach((p) => {
+    const runs = p.match(/<w:r\b[\s\S]*?<\/w:r>/g) || [];
+    let pFullText = '';
+    const runList = [];
+
+    runs.forEach((r) => {
+      const c = r.match(/<w:color\s+w:val="([^"]+)"/i);
+      const h = r.match(/<w:highlight\s+w:val="([^"]+)"/i);
+      const text = (r.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [])
+        .map((x) => x.replace(/<[^>]+>/g, ''))
+        .join('');
+      if (text) {
+        pFullText += text;
+        const colorVal = c ? c[1] : null;
+        const highlightVal = h ? h[1] : null;
+        const isColored = isAnswerColor(colorVal) || ['red', 'yellow', 'green', 'cyan'].includes(String(highlightVal).toLowerCase());
+        runList.push({ text, isColored, color: colorVal, highlight: highlightVal });
+      }
+    });
+
+    const trimmed = pFullText.trim();
+    if (!trimmed) return;
+
+    // Deteksi nomor atau header soal
+    const qMatch = trimmed.match(/^(?:soal\s*|pertanyaan\s*)?(?:nomor\s*)?(\d+)\s*[.)\]:\-]/i);
+    const headerMatch = trimmed.match(/^(?:soal|nomor|no\.?)\s*(?:nomor\s*)?(\d+)\s*$/i);
+    if (qMatch) {
+      currentQNum = Number(qMatch[1]);
+    } else if (headerMatch) {
+      currentQNum = Number(headerMatch[1]);
+    }
+
+    const hasColored = runList.some((r) => r.isColored);
+    if (hasColored && currentQNum) {
+      // Cari opsi (A-E) mana yang berada di dalam potongan teks berwarna
+      const markerRegex = /(?:^|[\s\u00A0]+)([A-E])\s*[.)\]:\-]\s+/g;
+      const markers = Array.from(trimmed.matchAll(markerRegex));
+      if (markers.length > 0) {
+        const options = markers.map((m, i) => {
+          const key = m[1].toUpperCase();
+          const start = m.index;
+          const end = i + 1 < markers.length ? markers[i + 1].index : trimmed.length;
+          return { key, start, end };
+        });
+
+        let charPos = 0;
+        for (const r of runList) {
+          const runStart = charPos;
+          const runEnd = charPos + r.text.length;
+          charPos = runEnd;
+          if (r.isColored) {
+            const matched = options.find((opt) => runStart < opt.end && runEnd > opt.start);
+            if (matched && !keysByNumber[currentQNum]) {
+              keysByNumber[currentQNum] = matched.key;
+              keysInOrder.push(matched.key);
+              break;
+            }
+          }
+        }
+      } else {
+        // Baris tanpa marker eksplisit di awal, cek apakah huruf opsi A-E diwarnai
+        const single = trimmed.match(/^([A-E])(?![A-Za-z])/i);
+        if (single && !keysByNumber[currentQNum]) {
+          const key = single[1].toUpperCase();
+          keysByNumber[currentQNum] = key;
+          keysInOrder.push(key);
+        }
+      }
+    }
+  });
+
+  return { keysByNumber, keysInOrder };
+}
+
+function parseQuestionImport(text, options = {}) {
+  const { coloredKeysByNumber = {}, coloredKeysInOrder = [] } = options;
   const allLines = String(text || '')
     .split(/\r?\n/)
     .map((line) => line.replace(/\t/g, ' ').trim())
@@ -232,13 +334,27 @@ function parseQuestionImport(text) {
 
   pushCurrent();
   questions.forEach((question, index) => {
+    // 1. Kunci sudah terdeteksi di teks eksplisit (cth: KUNCI: B)
     if (question.keyDetected) return;
+
+    // 2. Kunci otomatis terdeteksi dari teks bertinta merah / stabilo pada dokumen Word (.docx)
+    const colorKey = coloredKeysByNumber[question.questionNumber] || coloredKeysInOrder[index];
+    if (colorKey) {
+      question.correctOption = colorKey;
+      question.keyDetected = true;
+      question.keySource = 'WARNA_MERAH';
+      return;
+    }
+
+    // 3. Kunci dari daftar kunci terpisah di akhir dokumen (header Kunci Jawaban)
     const key = answerKeyByNumber[question.questionNumber] || answerKeyList[index];
     if (key) {
       question.correctOption = key;
       question.keyDetected = true;
+      question.keySource = 'DAFTAR_KUNCI';
     }
   });
+
   return questions.map((question, index) => ({
     id: `q-import-${Date.now()}-${index}`,
     questionNumber: index + 1,
@@ -247,6 +363,7 @@ function parseQuestionImport(text) {
     options: question.options,
     correctOption: question.correctOption,
     keyDetected: question.keyDetected,
+    keySource: question.keySource || undefined,
     points: question.points || 10,
     stimulusText: question.stimulusText || undefined,
     imageUrl: question.imageUrl || undefined,
@@ -255,7 +372,7 @@ function parseQuestionImport(text) {
 
 // Hapus field bantu parser sebelum dikirim ke server
 const stripImportMeta = (question) => {
-  const { keyDetected, ...rest } = question;
+  const { keyDetected, keySource, ...rest } = question;
   return rest;
 };
 
@@ -1105,6 +1222,23 @@ export default function TeacherExamsManagementPage() {
     setIsImporting(true);
     try {
       const arrayBuffer = await file.arrayBuffer();
+
+      // Ekstraksi kunci jawaban berwarna (merah/stabilo) langsung dari word/document.xml
+      let coloredKeysByNumber = {};
+      let coloredKeysInOrder = [];
+      try {
+        const zip = await JSZip.loadAsync(arrayBuffer);
+        const docXmlFile = zip.file('word/document.xml');
+        if (docXmlFile) {
+          const docXml = await docXmlFile.async('string');
+          const res = extractColoredKeysFromDocxXml(docXml);
+          coloredKeysByNumber = res.keysByNumber;
+          coloredKeysInOrder = res.keysInOrder;
+        }
+      } catch (zipErr) {
+        console.warn('Gagal membaca warna XML docx:', zipErr);
+      }
+
       const result = await mammoth.convertToHtml(
         { arrayBuffer },
         {
@@ -1142,7 +1276,7 @@ export default function TeacherExamsManagementPage() {
         if (text) lines.push(text);
       });
 
-      const imported = parseQuestionImport(lines.join('\n'));
+      const imported = parseQuestionImport(lines.join('\n'), { coloredKeysByNumber, coloredKeysInOrder });
       if (imported.length === 0) {
         throw new Error('Struktur soal tidak dikenali. Pastikan file memuat nomor soal (cth: 1. Soal atau Soal 1) dan opsi A-D.');
       }
@@ -2287,6 +2421,11 @@ export default function TeacherExamsManagementPage() {
                                 <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[10px] flex items-center gap-1">
                                   <span>Kunci:</span>
                                   <strong>{q.correctOption || 'A'}</strong>
+                                  {q.keySource === 'WARNA_MERAH' && (
+                                    <span className="text-[9px] font-semibold text-rose-700 bg-rose-50 px-1 py-0.2 rounded border border-rose-200" title="Kunci terdeteksi dari teks merah Word">
+                                      Teks Merah
+                                    </span>
+                                  )}
                                 </span>
                               )}
                               {q.type === 'COMPLEX_MCQ' && (
@@ -2570,8 +2709,16 @@ export default function TeacherExamsManagementPage() {
                           <span>File Word Terbaca: {docxFileName}</span>
                         </p>
                         <p className="text-xs text-emerald-800">
-                          Berhasil mendeteksi <strong>{docxImported.length} butir soal</strong> dari file Word Anda (lengkap dengan wacana dan kunci jawaban).
+                          Berhasil mendeteksi <strong>{docxImported.length} butir soal</strong> dari file Word Anda (lengkap dengan wacana dan opsi jawaban).
                         </p>
+                        {docxImported.some((q) => q.keySource === 'WARNA_MERAH') && (
+                          <p className="text-xs font-semibold text-emerald-950 bg-white/80 p-2 rounded-lg border border-emerald-300 flex items-center gap-1.5">
+                            <span>✨</span>
+                            <span>
+                              Kunci jawaban otomatis terdeteksi dari <strong>teks/opsi berwarna merah</strong> pada naskah Word!
+                            </span>
+                          </p>
+                        )}
                       </div>
                       <button
                         type="button"
@@ -2602,23 +2749,29 @@ export default function TeacherExamsManagementPage() {
                         <span>Preview Tampilan Siswa ({docxImported.length} Soal)</span>
                       </button>
                       <span className="text-[11px] text-neutral-500">
-                        Klik preview untuk memastikan tampilan soal sebelum disimpan ke database.
+                        Klik tombol di atas untuk memastikan butir soal dan kunci sudah sesuai sebelum disimpan ke database.
                       </span>
                     </div>
                   </div>
                 ) : (
                   <>
-                    <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-[11px] text-blue-900 space-y-1">
-                      <p className="font-bold">Cara Impor Soal:</p>
-                      <p>
-                        Pilih file Word (.docx) di bawah, atau tempelkan teks naskah soal. Sistem otomatis mendeteksi nomor soal, teks pertanyaan, wacana/stimulus, opsi A-E, dan daftar kunci jawaban.
+                    <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-[11px] text-blue-900 space-y-1.5">
+                      <p className="font-bold flex items-center gap-1.5 text-blue-950">
+                        <span>💡</span>
+                        <span>Mendukung Deteksi Otomatis Kunci Teks Merah:</span>
+                      </p>
+                      <p className="leading-relaxed">
+                        • <strong>Teks Pilihan Berwarna Merah</strong>: Cukup warnai huruf atau teks jawaban yang benar dengan <strong>tinta merah</strong> di Microsoft Word (seperti <code>B. Jawaban...</code>), sistem akan otomatis mendeteksinya sebagai kunci jawaban!
+                      </p>
+                      <p className="leading-relaxed">
+                        • <strong>Kunci Tertulis</strong>: Sistem juga tetap mendukung format <code>Kunci: B</code> di bawah soal atau daftar <strong>Kunci Jawaban</strong> di akhir file.
                       </p>
                     </div>
 
                     <label className="flex cursor-pointer flex-col gap-1 rounded-xl border-2 border-dashed border-primary-300 bg-primary-50/50 p-5 text-center hover:bg-primary-50 transition">
                       <span className="text-xs font-bold text-primary-800">Pilih Berkas Word (.docx, .docm, .dotx)</span>
                       <span className="text-[10px] text-primary-600">
-                        Sistem mendeteksi wacana kasus, teks soal, opsi A-E, kunci jawaban, dan gambar.
+                        Sistem mendeteksi wacana kasus, teks soal, opsi A-E, kunci bertinta merah, dan gambar.
                       </span>
                       {docxFileName && <span className="text-[10px] font-semibold text-emerald-700">{docxFileName}</span>}
                       <input
