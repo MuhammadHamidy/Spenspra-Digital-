@@ -12,6 +12,12 @@ import AppIcon from '@/components/AppIcon';
 import { elearningApi, generateRandomPin } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 import mammoth from 'mammoth';
+import {
+  StudentPreviewModal,
+  StudentQuestionView,
+  getQuestionIssues,
+  getTypeMeta,
+} from '@/components/exam/StudentQuestionPreview';
 
 const formatDateDisplay = (dateStr) => {
   if (!dateStr) return 'Sesuai Jadwal';
@@ -54,27 +60,71 @@ function MathSymbolToolbar({ onInsert, label = 'Simbol matematika', compact = fa
 }
 
 function parseQuestionImport(text) {
-  const lines = String(text || '')
+  const allLines = String(text || '')
     .split(/\r?\n/)
     .map((line) => line.replace(/\t/g, ' ').trim())
     .filter(Boolean);
+
+  // Bagian "Kunci Jawaban" terpisah di akhir dokumen (cth. "Kunci Jawaban" lalu baris "A", "D", ... atau "1. A")
+  const keyHeaderIdx = allLines.findIndex((line) => /^kunci(?:\s+jawaban)?\s*[:.]?$/i.test(line));
+  const answerKeyList = [];
+  const answerKeyByNumber = {};
+  const lines = keyHeaderIdx >= 0 ? allLines.slice(0, keyHeaderIdx) : allLines;
+  if (keyHeaderIdx >= 0) {
+    allLines.slice(keyHeaderIdx + 1).forEach((line) => {
+      const multi = Array.from(line.matchAll(/(\d+)\s*[.)\-:=]?\s*([A-E])(?![A-Za-z])/g));
+      if (multi.length > 1) {
+        multi.forEach((m) => { answerKeyByNumber[Number(m[1])] = m[2].toUpperCase(); });
+        return;
+      }
+      const single = line.match(/^(?:(\d+)\s*[.)\-:=]?\s*)?([A-E])(?![A-Za-z])/i);
+      if (!single) return;
+      const key = single[2].toUpperCase();
+      if (single[1]) answerKeyByNumber[Number(single[1])] = key;
+      answerKeyList.push(key);
+    });
+  }
+
   const questions = [];
   let current = null;
   let currentOption = null;
+  // Blok "Soal N" (tanpa titik) biasanya diikuti wacana/stimulus sebelum nomor pertanyaan.
+  let collectingStimulus = false;
+  let pendingStimulus = [];
+  let pendingImage = '';
+
+  const pushCurrent = () => {
+    if (current?.questionText && current.options.length >= 2) questions.push(current);
+  };
 
   const expandInlineOptions = (line) => {
     const markerRegex = /(?:^|[\s\u00A0]+)([A-E])\s*[.)\]:\-]\s+/g;
-    const markers = Array.from(line.matchAll(markerRegex));
-    if (markers.length < 2) return [line];
+    const allMarkers = Array.from(line.matchAll(markerRegex));
+    if (allMarkers.length === 0) return [line];
+
+    // Ambil hanya marker yang berurutan A, B, C, ... agar huruf kapital di tengah kalimat tidak terpotong.
+    const startIdx = allMarkers.findIndex((m) => m[1] === 'A');
+    if (startIdx === -1) return [line];
+    const markers = [allMarkers[startIdx]];
+    for (let i = startIdx + 1; i < allMarkers.length; i += 1) {
+      const expected = String.fromCharCode(markers[markers.length - 1][1].charCodeAt(0) + 1);
+      if (allMarkers[i][1] === expected) markers.push(allMarkers[i]);
+    }
+
+    const prefix = line.slice(0, markers[0].index).trim();
+    // Hanya satu marker "A." di tengah baris: pisahkan bila didahului akhir kalimat (cth. "...?" A. Opsi)
+    if (markers.length < 2) {
+      if (!prefix || !/[?.:!…]$/.test(prefix)) return [line];
+    }
+
     const segments = [];
+    if (prefix) segments.push(prefix);
     for (let i = 0; i < markers.length; i += 1) {
       const marker = markers[i];
-      const key = marker[1];
       const contentStart = marker.index + marker[0].length;
       const contentEnd = i + 1 < markers.length ? markers[i + 1].index : line.length;
-      let content = line.slice(contentStart, contentEnd).trim();
-      content = content.replace(/^[\s\u00A0]+/, '').replace(/\s+$/, '');
-      segments.push(`${key}. ${content}`);
+      const content = line.slice(contentStart, contentEnd).trim();
+      segments.push(`${marker[1]}. ${content}`);
     }
     return segments;
   };
@@ -83,34 +133,51 @@ function parseQuestionImport(text) {
     const match = line.match(/^(?:soal\s*|pertanyaan\s*)?(?:nomor\s*)?(\d+)\s*[.)\]:\-]\s*(.+)$/i);
     const labeledMatch = line.match(/^(?:soal|pertanyaan)\s*[:\-]\s*(.+)$/i);
     if (!match && !labeledMatch) return false;
-    if (current?.questionText && current.options.length >= 2) questions.push(current);
+    pushCurrent();
     current = {
       questionNumber: match ? Number(match[1]) : questions.length + 1,
       questionText: (match ? match[2] : labeledMatch[1]).trim(),
       options: [],
       correctOption: 'A',
+      keyDetected: false,
       points: 10,
-      stimulusText: '',
-      imageUrl: '',
+      stimulusText: pendingStimulus.join('\n\n'),
+      imageUrl: pendingImage,
     };
+    collectingStimulus = false;
+    pendingStimulus = [];
+    pendingImage = '';
     currentOption = null;
     return true;
   };
 
-  lines.forEach((line) => {
-    const expandedLines = expandInlineOptions(line);
-    expandedLines.forEach((expandedLine) => {
-      parseLine(expandedLine);
-    });
-  });
-
   function parseLine(line) {
+    // Header blok seperti "Soal 6" / "Soal Nomor 6" tanpa teks pertanyaan
+    if (/^(?:soal|nomor|no\.?)\s*(?:nomor\s*)?\d+\s*$/i.test(line)) {
+      pushCurrent();
+      current = null;
+      currentOption = null;
+      collectingStimulus = true;
+      pendingStimulus = [];
+      pendingImage = '';
+      return;
+    }
+
     if (startQuestion(line)) return;
-    if (!current) return;
+
+    if (!current) {
+      if (collectingStimulus) {
+        const img = line.match(/^(?:gambar|image)\s*[:=]\s*(.+)$/i);
+        if (img) pendingImage = img[1].trim();
+        else pendingStimulus.push(line.replace(/^(?:stimulus|wacana|teks\s*kasus)\s*[:\-]\s*/i, ''));
+      }
+      return;
+    }
 
     const stimulusMatch = line.match(/^(?:stimulus|wacana|teks\s*kasus)\s*[:\-]?\s*(.*)$/i);
     if (stimulusMatch) {
       current.stimulusText = stimulusMatch[1].trim();
+      current.inStimulus = true;
       currentOption = null;
       return;
     }
@@ -118,6 +185,7 @@ function parseQuestionImport(text) {
     const answerMatch = line.match(/^(?:kunci(?:\s+(?:jawaban|benar))?|jawaban(?:\s+benar)?|answer)\s*[:=.-]\s*(?:opsi\s*)?([A-E])/i);
     if (answerMatch) {
       current.correctOption = answerMatch[1].toUpperCase();
+      current.keyDetected = true;
       currentOption = null;
       return;
     }
@@ -151,14 +219,26 @@ function parseQuestionImport(text) {
     if (currentOption) {
       const option = current.options.find((item) => item.key === currentOption);
       if (option) option.text = `${option.text} ${line}`.trim();
-    } else if (current.stimulusText && !current.options.length) {
-      current.stimulusText = `${current.stimulusText} ${line}`.trim();
+    } else if (current.inStimulus && !current.options.length) {
+      current.stimulusText = `${current.stimulusText}\n${line}`.trim();
     } else {
-      current.questionText = `${current.questionText} ${line}`.trim();
+      current.questionText = `${current.questionText}\n${line}`.trim();
     }
   }
 
-  if (current?.questionText && current.options.length >= 2) questions.push(current);
+  lines.forEach((line) => {
+    expandInlineOptions(line).forEach((expandedLine) => parseLine(expandedLine));
+  });
+
+  pushCurrent();
+  questions.forEach((question, index) => {
+    if (question.keyDetected) return;
+    const key = answerKeyByNumber[question.questionNumber] || answerKeyList[index];
+    if (key) {
+      question.correctOption = key;
+      question.keyDetected = true;
+    }
+  });
   return questions.map((question, index) => ({
     id: `q-import-${Date.now()}-${index}`,
     questionNumber: index + 1,
@@ -166,11 +246,18 @@ function parseQuestionImport(text) {
     questionText: question.questionText,
     options: question.options,
     correctOption: question.correctOption,
+    keyDetected: question.keyDetected,
     points: question.points || 10,
     stimulusText: question.stimulusText || undefined,
     imageUrl: question.imageUrl || undefined,
   }));
 }
+
+// Hapus field bantu parser sebelum dikirim ke server
+const stripImportMeta = (question) => {
+  const { keyDetected, ...rest } = question;
+  return rest;
+};
 
 export default function TeacherExamsManagementPage() {
   const router = useRouter();
@@ -251,6 +338,11 @@ export default function TeacherExamsManagementPage() {
   const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [docxFileName, setDocxFileName] = useState('');
+  const [docxImported, setDocxImported] = useState(null); // hasil parse file Word (belum disimpan)
+  const [studentPreview, setStudentPreview] = useState({ isOpen: false, questions: [], index: 0, subtitle: '' });
+  const [questionSearch, setQuestionSearch] = useState('');
+  const [questionTypeFilter, setQuestionTypeFilter] = useState('ALL');
+  const [expandedStimulus, setExpandedStimulus] = useState({});
   const [isQuickEditMode, setIsQuickEditMode] = useState(false);
   const [bulkPoints, setBulkPoints] = useState(10);
   const [scheduleClock, setScheduleClock] = useState(() => new Date());
@@ -312,14 +404,23 @@ export default function TeacherExamsManagementPage() {
     return filtered.length > 0 ? filtered : classes;
   };
 
-  // Helper mendapatkan seluruh rombel paralel tingkat dari Master SSO (cth: Tingkat 7 -> 7A, 7B, 7C, dst.)
+  // Helper mendapatkan seluruh rombel paralel tingkat dari Master SSO (cth: Tingkat 7 -> 7A, 7B, dst.)
   const getParallelClassesForLevel = (lvl) => {
     if (!lvl) return [];
     const level = String(lvl).trim();
-    const romanPrefix = level === '7' ? 'VII' : level === '8' ? 'VIII' : level === '9' ? 'IX' : '';
     return classes.filter((cls) => {
       const clean = String(cls.name || '').trim().replace(/^kelas\s*/i, '').toUpperCase();
-      return clean.startsWith(level) || (romanPrefix && clean.startsWith(romanPrefix));
+      if (level === '7') {
+        // Jangan mencocokkan 'VIII' saat prefix 'VII'
+        return clean.startsWith('7') || (clean.startsWith('VII') && !clean.startsWith('VIII'));
+      }
+      if (level === '8') {
+        return clean.startsWith('8') || clean.startsWith('VIII');
+      }
+      if (level === '9') {
+        return clean.startsWith('9') || clean.startsWith('IX');
+      }
+      return clean.startsWith(level);
     });
   };
 
@@ -960,22 +1061,29 @@ export default function TeacherExamsManagementPage() {
   };
 
   const handleImportQuestions = async () => {
-    const imported = parseQuestionImport(importText);
-    if (imported.length === 0) {
-      alert('Tidak ada soal yang terbaca. Gunakan format nomor soal lalu opsi A), B), C), D).');
+    const rawList = (docxImported && docxImported.length > 0)
+      ? docxImported
+      : parseQuestionImport(importText);
+
+    if (!rawList || rawList.length === 0) {
+      alert('Tidak ada soal yang terbaca. Masukkan teks soal atau pilih berkas Word (.docx) yang valid.');
       return;
     }
+
     setIsImporting(true);
     try {
-      const updated = [...examQuestions, ...imported].map((question, index) => ({
+      const cleaned = rawList.map(stripImportMeta);
+      const updated = [...examQuestions, ...cleaned].map((question, index) => ({
         ...question,
         questionNumber: index + 1,
       }));
       setExamQuestions(updated);
       await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, updated);
       setImportText('');
+      setDocxImported(null);
+      setDocxFileName('');
       setIsImportOpen(false);
-      setSaveSuccessMsg(`${imported.length} soal pilihan ganda berhasil diimpor.`);
+      setSaveSuccessMsg(`${cleaned.length} butir soal berhasil diimpor dan disimpan ke server.`);
       setTimeout(() => setSaveSuccessMsg(''), 4000);
     } catch (error) {
       alert(`Gagal mengimpor soal: ${error.message}`);
@@ -1009,11 +1117,9 @@ export default function TeacherExamsManagementPage() {
       );
       const body = new DOMParser().parseFromString(result.value, 'text/html').body;
       const lines = [];
-      let inTable = false;
 
       Array.from(body.children).forEach((element) => {
         if (element.tagName === 'TABLE') {
-          inTable = true;
           element.querySelectorAll('tr').forEach((row) => {
             const cells = Array.from(row.querySelectorAll('th, td'));
             if (cells.length > 0) {
@@ -1026,7 +1132,6 @@ export default function TeacherExamsManagementPage() {
               });
             }
           });
-          inTable = false;
           return;
         }
 
@@ -1039,18 +1144,13 @@ export default function TeacherExamsManagementPage() {
 
       const imported = parseQuestionImport(lines.join('\n'));
       if (imported.length === 0) {
-        throw new Error('Struktur soal tidak dikenali. Gunakan nomor soal atau label SOAL, lalu opsi A-E.');
+        throw new Error('Struktur soal tidak dikenali. Pastikan file memuat nomor soal (cth: 1. Soal atau Soal 1) dan opsi A-D.');
       }
-      const updated = [...examQuestions, ...imported].map((question, index) => ({
-        ...question,
-        questionNumber: index + 1,
-      }));
-      setExamQuestions(updated);
-      await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, updated);
-      setSaveSuccessMsg(`${imported.length} soal dari ${file.name} berhasil diimpor.`);
-      setTimeout(() => setSaveSuccessMsg(''), 4000);
+      setDocxImported(imported);
     } catch (error) {
       alert(`Gagal membaca file Word: ${error.message}`);
+      setDocxImported(null);
+      setDocxFileName('');
     } finally {
       setIsImporting(false);
       event.target.value = '';
@@ -1103,21 +1203,45 @@ export default function TeacherExamsManagementPage() {
 
           <div className="flex items-center gap-2 self-end md:self-center">
             {examQuestions.length > 0 && (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleSaveAllQuestions}
-                loading={isSavingQuestion}
-                className="cursor-pointer font-bold shadow-xs bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"
-              >
-                <AppIcon name="sync" color="white" size={14} />
-                <span>Simpan ke Server ({examQuestions.length} Soal)</span>
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setStudentPreview({
+                      isOpen: true,
+                      questions: examQuestions,
+                      index: 0,
+                      subtitle: `${activeQuestionEditorExam.title} • Total ${examQuestions.length} Butir Soal`,
+                    })
+                  }
+                  className="cursor-pointer font-bold border-primary-300 bg-primary-50 text-primary-700 hover:bg-primary-100 flex items-center gap-1.5"
+                  title="Buka simulasi layar ujian siswa"
+                >
+                  <AppIcon name="survey" color="purple" size={14} />
+                  <span>Preview Siswa</span>
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSaveAllQuestions}
+                  loading={isSavingQuestion}
+                  className="cursor-pointer font-bold shadow-xs bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"
+                >
+                  <AppIcon name="sync" color="white" size={14} />
+                  <span>Simpan ke Server ({examQuestions.length} Soal)</span>
+                </Button>
+              </>
             )}
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setIsImportOpen(true)}
+              onClick={() => {
+                setDocxImported(null);
+                setDocxFileName('');
+                setIsImportOpen(true);
+              }}
               className="cursor-pointer font-bold flex items-center gap-1.5"
             >
               <AppIcon name="upload" color="blue" size={14} />
@@ -1850,66 +1974,146 @@ export default function TeacherExamsManagementPage() {
           {/* RIGHT COLUMN: Daftar Soal Tersimpan */}
           <div className="space-y-4">
             <Card className="border border-neutral-200 bg-white shadow-xs p-4 sm:p-5 space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-neutral-100">
                 <div>
-                  <h3 className="text-xs sm:text-sm font-bold text-neutral-900 uppercase tracking-wider">
-                    Daftar Soal Tersimpan
-                  </h3>
-                  <p className="text-[11px] text-neutral-400">
-                    Total {examQuestions.length} Butir ({mcqCount} PG, {essayCount} Esai)
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs sm:text-sm font-bold text-neutral-900 uppercase tracking-wider">
+                      Daftar Soal Tersimpan
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-100 text-neutral-700 border border-neutral-200">
+                      {examQuestions.length} Butir
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-neutral-400 mt-0.5">
+                    Total {examQuestions.length} Butir ({mcqCount} Objektif, {essayCount} Esai) • Total {examQuestions.reduce((sum, q) => sum + (Number(q.points) || 10), 0)} Poin
                   </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setStudentPreview({
+                        isOpen: true,
+                        questions: examQuestions,
+                        index: 0,
+                        subtitle: `${activeQuestionEditorExam.title} (${examQuestions.length} Soal)`,
+                      })
+                    }
+                    disabled={examQuestions.length === 0}
+                    className="cursor-pointer font-bold border-primary-300 bg-primary-50 text-primary-700 hover:bg-primary-100 flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <AppIcon name="survey" color="purple" size={14} />
+                    <span>Preview Tampilan Siswa</span>
+                  </Button>
                 </div>
               </div>
 
               {examQuestions.length > 0 && (
-                <div className="flex flex-col gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3 sm:flex-row sm:items-end sm:justify-between">
-                  <div className="flex flex-wrap items-end gap-2">
-                    <label className="text-[10px] font-bold text-neutral-500">
-                      Atur poin semua soal
+                <div className="space-y-3">
+                  {/* Search and Type Filter */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="relative flex-1">
                       <input
-                        type="number"
-                        min="1"
-                        value={bulkPoints}
-                        onChange={(event) => setBulkPoints(event.target.value)}
-                        className="mt-1 block w-24 rounded-lg border border-neutral-300 bg-white px-2 py-1.5 text-xs font-bold outline-none focus:border-primary-500"
+                        type="text"
+                        value={questionSearch}
+                        onChange={(e) => setQuestionSearch(e.target.value)}
+                        placeholder="Cari teks pertanyaan, opsi, atau wacana..."
+                        className="w-full text-xs rounded-xl border border-neutral-200 bg-neutral-50/60 px-3 py-2 pl-8 outline-none focus:border-primary-500 focus:bg-white transition"
                       />
-                    </label>
-                    <Button type="button" variant="outline" size="sm" onClick={handleApplyPointsToAll} className="cursor-pointer font-bold">
-                      Terapkan Poin
-                    </Button>
+                      <span className="absolute left-2.5 top-2.5 text-neutral-400 text-xs">🔍</span>
+                      {questionSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setQuestionSearch('')}
+                          className="absolute right-2.5 top-2 text-xs text-neutral-400 hover:text-neutral-700"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
+                      {[
+                        { key: 'ALL', label: `Semua (${examQuestions.length})` },
+                        { key: 'MCQ', label: 'PG' },
+                        { key: 'COMPLEX_MCQ', label: 'PG Kompleks' },
+                        { key: 'TRUE_FALSE', label: 'B/S' },
+                        { key: 'MATCHING', label: 'Jodoh' },
+                        { key: 'ESSAY', label: 'Esai' },
+                      ].map((chip) => (
+                        <button
+                          key={chip.key}
+                          type="button"
+                          onClick={() => setQuestionTypeFilter(chip.key)}
+                          className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold whitespace-nowrap transition cursor-pointer ${
+                            questionTypeFilter === chip.key
+                              ? 'bg-primary-600 text-white shadow-2xs'
+                              : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                          }`}
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Bulk points & quick edit tools */}
+                  <div className="flex flex-col gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-2.5 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="text-[10px] font-bold text-neutral-500 flex items-center gap-1.5">
+                        <span>Poin:</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={bulkPoints}
+                          onChange={(event) => setBulkPoints(event.target.value)}
+                          className="w-16 rounded-md border border-neutral-300 bg-white px-2 py-1 text-xs font-bold outline-none focus:border-primary-500"
+                        />
+                      </label>
+                      <Button type="button" variant="outline" size="sm" onClick={handleApplyPointsToAll} className="cursor-pointer text-[10px] py-1 px-2.5 font-bold">
+                        Terapkan ke Semua
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => setIsQuickEditMode((current) => !current)}
+                        className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition cursor-pointer ${
+                          isQuickEditMode
+                            ? 'border-amber-300 bg-amber-50 text-amber-800'
+                            : 'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100'
+                        }`}
+                      >
+                        {isQuickEditMode ? 'Tutup Edit Cepat' : 'Edit Cepat Semua'}
+                      </button>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setIsQuickEditMode((current) => !current)}
-                      className={`rounded-lg border px-3 py-2 text-[10px] font-bold transition ${
-                        isQuickEditMode
-                          ? 'border-amber-300 bg-amber-50 text-amber-800'
-                          : 'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100'
-                      }`}
+                      onClick={handleDeleteAllQuestions}
+                      className="rounded-lg border border-danger-200 bg-danger-50 px-2.5 py-1.5 text-[10px] font-bold text-danger-700 transition hover:bg-danger-100 cursor-pointer self-start sm:self-auto"
                     >
-                      {isQuickEditMode ? 'Tutup Edit Cepat' : 'Edit Cepat Semua'}
+                      Hapus Semua Soal
                     </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleDeleteAllQuestions}
-                    className="rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-[10px] font-bold text-danger-700 transition hover:bg-danger-100"
-                  >
-                    Hapus Semua Soal
-                  </button>
                 </div>
               )}
 
               {/* Scrollable Questions List */}
               <div className="space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto pr-1">
                 {examQuestions.length === 0 ? (
-                  <div className="p-6 rounded-xl bg-neutral-50 border border-dashed border-neutral-300 text-center space-y-2">
+                  <div className="p-8 rounded-2xl bg-neutral-50 border-2 border-dashed border-neutral-200 text-center space-y-3">
                     <div className="flex justify-center">
-                      <AppIcon name="document-book" color="grey" size={32} />
+                      <div className="w-12 h-12 rounded-2xl bg-white border border-neutral-200 flex items-center justify-center shadow-2xs">
+                        <AppIcon name="document-book" color="grey" size={24} />
+                      </div>
                     </div>
-                    <p className="text-xs font-bold text-neutral-600">Belum Ada Butir Soal</p>
-                    <p className="text-[11px] text-neutral-400 leading-relaxed">
-                      Silakan isi formulir di sebelah kiri untuk menyusun butir soal ujian ini.
-                    </p>
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-neutral-700">Belum Ada Butir Soal Tersimpan</p>
+                      <p className="text-xs text-neutral-400 max-w-sm mx-auto leading-relaxed">
+                        Susun soal baru melalui formulir di sebelah kiri atau klik tombol <strong>Impor Soal Word/Teks</strong> di kanan atas untuk mengunggah naskah ujian.
+                      </p>
+                    </div>
                   </div>
                 ) : isQuickEditMode ? (
                   <div className="space-y-3">
@@ -2014,246 +2218,475 @@ export default function TeacherExamsManagementPage() {
                     </Button>
                   </div>
                 ) : (
-                  examQuestions.map((q, idx) => (
-                    <div
-                      key={q.id || idx}
-                      className={`p-3.5 rounded-xl border transition-all space-y-2 text-xs ${
-                        editingQuestionId === q.id
-                          ? 'border-amber-400 bg-amber-50/70 ring-2 ring-amber-400/30'
-                          : 'border-neutral-200 bg-neutral-50/60 hover:bg-neutral-50'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-bold px-2 py-0.5 rounded bg-neutral-800 text-white text-[10px]">
-                            #{idx + 1}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            q.type === 'MCQ'
-                              ? 'bg-primary-100 text-primary-800'
-                              : q.type === 'COMPLEX_MCQ'
-                              ? 'bg-blue-100 text-blue-800'
-                              : q.type === 'TRUE_FALSE'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : q.type === 'MATCHING'
-                              ? 'bg-violet-100 text-violet-800'
-                              : 'bg-secondary-100 text-secondary-800'
-                          }`}>
-                            {q.type === 'MCQ'
-                              ? 'Pilihan Ganda'
-                              : q.type === 'COMPLEX_MCQ'
-                              ? 'PG Kompleks'
-                              : q.type === 'TRUE_FALSE'
-                              ? 'Benar / Salah'
-                              : q.type === 'MATCHING'
-                              ? 'Menjodohkan'
-                              : 'Esai'}
-                          </span>
-                          {q.stimulusText && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
-                              +Wacana
-                            </span>
-                          )}
-                          {q.imageUrl && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800">
-                              +Gambar
-                            </span>
-                          )}
+                  (() => {
+                    const filteredList = examQuestions
+                      .map((q, originalIndex) => ({ ...q, originalIndex }))
+                      .filter((q) => {
+                        if (questionTypeFilter !== 'ALL' && q.type !== questionTypeFilter) return false;
+                        if (!questionSearch.trim()) return true;
+                        const s = questionSearch.toLowerCase();
+                        const matchText = (q.questionText || '').toLowerCase().includes(s);
+                        const matchStim = (q.stimulusText || '').toLowerCase().includes(s);
+                        const matchOpts = (q.options || []).some((o) => (o.text || '').toLowerCase().includes(s));
+                        return matchText || matchStim || matchOpts;
+                      });
+
+                    if (filteredList.length === 0) {
+                      return (
+                        <div className="p-6 rounded-xl bg-neutral-50 border border-neutral-200 text-center space-y-1">
+                          <p className="text-xs font-bold text-neutral-600">Tidak Ada Soal yang Sesuai Filter</p>
+                          <p className="text-[11px] text-neutral-400">Coba ubah kata kunci pencarian atau ganti filter tipe soal.</p>
                         </div>
+                      );
+                    }
 
-                        <div className="flex items-center gap-1.5">
-                          {q.type === 'MCQ' && (
-                            <span className="font-bold text-success-700 bg-success-50 px-2 py-0.5 rounded border border-success-200 text-[10px]">
-                              Kunci: {q.correctOption}
-                            </span>
-                          )}
-                          {q.type === 'COMPLEX_MCQ' && (
-                            <span className="font-bold text-primary-700 bg-primary-50 px-2 py-0.5 rounded border border-primary-200 text-[10px]">
-                              Kunci: {Array.isArray(q.correctOptions) ? q.correctOptions.join(', ') : q.correctOption}
-                            </span>
-                          )}
-                          {q.type === 'TRUE_FALSE' && (
-                            <span className={`font-bold px-2 py-0.5 rounded border text-[10px] ${
-                              q.trueFalseAnswer || q.correctOption === 'TRUE'
-                                ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                                : 'text-rose-700 bg-rose-50 border-rose-200'
-                            }`}>
-                              Kunci: {q.trueFalseAnswer || q.correctOption === 'TRUE' ? 'BENAR' : 'SALAH'}
-                            </span>
-                          )}
-                          {q.type === 'MATCHING' && (
-                            <span className="font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded border border-violet-200 text-[10px]">
-                              {Array.isArray(q.matchingPairs) ? q.matchingPairs.length : 0} Pasang
-                            </span>
-                          )}
-                          <span className="font-bold text-neutral-700 bg-neutral-100 px-2 py-0.5 rounded border border-neutral-200 text-[10px]">
-                            {q.points || 10} Poin
-                          </span>
+                    return filteredList.map((q) => {
+                      const meta = getTypeMeta(q.type);
+                      const issues = getQuestionIssues(q);
+                      const isEditing = editingQuestionId === q.id;
+                      const isExpanded = Boolean(expandedStimulus[q.id]);
+                      const correctKeys = q.type === 'COMPLEX_MCQ'
+                        ? (Array.isArray(q.correctOptions) ? q.correctOptions : String(q.correctOption || '').split(',').map((s) => s.trim().toUpperCase()))
+                        : [String(q.correctOption || 'A').toUpperCase()];
 
-                          <button
-                            type="button"
-                            onClick={() => handleEditQuestion(q)}
-                            className="text-primary-600 hover:text-primary-800 font-bold p-1 hover:bg-primary-50 rounded transition-colors cursor-pointer text-xs"
-                            title="Edit Soal Ini"
-                          >
-                            <AppIcon name="edit" color="blue" size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteQuestion(q.id)}
-                            className="text-danger-600 hover:text-danger-700 font-bold p-1 hover:bg-danger-50 rounded transition-colors cursor-pointer text-xs"
-                            title="Hapus Soal"
-                          >
-                            <AppIcon name="close-cancel" color="red" size={13} />
-                          </button>
-                        </div>
-                      </div>
-
-                      {q.imageUrl && (
-                        <div className="pt-1">
-                          <img
-                            src={q.imageUrl}
-                            alt="Preview Soal"
-                            className="max-h-24 rounded border border-neutral-200 object-contain bg-white p-1"
-                          />
-                        </div>
-                      )}
-
-                      <p className="text-neutral-800 font-medium line-clamp-3 leading-relaxed">
-                        {q.questionText}
-                      </p>
-
-                      {/* Detail Preview Tiap Tipe Soal */}
-                      {(q.type === 'MCQ' || q.type === 'COMPLEX_MCQ') && (
-                        <div className="grid grid-cols-2 gap-1 text-[11px] text-neutral-600 pt-1">
-                          {q.options?.map((opt) => {
-                            const isKey = q.type === 'MCQ'
-                              ? opt.key === q.correctOption
-                              : Array.isArray(q.correctOptions) && q.correctOptions.includes(opt.key);
-                            return (
-                              <span
-                                key={opt.key}
-                                className={`truncate px-1.5 py-0.5 rounded ${
-                                  isKey
-                                    ? 'font-bold text-success-700 bg-success-100/70 border border-success-200'
-                                    : 'bg-white border border-neutral-200'
-                                }`}
-                              >
-                                <strong>{opt.key}.</strong> {opt.text}
-                                {opt.imageUrl && (
-                                  <img src={opt.imageUrl} alt={`Gambar opsi ${opt.key}`} className="mt-1 max-h-12 max-w-full rounded object-contain" />
-                                )}
+                      return (
+                        <div
+                          key={q.id || q.originalIndex}
+                          className={`p-4 rounded-2xl border transition-all duration-150 space-y-3 ${
+                            isEditing
+                              ? 'border-amber-400 bg-amber-50/70 ring-2 ring-amber-400/30 shadow-xs'
+                              : 'border-neutral-200 bg-white hover:border-neutral-300 hover:shadow-xs'
+                          }`}
+                        >
+                          {/* Card Top: Number, Type badge, indicators, points, actions */}
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="font-bold px-2 py-0.5 rounded-md bg-neutral-800 text-white text-[11px]">
+                                #{q.originalIndex + 1}
                               </span>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {q.type === 'MATCHING' && Array.isArray(q.matchingPairs) && (
-                        <div className="space-y-1 pt-1">
-                          {q.matchingPairs.slice(0, 3).map((p, i) => (
-                            <div key={i} className="text-[11px] flex items-center justify-between bg-white border border-violet-100 px-2 py-0.5 rounded">
-                              <span className="font-semibold text-neutral-800 truncate max-w-30">{p.left}</span>
-                              <span className="text-violet-500 font-bold px-1">↔</span>
-                              <span className="text-neutral-600 truncate max-w-30">{p.right}</span>
+                              <span className={`px-2 py-0.5 rounded-md border text-[10px] font-bold ${meta.badge}`}>
+                                {meta.label}
+                              </span>
+                              {q.stimulusText && (
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedStimulus((prev) => ({ ...prev, [q.id]: !isExpanded }))}
+                                  className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-900 hover:bg-amber-200 transition cursor-pointer flex items-center gap-1"
+                                  title="Klik untuk membuka/menutup wacana"
+                                >
+                                  <span>📖 Wacana</span>
+                                  <span className="text-[9px]">{isExpanded ? '▲' : '▼'}</span>
+                                </button>
+                              )}
+                              {q.imageUrl && (
+                                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-sky-100 text-sky-800">
+                                  🖼️ Gambar
+                                </span>
+                              )}
+                              {q.type === 'MCQ' && (
+                                <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[10px] flex items-center gap-1">
+                                  <span>Kunci:</span>
+                                  <strong>{q.correctOption || 'A'}</strong>
+                                </span>
+                              )}
+                              {q.type === 'COMPLEX_MCQ' && (
+                                <span className="font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 text-[10px]">
+                                  Kunci: {correctKeys.join(', ') || 'A'}
+                                </span>
+                              )}
+                              {q.type === 'TRUE_FALSE' && (
+                                <span className={`font-bold px-2 py-0.5 rounded-md border text-[10px] ${
+                                  q.trueFalseAnswer || q.correctOption === 'TRUE' || q.correctOption === 'BENAR'
+                                    ? 'text-emerald-800 bg-emerald-50 border-emerald-200'
+                                    : 'text-rose-800 bg-rose-50 border-rose-200'
+                                }`}>
+                                  Kunci: {q.trueFalseAnswer || q.correctOption === 'TRUE' || q.correctOption === 'BENAR' ? 'BENAR' : 'SALAH'}
+                                </span>
+                              )}
+                              {q.type === 'MATCHING' && (
+                                <span className="font-bold text-violet-800 bg-violet-50 px-2 py-0.5 rounded-md border border-violet-200 text-[10px]">
+                                  {Array.isArray(q.matchingPairs) ? q.matchingPairs.length : 0} Pasang
+                                </span>
+                              )}
+                              <span className="font-bold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded-md border border-neutral-200 text-[10px]">
+                                {q.points || 10} Poin
+                              </span>
                             </div>
-                          ))}
-                          {q.matchingPairs.length > 3 && (
-                            <p className="text-[10px] text-neutral-400 italic text-right">+{q.matchingPairs.length - 3} pasangan lainnya...</p>
+
+                            {/* Action Buttons: Preview Siswa, Edit, Delete */}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setStudentPreview({
+                                    isOpen: true,
+                                    questions: examQuestions,
+                                    index: q.originalIndex,
+                                    subtitle: `${activeQuestionEditorExam.title} • Soal #${q.originalIndex + 1}`,
+                                  })
+                                }
+                                className="px-2 py-1 rounded-lg border border-primary-200 bg-primary-50 hover:bg-primary-100 text-primary-700 font-bold text-[11px] flex items-center gap-1 transition cursor-pointer"
+                                title="Lihat persis seperti yang dilihat siswa di ujian"
+                              >
+                                <AppIcon name="survey" color="purple" size={12} />
+                                <span>Preview Siswa</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleEditQuestion(q)}
+                                className="px-2 py-1 rounded-lg border border-neutral-200 bg-neutral-50 hover:bg-neutral-100 text-neutral-700 font-bold text-[11px] flex items-center gap-1 transition cursor-pointer"
+                                title="Edit Soal Ini di Formulir Kiri"
+                              >
+                                <AppIcon name="edit" color="blue" size={12} />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteQuestion(q.id)}
+                                className="p-1 rounded-lg border border-neutral-200 hover:border-danger-300 bg-neutral-50 hover:bg-danger-50 text-danger-600 transition cursor-pointer"
+                                title="Hapus Soal"
+                              >
+                                <AppIcon name="close-cancel" color="red" size={13} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Warning issue banner if detected */}
+                          {issues.length > 0 && (
+                            <div className="rounded-xl border border-amber-300 bg-amber-50/80 px-3 py-1.5 text-[11px] text-amber-900 flex items-center gap-1.5">
+                              <span>⚠️</span>
+                              <span><strong>Perlu dicek:</strong> {issues.join('; ')}</span>
+                            </div>
+                          )}
+
+                          {/* Collapsible Wacana / Stimulus */}
+                          {q.stimulusText && (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 space-y-1 text-xs">
+                              <div className="flex items-center justify-between text-amber-900 font-bold text-[11px] uppercase tracking-wider">
+                                <span>Wacana / Teks Bacaan:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedStimulus((prev) => ({ ...prev, [q.id]: !isExpanded }))}
+                                  className="text-amber-800 underline text-[10px] cursor-pointer"
+                                >
+                                  {isExpanded ? 'Sembunyikan' : 'Baca Lengkap'}
+                                </button>
+                              </div>
+                              <p className={`text-neutral-800 leading-relaxed font-sans ${isExpanded ? 'whitespace-pre-wrap' : 'line-clamp-2'}`}>
+                                {q.stimulusText}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Image preview */}
+                          {q.imageUrl && (
+                            <div className="pt-1">
+                              <img
+                                src={q.imageUrl}
+                                alt="Preview Soal"
+                                className="max-h-36 rounded-xl border border-neutral-200 object-contain bg-neutral-50 p-1"
+                              />
+                            </div>
+                          )}
+
+                          {/* Question Text */}
+                          <div className="text-neutral-900 font-medium text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">
+                            {q.questionText}
+                          </div>
+
+                          {/* Choice Options List */}
+                          {(q.type === 'MCQ' || q.type === 'COMPLEX_MCQ' || !q.type) && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                              {(q.options || []).map((opt) => {
+                                const isKey = correctKeys.includes(opt.key);
+                                return (
+                                  <div
+                                    key={opt.key}
+                                    className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-xs transition ${
+                                      isKey
+                                        ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950 font-semibold ring-1 ring-emerald-400/20'
+                                        : 'bg-white border-neutral-200 text-neutral-700'
+                                    }`}
+                                  >
+                                    <span
+                                      className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
+                                        isKey ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-neutral-100 text-neutral-600'
+                                      }`}
+                                    >
+                                      {opt.key}
+                                    </span>
+                                    <div className="flex-1 min-w-0 pt-0.5">
+                                      <p className="leading-snug break-words">{opt.text}</p>
+                                      {opt.imageUrl && (
+                                        <img src={opt.imageUrl} alt={`Opsi ${opt.key}`} className="mt-1 max-h-16 rounded object-contain" />
+                                      )}
+                                    </div>
+                                    {isKey && (
+                                      <span className="text-[10px] font-bold text-emerald-700 shrink-0 self-center">
+                                        ✓ Kunci
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* True / False Preview */}
+                          {q.type === 'TRUE_FALSE' && (
+                            <div className="flex items-center gap-2 pt-1 text-xs">
+                              {['TRUE', 'FALSE'].map((tfVal) => {
+                                const isCorrect = (tfVal === 'TRUE') === (q.trueFalseAnswer || q.correctOption === 'TRUE' || q.correctOption === 'BENAR');
+                                return (
+                                  <span
+                                    key={tfVal}
+                                    className={`px-3 py-1.5 rounded-xl border font-bold text-xs flex items-center gap-1.5 ${
+                                      isCorrect
+                                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                                        : 'bg-neutral-50 border-neutral-200 text-neutral-400'
+                                    }`}
+                                  >
+                                    {isCorrect && <span>✓</span>}
+                                    <span>{tfVal === 'TRUE' ? 'BENAR' : 'SALAH'}</span>
+                                    {isCorrect && <span className="text-[9px] font-normal">(Kunci)</span>}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Matching Preview */}
+                          {q.type === 'MATCHING' && Array.isArray(q.matchingPairs) && (
+                            <div className="space-y-1.5 pt-1">
+                              {q.matchingPairs.map((p, pIdx) => (
+                                <div key={p.id || pIdx} className="text-xs flex items-center justify-between gap-2 bg-neutral-50 border border-neutral-200 p-2 rounded-xl">
+                                  <span className="font-semibold text-neutral-800 flex-1">{p.left}</span>
+                                  <span className="text-violet-500 font-bold px-1.5">↔</span>
+                                  <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 flex-1 text-right">
+                                    {p.right}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Essay Preview */}
+                          {q.type === 'ESSAY' && q.essayRubric && (
+                            <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-2.5 text-xs text-neutral-700 space-y-1">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">Rubrik Jawaban:</span>
+                              <p className="whitespace-pre-wrap">{q.essayRubric}</p>
+                            </div>
                           )}
                         </div>
-                      )}
-                    </div>
-                  ))
+                      );
+                    });
+                  })()
                 )}
               </div>
 
-              <div className="pt-2 border-t border-neutral-100">
+              {/* Bottom Sticky Action Bar */}
+              <div className="pt-3 border-t border-neutral-200 flex flex-col sm:flex-row items-center justify-between gap-2.5">
                 <Button
+                  type="button"
                   variant="outline"
                   size="sm"
-                  className="w-full font-bold cursor-pointer flex items-center justify-center gap-1.5"
-                  onClick={handleCloseQuestionEditor}
+                  onClick={() =>
+                    setStudentPreview({
+                      isOpen: true,
+                      questions: examQuestions,
+                      index: 0,
+                      subtitle: `${activeQuestionEditorExam.title} (${examQuestions.length} Soal)`,
+                    })
+                  }
+                  disabled={examQuestions.length === 0}
+                  className="w-full sm:w-auto font-bold cursor-pointer flex items-center justify-center gap-1.5 border-primary-300 text-primary-700 bg-primary-50 hover:bg-primary-100"
                 >
-                  <AppIcon name="tick" color="grey" size={14} />
-                  <span>Selesai & Simpan Semua</span>
+                  <AppIcon name="survey" color="purple" size={14} />
+                  <span>Preview Tampilan Siswa ({examQuestions.length} Soal)</span>
                 </Button>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                  {examQuestions.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={handleSaveAllQuestions}
+                      loading={isSavingQuestion}
+                      className="cursor-pointer font-bold shadow-xs bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"
+                    >
+                      <AppIcon name="sync" color="white" size={14} />
+                      <span>Simpan Semua</span>
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="font-bold cursor-pointer flex items-center justify-center gap-1.5"
+                    onClick={handleCloseQuestionEditor}
+                  >
+                    <AppIcon name="tick" color="grey" size={14} />
+                    <span>Selesai & Keluar</span>
+                  </Button>
+                </div>
               </div>
             </Card>
           </div>
         </div>
 
+        {/* Modal Impor Soal */}
         {isImportOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
-            <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl border border-neutral-200 overflow-hidden">
+            <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl border border-neutral-200 overflow-hidden max-h-[92vh] flex flex-col">
               <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200">
                 <div>
                   <h2 className="font-bold text-neutral-900">Impor Soal Pilihan Ganda</h2>
                   <p className="text-[11px] text-neutral-500">
-                    Tempel dari Word, Notepad, atau Excel dengan kolom soal, opsi, kunci, dan poin yang terpisah.
+                    Dapat memilih berkas Word (.docx) atau menempelkan teks berformat soal dan kunci.
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsImportOpen(false)}
-                  className="text-neutral-500 hover:text-neutral-900 text-xl"
+                  onClick={() => {
+                    setIsImportOpen(false);
+                    setDocxImported(null);
+                    setDocxFileName('');
+                  }}
+                  className="text-neutral-500 hover:text-neutral-900 text-xl font-bold cursor-pointer"
                 >
                   ×
                 </button>
               </div>
-              <div className="p-5 space-y-3">
-                <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-[11px] text-blue-900">
-                  Format yang disarankan (setiap bagian memiliki label sendiri):
-                  <pre className="mt-2 overflow-x-auto rounded-lg bg-white/70 p-2 font-mono text-[10px] leading-relaxed">
-{`SOAL: Ibu kota Indonesia adalah ...
-A: Bandung
-B: Jakarta
-C: Surabaya
-D: Medan
-KUNCI: B
-POIN: 5`}
-                  </pre>
-                  Format lama bernomor seperti <strong>1. Soal</strong>, <strong>A) Opsi</strong>,
-                  <strong>Kunci: B</strong>, dan <strong>Poin: 5</strong> tetap didukung.
-                </div>
-                <label className="flex cursor-pointer flex-col gap-1 rounded-xl border-2 border-dashed border-primary-200 bg-primary-50/50 p-4 text-center hover:bg-primary-50">
-                  <span className="text-xs font-bold text-primary-800">Pilih file Word (.docx, .docm, .dotx, .dotm)</span>
-                  <span className="text-[10px] text-primary-600">
-                    Sistem mencoba mendeteksi stimulus, soal, opsi, kunci, poin, dan gambar tertanam.
-                  </span>
-                  {docxFileName && <span className="text-[10px] font-semibold text-emerald-700">{docxFileName}</span>}
-                  <input
-                    type="file"
-                    accept=".docx,.docm,.dotx,.dotm,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-word.document.macroEnabled.12,application/vnd.openxmlformats-officedocument.wordprocessingml.template"
-                    onChange={handleImportDocx}
-                    className="hidden"
-                  />
-                </label>
-                <textarea
-                  value={importText}
-                  onChange={(event) => setImportText(event.target.value)}
-                  rows={14}
-                  placeholder={'SOAL: Ibu kota Indonesia adalah ...\nA: Bandung\nB: Jakarta\nC: Surabaya\nD: Medan\nKUNCI: B\nPOIN: 5'}
-                  className="w-full rounded-xl border border-neutral-300 p-3 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-                <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setIsImportOpen(false)}>
-                    Batal
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="sm"
-                    onClick={handleImportQuestions}
-                    loading={isImporting}
-                  >
-                    Impor & Simpan Soal
-                  </Button>
+
+              <div className="p-5 space-y-4 overflow-y-auto">
+                {/* Status Box jika file Word berhasil dibaca */}
+                {docxImported && docxImported.length > 0 ? (
+                  <div className="rounded-2xl border border-emerald-300 bg-emerald-50/80 p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <p className="font-bold text-sm text-emerald-950 flex items-center gap-1.5">
+                          <AppIcon name="tick" color="green" size={16} />
+                          <span>File Word Terbaca: {docxFileName}</span>
+                        </p>
+                        <p className="text-xs text-emerald-800">
+                          Berhasil mendeteksi <strong>{docxImported.length} butir soal</strong> dari file Word Anda (lengkap dengan wacana dan kunci jawaban).
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDocxImported(null);
+                          setDocxFileName('');
+                        }}
+                        className="text-xs text-rose-700 hover:text-rose-900 font-bold underline cursor-pointer"
+                      >
+                        Ganti File
+                      </button>
+                    </div>
+
+                    <div className="pt-1 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setStudentPreview({
+                            isOpen: true,
+                            questions: docxImported,
+                            index: 0,
+                            subtitle: `Preview Hasil Baca File Word: ${docxFileName} (${docxImported.length} Soal)`,
+                          })
+                        }
+                        className="px-3.5 py-2 rounded-xl bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                      >
+                        <AppIcon name="survey" color="white" size={14} />
+                        <span>Preview Tampilan Siswa ({docxImported.length} Soal)</span>
+                      </button>
+                      <span className="text-[11px] text-neutral-500">
+                        Klik preview untuk memastikan tampilan soal sebelum disimpan ke database.
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-[11px] text-blue-900 space-y-1">
+                      <p className="font-bold">Cara Impor Soal:</p>
+                      <p>
+                        Pilih file Word (.docx) di bawah, atau tempelkan teks naskah soal. Sistem otomatis mendeteksi nomor soal, teks pertanyaan, wacana/stimulus, opsi A-E, dan daftar kunci jawaban.
+                      </p>
+                    </div>
+
+                    <label className="flex cursor-pointer flex-col gap-1 rounded-xl border-2 border-dashed border-primary-300 bg-primary-50/50 p-5 text-center hover:bg-primary-50 transition">
+                      <span className="text-xs font-bold text-primary-800">Pilih Berkas Word (.docx, .docm, .dotx)</span>
+                      <span className="text-[10px] text-primary-600">
+                        Sistem mendeteksi wacana kasus, teks soal, opsi A-E, kunci jawaban, dan gambar.
+                      </span>
+                      {docxFileName && <span className="text-[10px] font-semibold text-emerald-700">{docxFileName}</span>}
+                      <input
+                        type="file"
+                        accept=".docx,.docm,.dotx,.dotm,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-word.document.macroEnabled.12,application/vnd.openxmlformats-officedocument.wordprocessingml.template"
+                        onChange={handleImportDocx}
+                        className="hidden"
+                      />
+                    </label>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-neutral-700">Atau Tempel Teks Soal Manual di Sini:</label>
+                      <textarea
+                        value={importText}
+                        onChange={(event) => setImportText(event.target.value)}
+                        rows={8}
+                        placeholder={'1. Ibu kota Indonesia adalah ...\nA. Bandung\nB. Jakarta\nC. Surabaya\nD. Medan\nKunci: B\nPoin: 10'}
+                        className="w-full rounded-xl border border-neutral-300 p-3 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div className="flex items-center justify-between pt-3 border-t border-neutral-200">
+                  <div className="text-[11px] text-neutral-500">
+                    {docxImported?.length
+                      ? `${docxImported.length} butir soal siap ditambahkan ke ujian.`
+                      : 'Pilih file Word atau isi teks di atas.'}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setIsImportOpen(false);
+                        setDocxImported(null);
+                        setDocxFileName('');
+                      }}
+                    >
+                      Batal
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={handleImportQuestions}
+                      loading={isImporting}
+                      disabled={isImporting || (!docxImported?.length && !importText.trim())}
+                    >
+                      {docxImported?.length ? `Simpan ${docxImported.length} Soal ke Ujian` : 'Impor & Simpan Soal'}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         )}
+
+        {/* Modal Simulasi Layar Ujian Siswa */}
+        <StudentPreviewModal
+          isOpen={studentPreview.isOpen}
+          onClose={() => setStudentPreview((prev) => ({ ...prev, isOpen: false }))}
+          questions={studentPreview.questions}
+          initialIndex={studentPreview.index}
+          examTitle={activeQuestionEditorExam?.title || 'Preview Soal'}
+          subtitle={studentPreview.subtitle}
+        />
 
         <ConfirmModal
           {...confirmModal}
