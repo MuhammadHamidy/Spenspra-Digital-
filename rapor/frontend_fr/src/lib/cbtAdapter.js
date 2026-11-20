@@ -31,7 +31,13 @@ function getLocal(key, fallback = null) {
 export const cbtAdapter = {
   // Ambil seluruh daftar ujian CBT (dari server backend + cache browser)
   getExams: async () => {
-    const localExams = getLocal('spenspra_exams', []);
+    const local1 = getLocal('spenspra_exams', []);
+    const local2 = getLocal('spenspra_elearning_exams', []);
+    const localExams = [
+      ...(Array.isArray(local1) ? local1 : []),
+      ...(Array.isArray(local2) ? local2 : []),
+    ];
+
     try {
       const res = await fetchJson('/exams');
       if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
@@ -48,7 +54,12 @@ export const cbtAdapter = {
   getExamSessions: async (examId) => {
     if (!examId) return [];
     const monitorKey = `proctoring_${examId}`;
-    const localSessions = getLocal(monitorKey, []);
+    const local1 = getLocal(monitorKey, []);
+    const local2 = getLocal(`spenspra_elearning_${monitorKey}`, []);
+    const localSessions = [
+      ...(Array.isArray(local1) ? local1 : []),
+      ...(Array.isArray(local2) ? local2 : []),
+    ];
 
     let serverSessions = [];
     try {
@@ -73,7 +84,7 @@ export const cbtAdapter = {
     if (typeof window !== 'undefined') {
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (k && k.startsWith(`exam_session_${examId}_`)) {
+        if (k && (k.startsWith(`exam_session_${examId}_`) || k.startsWith(`spenspra_elearning_exam_session_${examId}_`))) {
           try {
             const sess = JSON.parse(localStorage.getItem(k));
             if (sess) {

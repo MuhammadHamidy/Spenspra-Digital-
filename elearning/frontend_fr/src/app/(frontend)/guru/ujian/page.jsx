@@ -928,17 +928,42 @@ export default function TeacherExamsManagementPage() {
   };
 
   const getExamStatus = (ex) => {
+    if (ex.status === 'COMPLETED' || ex.status === 'CLOSED') return 'COMPLETED';
+
+    const dateStr = ex.scheduledDate || (ex.startDateTime ? ex.startDateTime.split('T')[0] : '');
+    const startTimeStr = ex.startTime || (ex.startDateTime ? ex.startDateTime.split('T')[1]?.slice(0, 5) : '');
+    const endTimeStr = ex.endTime || (ex.endDateTime ? ex.endDateTime.split('T')[1]?.slice(0, 5) : '');
+
+    // Evaluasi presisi berbasis waktu lokal perangkat (WIB) tanpa tergeser zona waktu server
+    if (dateStr && startTimeStr && endTimeStr) {
+      const now = scheduleClock || new Date();
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const [startH, startM] = startTimeStr.split(':').map(Number);
+      const [endH, endM] = endTimeStr.split(':').map(Number);
+
+      if (year && month && day) {
+        const start = new Date(year, month - 1, day, startH || 0, startM || 0, 0);
+        const end = new Date(year, month - 1, day, endH || 0, endM || 0, 0);
+
+        if (now > end) return 'COMPLETED';
+        if (now >= start && now <= end) return 'ACTIVE';
+        if (ex.status === 'ACTIVE') return 'ACTIVE';
+        if (now < start) return 'UPCOMING';
+      }
+    }
+
     if (ex.startDateTime && ex.endDateTime) {
-      const now = scheduleClock;
+      const now = scheduleClock || new Date();
       const start = new Date(ex.startDateTime);
       const end = new Date(ex.endDateTime);
-      if (now < start) return 'UPCOMING';
-      if (now >= start && now <= end) return 'ACTIVE';
       if (now > end) return 'COMPLETED';
+      if (now >= start && now <= end) return 'ACTIVE';
+      if (ex.status === 'ACTIVE') return 'ACTIVE';
+      if (now < start) return 'UPCOMING';
     }
-    if (ex.status === 'COMPLETED' || ex.status === 'CLOSED') return 'COMPLETED';
+
     if (ex.status === 'ACTIVE') return 'ACTIVE';
-    return ex.status || 'ACTIVE';
+    return ex.status || 'UPCOMING';
   };
 
   const handleStartExamNow = async (exam) => {
@@ -950,7 +975,7 @@ export default function TeacherExamsManagementPage() {
       const startStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
       const endObj = new Date(now.getTime() + (Number(exam.durationMinutes) || 90) * 60 * 1000);
       const endStr = `${pad(endObj.getHours())}:${pad(endObj.getMinutes())}`;
-      const todayDate = now.toISOString().split('T')[0];
+      const todayDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
       const startDT = `${todayDate}T${startStr}:00`;
       const endDT = `${todayDate}T${endStr}:00`;
 

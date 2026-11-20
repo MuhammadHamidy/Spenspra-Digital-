@@ -18,6 +18,34 @@ const DEFAULT_DESCRIPTIONS = {
   D: 'Perlu pendampingan intensif dalam memahami materi dasar dan remedial pembelajaran.',
 };
 
+const normalizeClassCode = (c) => {
+  if (!c) return '';
+  let s = String(c)
+    .toLowerCase()
+    .trim()
+    .replace(/^kelas\s*/i, '')
+    .replace(/^rombel\s*/i, '')
+    .replace(/[^a-z0-9]/g, '');
+  if (s.startsWith('viii')) s = '8' + s.slice(4);
+  else if (s.startsWith('vii')) s = '7' + s.slice(3);
+  else if (s.startsWith('ix')) s = '9' + s.slice(2);
+  return s;
+};
+
+const extractGradeLevelDigit = (c) => {
+  if (!c) return '';
+  const str = String(c).toUpperCase();
+  if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VIII|8)\b|\bVIII[-_A-Z0-9]|\b8[A-Z0-9]\b|\[ASAS:8\]/.test(str)) return '8';
+  if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VII|7)\b|\bVII[-_A-Z0-9]|\b7[A-Z0-9]\b|\[ASAS:7\]/.test(str)) return '7';
+  if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:IX|9)\b|\bIX[-_A-Z0-9]|\b9[A-Z0-9]\b|\[ASAS:9\]/.test(str)) return '9';
+  if (/^(?:8|VIII)$/.test(str.trim())) return '8';
+  if (/^(?:7|VII)$/.test(str.trim())) return '7';
+  if (/^(?:9|IX)$/.test(str.trim())) return '9';
+  const norm = normalizeClassCode(c);
+  const m = norm.match(/^([789])/);
+  return m ? m[1] : '';
+};
+
 const getPredicate = (score) => {
   if (score === '' || score === null || score === undefined || Number.isNaN(Number(score))) return '-';
   if (Number(score) < 0) return '-';
@@ -55,6 +83,7 @@ export default function PenilaianUASPage() {
 
   // CBT Integration States
   const [availableCbtExams, setAvailableCbtExams] = useState([]);
+  const [otherGradeExams, setOtherGradeExams] = useState([]);
   const [selectedExamId, setSelectedExamId] = useState('');
   const [isSyncingCbt, setIsSyncingCbt] = useState(false);
   const [cbtNotice, setCbtNotice] = useState(null);
@@ -244,50 +273,83 @@ export default function PenilaianUASPage() {
     const fetchMatchingExams = async () => {
       if (!className || !subject) {
         setAvailableCbtExams([]);
+        setOtherGradeExams([]);
         setSelectedExamId('');
         return;
       }
       try {
         const allExams = await cbtAdapter.getExams();
-        const normalize = (c) => String(c || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
-        const cNorm = normalize(className);
-        const gradeDigit = className.match(/\d+/)?.[0] || '';
+        const cNorm = normalizeClassCode(className);
+        const classGrade = extractGradeLevelDigit(className);
         const currentSubjectObj = subjects.find((item) => item.code === subject);
         const subjectName = (currentSubjectObj?.name || subject || '').toLowerCase();
 
-        const filtered = (allExams || []).filter((ex) => {
-          const exSub = (ex.subject || '').toLowerCase();
-          const exCode = (ex.subjectCode || '').toLowerCase();
-          const matchSub =
-            (exCode && exCode === subject.toLowerCase()) ||
-            exSub.includes(subject.toLowerCase()) ||
-            (subjectName && (exSub.includes(subjectName) || subjectName.includes(exSub)));
+        const normStr = (s) => String(s || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+        const curSubCodeNorm = normStr(subject);
+        const curSubNameNorm = normStr(subjectName);
 
-          if (!matchSub) return false;
+        const checkSubMatch = (ex) => {
+          const exSub = normStr(ex.subject);
+          const exCode = normStr(ex.subjectCode);
+          return (
+            (exCode && curSubCodeNorm && exCode === curSubCodeNorm) ||
+            (exSub && curSubNameNorm && (exSub.includes(curSubNameNorm) || curSubNameNorm.includes(exSub))) ||
+            (exCode && curSubNameNorm && curSubNameNorm.includes(exCode)) ||
+            (exSub && curSubCodeNorm && (exSub.includes(curSubCodeNorm) || curSubCodeNorm === exSub))
+          );
+        };
 
-          const matchCls =
-            normalize(ex.className) === cNorm ||
-            (Array.isArray(ex.targetClasses) && ex.targetClasses.some((tc) => normalize(tc) === cNorm)) ||
-            (ex.targetGradeLevel && gradeDigit && String(ex.targetGradeLevel) === gradeDigit) ||
-            (ex.targetGradeLevel && cNorm.startsWith(String(ex.targetGradeLevel)));
+        const checkClassMatch = (ex) => {
+          const exNorm = normalizeClassCode(ex.className);
+          const isCoordinator = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+          const exGrade = extractGradeLevelDigit(ex.targetGradeLevel || ex.className || ex.title || ex.rawDescription || '');
 
-          return matchCls;
-        });
+          if (exNorm && exNorm === cNorm) return true;
+          if (Array.isArray(ex.targetClasses) && ex.targetClasses.length > 0) {
+            if (ex.targetClasses.some((tc) => normalizeClassCode(tc) === cNorm)) return true;
+          }
+          if (isCoordinator && classGrade && exGrade && classGrade === exGrade) {
+            return true;
+          }
+          if (ex.targetGradeLevel && classGrade && String(ex.targetGradeLevel) === classGrade) {
+            return true;
+          }
+          return false;
+        };
+
+        // Filter ujian yang sesuai dengan Mapel
+        const sameSubjectExams = (allExams || []).filter(checkSubMatch);
+
+        // Ujian yang sesuai kelas/tingkat aktif
+        const filtered = sameSubjectExams.filter(checkClassMatch);
+
+        // Ujian mapel yang sama tetapi di jenjang/tingkat lain (misal: Tingkat 9 saat guru buka Kelas VII-C)
+        const others = sameSubjectExams.filter((ex) => !checkClassMatch(ex));
 
         // Urutkan: Ujian UAS / ASAS Semester diutamakan paling atas
-        filtered.sort((a, b) => {
-          const aIsUas = a.examCategory === 'SEMESTER_UAS' || a.isCoordinatorExam || /uas|asas/i.test(a.title);
-          const bIsUas = b.examCategory === 'SEMESTER_UAS' || b.isCoordinatorExam || /uas|asas/i.test(b.title);
-          if (aIsUas && !bIsUas) return -1;
-          if (!aIsUas && bIsUas) return 1;
-          return 0;
-        });
+        const sortExams = (list) => {
+          return [...list].sort((a, b) => {
+            const aIsUas = a.examCategory === 'SEMESTER_UAS' || a.isCoordinatorExam || /uas|asas/i.test(a.title);
+            const bIsUas = b.examCategory === 'SEMESTER_UAS' || b.isCoordinatorExam || /uas|asas/i.test(b.title);
+            if (aIsUas && !bIsUas) return -1;
+            if (!aIsUas && bIsUas) return 1;
+            return 0;
+          });
+        };
 
-        setAvailableCbtExams(filtered);
-        if (filtered.length > 0) {
-          // Pilih otomatis ujian bertipe UAS / ASAS jika ada
-          const defaultExam = filtered.find((e) => e.examCategory === 'SEMESTER_UAS' || /uas|asas/i.test(e.title)) || filtered[0];
+        const sortedFiltered = sortExams(filtered);
+        const sortedOthers = sortExams(others);
+
+        setAvailableCbtExams(sortedFiltered);
+        setOtherGradeExams(sortedOthers);
+
+        if (sortedFiltered.length > 0) {
+          // Pilih otomatis ujian bertipe UAS / ASAS yang sesuai jenjang
+          const defaultExam = sortedFiltered.find((e) => e.examCategory === 'SEMESTER_UAS' || /uas|asas/i.test(e.title)) || sortedFiltered[0];
           setSelectedExamId(defaultExam.id);
+        } else if (sortedOthers.length > 0) {
+          // Biarkan kosong sampai guru memilih sesi atau memilih jenjang yang sesuai
+          setSelectedExamId('');
         } else {
           setSelectedExamId('');
         }
@@ -393,7 +455,10 @@ export default function PenilaianUASPage() {
       return;
     }
 
-    const chosenExam = availableCbtExams.find((e) => e.id === selectedExamId);
+    const chosenExam =
+      availableCbtExams.find((e) => e.id === selectedExamId) ||
+      otherGradeExams.find((e) => e.id === selectedExamId);
+
     if (!chosenExam) {
       alert('Data ujian CBT yang dipilih tidak ditemukan.');
       return;
@@ -786,20 +851,52 @@ export default function PenilaianUASPage() {
               onChange={(e) => setSelectedExamId(e.target.value)}
               className="w-full rounded-xl border-2 border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-2xs outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 transition-all"
             >
-              {availableCbtExams.length === 0 ? (
+              {availableCbtExams.length === 0 && otherGradeExams.length === 0 ? (
                 <option value="">— Belum ada sesi ujian CBT untuk {subjects.find((s) => s.code === subject)?.name || subject} di Kelas {className} —</option>
               ) : (
-                availableCbtExams.map((ex) => {
-                  const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || /uas|asas/i.test(ex.title);
-                  return (
-                    <option key={ex.id} value={ex.id}>
-                      {isUasType ? '[UAS / ASAS Semester] ' : '[Ujian Reguler] '}
-                      {ex.title} (Mapel: {ex.subject}) — Token: {ex.token || '-'}
-                    </option>
-                  );
-                })
+                <>
+                  <option value="">— Pilih Sesi Ujian CBT Sumber —</option>
+                  {availableCbtExams.length > 0 && (
+                    <optgroup label={`Sesi Ujian Sesuai: ${className} (Tingkat ${extractGradeLevelDigit(className) || 'Ini'})`}>
+                      {availableCbtExams.map((ex) => {
+                        const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || /uas|asas/i.test(ex.title);
+                        return (
+                          <option key={ex.id} value={ex.id}>
+                            {isUasType ? '[UAS / ASAS Semester] ' : '[Ujian Reguler] '}
+                            {ex.title} (Mapel: {ex.subject}) — Token: {ex.token || '-'}
+                          </option>
+                        );
+                      })}
+                    </optgroup>
+                  )}
+                  {otherGradeExams.length > 0 && (
+                    <optgroup label="Sesi Ujian Mapel Ini di Jenjang/Tingkat Lain">
+                      {otherGradeExams.map((ex) => {
+                        const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || /uas|asas/i.test(ex.title);
+                        const lvl = extractGradeLevelDigit(ex.targetGradeLevel || ex.className || ex.title);
+                        return (
+                          <option key={ex.id} value={ex.id}>
+                            {isUasType ? `[ASAS Tk. ${lvl || '?'}] ` : `[Ujian Reguler] `}
+                            {ex.title} (Mapel: {ex.subject}) — Token: {ex.token || '-'}
+                          </option>
+                        );
+                      })}
+                    </optgroup>
+                  )}
+                </>
               )}
             </select>
+
+            {availableCbtExams.length === 0 && otherGradeExams.length > 0 && (
+              <div className="flex items-start gap-2 text-[11px] text-amber-800 bg-amber-50/90 border border-amber-200/80 px-3 py-2 rounded-xl mt-2 leading-relaxed">
+                <span className="font-bold shrink-0">💡 Info Jenjang:</span>
+                <div>
+                  Ujian CBT yang terdaftar dibuat untuk <strong>Tingkat {extractGradeLevelDigit(otherGradeExams[0].targetGradeLevel || otherGradeExams[0].title) || '9'}</strong> (contoh: <em>{otherGradeExams[0].title}</em>).
+                  Ujian tersebut akan otomatis terseleksi saat memilih rombel tingkat tersebut (contoh: <strong>Kelas IX-A s/d IX-J</strong>).
+                  Anda juga dapat memilihnya langsung dari opsi dropdown di atas jika ingin menarik nilainya.
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex items-end">

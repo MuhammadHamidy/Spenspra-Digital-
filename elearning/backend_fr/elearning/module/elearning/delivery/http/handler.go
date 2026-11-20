@@ -272,6 +272,8 @@ func (h *ELearningHandler) GradeSubmission(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(responses.Success(fiber.Map{"graded": true}, "Nilai tugas berhasil disimpan"))
 }
 
+var wibZone = time.FixedZone("WIB", 7*3600)
+
 type CBTExamInput struct {
 	ID                     string `json:"id"`
 	Title                  string `json:"title"`
@@ -359,17 +361,19 @@ func (in *CBTExamInput) ToDomain() domain.CBTExam {
 
 	parseTime := func(dtStr, dStr, tStr string) *time.Time {
 		if dtStr != "" {
-			for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02T15:04"} {
-				if t, err := time.ParseInLocation(layout, dtStr, time.Local); err == nil {
-					return &t
+			for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05Z07:00", "2006-01-02T15:04:05", "2006-01-02T15:04"} {
+				if t, err := time.ParseInLocation(layout, dtStr, wibZone); err == nil {
+					tWib := t.In(wibZone)
+					return &tWib
 				}
 			}
 		}
 		if dStr != "" && tStr != "" {
 			combined := dStr + "T" + tStr
 			for _, layout := range []string{"2006-01-02T15:04", "2006-01-02T15:04:05"} {
-				if t, err := time.ParseInLocation(layout, combined, time.Local); err == nil {
-					return &t
+				if t, err := time.ParseInLocation(layout, combined, wibZone); err == nil {
+					tWib := t.In(wibZone)
+					return &tWib
 				}
 			}
 		}
@@ -379,14 +383,23 @@ func (in *CBTExamInput) ToDomain() domain.CBTExam {
 	startT := parseTime(in.StartDateTime, in.ScheduledDate, in.StartTime)
 	endT := parseTime(in.EndDateTime, in.ScheduledDate, in.EndTime)
 
-	now := time.Now()
-	switch {
-	case endT != nil && !now.Before(*endT):
-		stat = "COMPLETED"
-	case startT != nil && now.Before(*startT):
-		stat = "UPCOMING"
-	case startT != nil:
+	now := time.Now().In(wibZone)
+	if stat == "ACTIVE" {
 		stat = "ACTIVE"
+		if startT != nil && startT.After(now) {
+			startT = &now
+		}
+	} else if stat == "COMPLETED" || stat == "CLOSED" {
+		stat = "COMPLETED"
+	} else {
+		switch {
+		case endT != nil && !now.Before(*endT):
+			stat = "COMPLETED"
+		case startT != nil && now.Before(*startT):
+			stat = "UPCOMING"
+		case startT != nil:
+			stat = "ACTIVE"
+		}
 	}
 
 	return domain.CBTExam{
@@ -427,23 +440,28 @@ func formatExamForFrontend(e domain.CBTExam) fiber.Map {
 	sDateTime := ""
 	eDateTime := ""
 	status := strings.ToUpper(strings.TrimSpace(e.Status))
-	now := time.Now()
+	now := time.Now().In(wibZone)
 
 	if e.StartTime != nil {
-		sDateTime = e.StartTime.Format(time.RFC3339)
-		sDate = e.StartTime.Format("2006-01-02")
-		sTime = e.StartTime.Format("15:04")
+		st := e.StartTime.In(wibZone)
+		sDateTime = st.Format("2006-01-02T15:04:05+07:00")
+		sDate = st.Format("2006-01-02")
+		sTime = st.Format("15:04")
 	}
 	if e.EndTime != nil {
-		eDateTime = e.EndTime.Format(time.RFC3339)
-		eTime = e.EndTime.Format("15:04")
+		et := e.EndTime.In(wibZone)
+		eDateTime = et.Format("2006-01-02T15:04:05+07:00")
+		eTime = et.Format("15:04")
 	}
 
 	if status != "COMPLETED" && status != "CLOSED" {
-		if e.EndTime != nil && !now.Before(*e.EndTime) {
+		if e.EndTime != nil && !now.Before(e.EndTime.In(wibZone)) {
 			status = "COMPLETED"
+		} else if status == "ACTIVE" {
+			// Jika status sudah diaktifkan oleh guru, pertahankan ACTIVE sampai jam selesai
+			status = "ACTIVE"
 		} else if e.StartTime != nil {
-			if now.Before(*e.StartTime) {
+			if now.Before(e.StartTime.In(wibZone)) {
 				status = "UPCOMING"
 			} else {
 				status = "ACTIVE"
@@ -700,17 +718,19 @@ func (h *ELearningHandler) UpdateExam(c *fiber.Ctx) error {
 
 	parseTime := func(dtStr, dStr, tStr string) *time.Time {
 		if dtStr != "" {
-			for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02T15:04"} {
-				if t, err := time.ParseInLocation(layout, dtStr, time.Local); err == nil {
-					return &t
+			for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05Z07:00", "2006-01-02T15:04:05", "2006-01-02T15:04"} {
+				if t, err := time.ParseInLocation(layout, dtStr, wibZone); err == nil {
+					tWib := t.In(wibZone)
+					return &tWib
 				}
 			}
 		}
 		if dStr != "" && tStr != "" {
 			combined := dStr + "T" + tStr
 			for _, layout := range []string{"2006-01-02T15:04", "2006-01-02T15:04:05"} {
-				if t, err := time.ParseInLocation(layout, combined, time.Local); err == nil {
-					return &t
+				if t, err := time.ParseInLocation(layout, combined, wibZone); err == nil {
+					tWib := t.In(wibZone)
+					return &tWib
 				}
 			}
 		}
@@ -724,14 +744,23 @@ func (h *ELearningHandler) UpdateExam(c *fiber.Ctx) error {
 		req.EndTime = endT
 	}
 
-	now := time.Now()
-	switch {
-	case req.EndTime != nil && !now.Before(*req.EndTime):
-		req.Status = "COMPLETED"
-	case req.StartTime != nil && now.Before(*req.StartTime):
-		req.Status = "UPCOMING"
-	case req.StartTime != nil:
+	now := time.Now().In(wibZone)
+	if strings.ToUpper(input.Status) == "ACTIVE" {
 		req.Status = "ACTIVE"
+		if req.StartTime != nil && req.StartTime.After(now) {
+			req.StartTime = &now
+		}
+	} else if strings.ToUpper(input.Status) == "COMPLETED" || strings.ToUpper(input.Status) == "CLOSED" {
+		req.Status = "COMPLETED"
+	} else {
+		switch {
+		case req.EndTime != nil && !now.Before(*req.EndTime):
+			req.Status = "COMPLETED"
+		case req.StartTime != nil && now.Before(*req.StartTime):
+			req.Status = "UPCOMING"
+		case req.StartTime != nil:
+			req.Status = "ACTIVE"
+		}
 	}
 
 	if err := h.useCase.UpdateExam(c.Context(), id, &req); err != nil {

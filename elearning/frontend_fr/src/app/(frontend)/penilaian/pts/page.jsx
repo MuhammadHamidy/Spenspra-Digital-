@@ -10,7 +10,7 @@ import { exportToExcelXml } from '@/lib/excelExport';
 import Modal from '@/components/Modal';
 import ImportGradesModal from '@/components/ImportGradesModal';
 import { getSchoolAcademicPeriod } from '@/lib/academicPeriod';
-import { elearningApi } from '@/lib/elearningApi';
+import { elearningApi, normalizeClassCode, extractGradeLevelDigit } from '@/lib/elearningApi';
 
 const PREDICATE_LABELS = {
   A: 'Sangat baik dalam',
@@ -466,29 +466,41 @@ export default function PenilaianPTSPage() {
     setIsSyncingCbt(true);
     try {
       const exams = await elearningApi.getExams();
-      const normalize = (c) => String(c || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
-      const cNorm = normalize(className);
-      const gradeDigit = className.match(/\d+/)?.[0] || '';
+      const cNorm = normalizeClassCode(className);
+      const classGrade = extractGradeLevelDigit(className);
       const currentSubjectObj = subjects.find((item) => item.code === subject);
       const subjectName = (currentSubjectObj?.name || subject || '').toLowerCase();
 
+      const normStr = (s) => String(s || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+      const curSubCodeNorm = normStr(subject);
+      const curSubNameNorm = normStr(subjectName);
+
       const matchingExams = (exams || []).filter((ex) => {
-        const exSub = (ex.subject || '').toLowerCase();
-        const exCode = (ex.subjectCode || '').toLowerCase();
+        const exSub = normStr(ex.subject);
+        const exCode = normStr(ex.subjectCode);
         const matchSub =
-          (exCode && exCode === subject.toLowerCase()) ||
-          exSub.includes(subject.toLowerCase()) ||
-          (subjectName && (exSub.includes(subjectName) || subjectName.includes(exSub)));
+          (exCode && curSubCodeNorm && exCode === curSubCodeNorm) ||
+          (exSub && curSubNameNorm && (exSub.includes(curSubNameNorm) || curSubNameNorm.includes(exSub))) ||
+          (exCode && curSubNameNorm && curSubNameNorm.includes(exCode)) ||
+          (exSub && curSubCodeNorm && (exSub.includes(curSubCodeNorm) || curSubCodeNorm === exSub));
 
         if (!matchSub) return false;
 
-        const matchCls =
-          normalize(ex.className) === cNorm ||
-          (Array.isArray(ex.targetClasses) && ex.targetClasses.some((tc) => normalize(tc) === cNorm)) ||
-          (ex.targetGradeLevel && gradeDigit && String(ex.targetGradeLevel) === gradeDigit) ||
-          (ex.targetGradeLevel && cNorm.startsWith(String(ex.targetGradeLevel)));
+        const exNorm = normalizeClassCode(ex.className);
+        const isCoordinator = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+        const exGrade = extractGradeLevelDigit(ex.targetGradeLevel || ex.className || ex.title || ex.rawDescription || '');
 
-        return matchCls;
+        if (exNorm && exNorm === cNorm) return true;
+        if (Array.isArray(ex.targetClasses) && ex.targetClasses.length > 0) {
+          if (ex.targetClasses.some((tc) => normalizeClassCode(tc) === cNorm)) return true;
+        }
+        if (isCoordinator && classGrade && exGrade && classGrade === exGrade) {
+          return true;
+        }
+        if (ex.targetGradeLevel && classGrade && String(ex.targetGradeLevel) === classGrade) {
+          return true;
+        }
+        return false;
       });
 
       if (matchingExams.length === 0) {

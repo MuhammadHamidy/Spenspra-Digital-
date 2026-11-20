@@ -2029,20 +2029,21 @@ export const elearningApi = {
 
     // 3. Ambil seluruh ujian CBT bertipe SEMESTER_UAS yang berlaku untuk kelas ini
     const allExams = await elearningApi.getExams();
-    const normalize = (c) => String(c || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
-    const cNorm = normalize(className);
+    const cNorm = normalizeClassCode(className);
+    const classLevel = extractGradeLevelDigit(className);
 
     const uasExams = (allExams || []).filter((ex) => {
       const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
       if (!isUasType) return false;
 
       if (ex.targetClasses && Array.isArray(ex.targetClasses) && ex.targetClasses.length > 0) {
-        return ex.targetClasses.some((tc) => normalize(tc) === cNorm);
+        return ex.targetClasses.some((tc) => normalizeClassCode(tc) === cNorm);
       }
-      if (ex.targetGradeLevel) {
-        return cNorm.startsWith(String(ex.targetGradeLevel));
+      const exLevel = extractGradeLevelDigit(ex.targetGradeLevel || ex.className || ex.title);
+      if (exLevel && classLevel) {
+        return exLevel === classLevel;
       }
-      return normalize(ex.className) === cNorm;
+      return normalizeClassCode(ex.className) === cNorm;
     });
 
     // 4. Kumpulkan seluruh hasil/sesi ujian untuk ujian-ujian tersebut
