@@ -315,10 +315,11 @@ export default function TeacherExamsManagementPage() {
   // Helper mendapatkan seluruh rombel paralel tingkat dari Master SSO (cth: Tingkat 7 -> 7A, 7B, 7C, dst.)
   const getParallelClassesForLevel = (lvl) => {
     if (!lvl) return [];
-    const prefix = String(lvl).trim();
+    const level = String(lvl).trim();
+    const romanPrefix = level === '7' ? 'VII' : level === '8' ? 'VIII' : level === '9' ? 'IX' : '';
     return classes.filter((cls) => {
-      const clean = String(cls.name || '').trim().replace(/^kelas\s*/i, '');
-      return clean.startsWith(prefix);
+      const clean = String(cls.name || '').trim().replace(/^kelas\s*/i, '').toUpperCase();
+      return clean.startsWith(level) || (romanPrefix && clean.startsWith(romanPrefix));
     });
   };
 

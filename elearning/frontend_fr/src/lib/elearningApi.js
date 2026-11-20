@@ -125,33 +125,6 @@ const INITIAL_EXAMS = [];
 
 const INITIAL_QUESTIONS = {};
 
-export const DEFAULT_CLASSES = [
-  { id: 'cls-7a', name: '7A', level: 7, academicYear: '2026/2027' },
-  { id: 'cls-7b', name: '7B', level: 7, academicYear: '2026/2027' },
-  { id: 'cls-7c', name: '7C', level: 7, academicYear: '2026/2027' },
-  { id: 'cls-7d', name: '7D', level: 7, academicYear: '2026/2027' },
-  { id: 'cls-7e', name: '7E', level: 7, academicYear: '2026/2027' },
-  { id: 'cls-7f', name: '7F', level: 7, academicYear: '2026/2027' },
-  { id: 'cls-7g', name: '7G', level: 7, academicYear: '2026/2027' },
-  { id: 'cls-7h', name: '7H', level: 7, academicYear: '2026/2027' },
-  { id: 'cls-8a', name: '8A', level: 8, academicYear: '2026/2027' },
-  { id: 'cls-8b', name: '8B', level: 8, academicYear: '2026/2027' },
-  { id: 'cls-8c', name: '8C', level: 8, academicYear: '2026/2027' },
-  { id: 'cls-8d', name: '8D', level: 8, academicYear: '2026/2027' },
-  { id: 'cls-8e', name: '8E', level: 8, academicYear: '2026/2027' },
-  { id: 'cls-8f', name: '8F', level: 8, academicYear: '2026/2027' },
-  { id: 'cls-8g', name: '8G', level: 8, academicYear: '2026/2027' },
-  { id: 'cls-8h', name: '8H', level: 8, academicYear: '2026/2027' },
-  { id: 'cls-9a', name: '9A', level: 9, academicYear: '2026/2027' },
-  { id: 'cls-9b', name: '9B', level: 9, academicYear: '2026/2027' },
-  { id: 'cls-9c', name: '9C', level: 9, academicYear: '2026/2027' },
-  { id: 'cls-9d', name: '9D', level: 9, academicYear: '2026/2027' },
-  { id: 'cls-9e', name: '9E', level: 9, academicYear: '2026/2027' },
-  { id: 'cls-9f', name: '9F', level: 9, academicYear: '2026/2027' },
-  { id: 'cls-9g', name: '9G', level: 9, academicYear: '2026/2027' },
-  { id: 'cls-9h', name: '9H', level: 9, academicYear: '2026/2027' },
-];
-
 // Filter to completely purge any legacy dummy or demo items from client localStorage
 const DUMMY_IDS = new Set([
   'mat-001', 'mat-002', 'mat-003', 'mat-004',
@@ -1009,8 +982,8 @@ export const elearningApi = {
 
   // =================== MATA PELAJARAN (COURSES / SUBJECTS) ===================
   getSubjects: async () => {
-    // Ambil dari master mata pelajaran yang dikelola Admin e-Rapor/SSO,
-    // bukan dari daftar mata pelajaran hardcode aplikasi.
+    // Sumber utama adalah master mata pelajaran Admin e-Rapor.
+    // SSO hanya fallback jika endpoint e-Rapor benar-benar tidak tersedia.
     const raporBase = getRaporApiBase();
     const [ssoRes, raporRes, beRes] = await Promise.all([
       fetchSsoJson('/school/courses').catch(() => null),
@@ -1019,15 +992,16 @@ export const elearningApi = {
     ]);
 
     const rawCourses = [];
-    if (ssoRes?.success && Array.isArray(ssoRes.data)) rawCourses.push(...ssoRes.data);
-    else if (Array.isArray(ssoRes)) rawCourses.push(...ssoRes);
-    else if (Array.isArray(ssoRes?.data?.courses)) rawCourses.push(...ssoRes.data.courses);
-
     if (raporRes?.success && Array.isArray(raporRes.data)) rawCourses.push(...raporRes.data);
     else if (Array.isArray(raporRes)) rawCourses.push(...raporRes);
     else if (Array.isArray(raporRes?.data?.courses)) rawCourses.push(...raporRes.data.courses);
 
-    if (beRes?.success && Array.isArray(beRes.data)) rawCourses.push(...beRes.data);
+    if (rawCourses.length === 0) {
+      if (ssoRes?.success && Array.isArray(ssoRes.data)) rawCourses.push(...ssoRes.data);
+      else if (Array.isArray(ssoRes)) rawCourses.push(...ssoRes);
+      else if (Array.isArray(ssoRes?.data?.courses)) rawCourses.push(...ssoRes.data.courses);
+      if (beRes?.success && Array.isArray(beRes.data)) rawCourses.push(...beRes.data);
+    }
 
     const mergedMap = new Map();
     
@@ -1038,6 +1012,7 @@ export const elearningApi = {
       const code = (c.code || c.course_code || c.id || '').toUpperCase();
       const name = c.name || c.course_name || c.title || code;
       if (!code && !name) return;
+      if (code === 'UMUM' || /pembelajaran umum|wali kelas/i.test(name)) return;
 
       const effectiveCode = code || name.slice(0, 3).toUpperCase();
       const existing = mergedMap.get(effectiveCode) || {};
@@ -1081,33 +1056,37 @@ export const elearningApi = {
 
   // =================== KELAS / ROMBEL (CLASSES) ===================
   getClasses: async () => {
-    // 1. Ambil dari SSO master classes & backend
-    const [ssoRes, beRes] = await Promise.all([
+    // Sumber utama adalah master rombel Admin e-Rapor/SSO.
+    const raporBase = getRaporApiBase();
+    const [raporRes, ssoRes, beRes] = await Promise.all([
+      fetchPublicJson(`${raporBase}/school/classes`).catch(() => null),
       fetchSsoJson('/school/classes').catch(() => null),
       fetchJson('/school/classes').catch(() => null),
     ]);
 
     const rawList = [];
-    if (ssoRes?.success && Array.isArray(ssoRes.data)) rawList.push(...ssoRes.data);
-    else if (Array.isArray(ssoRes?.data?.classes)) rawList.push(...ssoRes.data.classes);
-    else if (Array.isArray(ssoRes)) rawList.push(...ssoRes);
+    if (raporRes?.success && Array.isArray(raporRes.data)) rawList.push(...raporRes.data);
+    else if (Array.isArray(raporRes)) rawList.push(...raporRes);
+    else if (Array.isArray(raporRes?.data?.classes)) rawList.push(...raporRes.data.classes);
 
-    if (beRes?.success && Array.isArray(beRes.data)) rawList.push(...beRes.data);
+    if (rawList.length === 0) {
+      if (ssoRes?.success && Array.isArray(ssoRes.data)) rawList.push(...ssoRes.data);
+      else if (Array.isArray(ssoRes?.data?.classes)) rawList.push(...ssoRes.data.classes);
+      else if (Array.isArray(ssoRes)) rawList.push(...ssoRes);
+      if (beRes?.success && Array.isArray(beRes.data)) rawList.push(...beRes.data);
+    }
 
-    const customClasses = getLocal('custom_classes', []);
     const mergedMap = new Map();
-
-    // Default Spenspra classes (7A-7H, 8A-8H, 9A-9H) as foundation
-    DEFAULT_CLASSES.forEach((c) => mergedMap.set(c.name.toUpperCase(), { ...c }));
-
-    // Merge SSO classes
-    [...rawList, ...customClasses].forEach((c) => {
+    rawList.forEach((c) => {
       if (!c) return;
       const rawName = typeof c === 'string' ? c : (c.name || c.class_name || c.class_code || '');
       const cleanName = rawName.replace(/^Kelas\s*/i, '').trim().toUpperCase();
       if (!cleanName) return;
 
-      const levelNum = Number(c.level) || (cleanName.startsWith('7') ? 7 : cleanName.startsWith('8') ? 8 : cleanName.startsWith('9') ? 9 : 7);
+      const levelNum = Number(c.level) ||
+        (cleanName.startsWith('VII') || cleanName.startsWith('7') ? 7 :
+         cleanName.startsWith('VIII') || cleanName.startsWith('8') ? 8 :
+         cleanName.startsWith('IX') || cleanName.startsWith('9') ? 9 : 0);
 
       mergedMap.set(cleanName, {
         id: c.id || `cls-${cleanName.toLowerCase()}`,
