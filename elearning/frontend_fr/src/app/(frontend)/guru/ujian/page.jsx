@@ -64,7 +64,7 @@ function MathSymbolToolbar({ onInsert, label = 'Simbol matematika', compact = fa
 function isAnswerColor(hexOrName) {
   if (!hexOrName) return false;
   const s = String(hexOrName).trim().toLowerCase();
-  if (['red', 'darkred', 'crimson', 'firebrick', 'green', 'darkgreen'].includes(s)) return true;
+  if (['red', 'darkred', 'crimson', 'firebrick', 'green', 'darkgreen', 'ee0000', 'ff0000', 'ed1c24', 'c00000'].includes(s)) return true;
   if (/^[0-9a-f]{6}$/.test(s)) {
     const r = parseInt(s.slice(0, 2), 16);
     const g = parseInt(s.slice(2, 4), 16);
@@ -76,6 +76,199 @@ function isAnswerColor(hexOrName) {
     if (g > 130 && g > r * 1.5 && g > b * 1.5) return true;
   }
   return false;
+}
+
+// Ekstraksi struktur dokumen Word (.docx) secara langsung dari XML OpenXML:
+// Menangani penomoran otomatis Word (w:numPr), opsi A-D, gambar tersemat (Base64), dan kunci jawaban berwarna merah.
+async function extractDocxStructure(arrayBuffer) {
+  const zip = await JSZip.loadAsync(arrayBuffer);
+  const docXmlFile = zip.file('word/document.xml');
+  if (!docXmlFile) return null;
+
+  const docXml = await docXmlFile.async('string');
+  const numberingXmlFile = zip.file('word/numbering.xml');
+  const numberingXml = numberingXmlFile ? await numberingXmlFile.async('string') : '';
+  const relsXmlFile = zip.file('word/_rels/document.xml.rels');
+  const relsXml = relsXmlFile ? await relsXmlFile.async('string') : '';
+
+  // 1. Peta relasi gambar (Relationship Id -> file path dalam ZIP)
+  const rels = {};
+  const relMatches = relsXml.match(/<Relationship\s+[^>]*\/>/g) || [];
+  for (const r of relMatches) {
+    const id = (r.match(/Id="([^"]+)"/) || [])[1];
+    const target = (r.match(/Target="([^"]+)"/) || [])[1];
+    if (id && target) {
+      rels[id] = target.replace(/^word\//, '');
+    }
+  }
+
+  // 2. Peta definisi penomoran (numId -> abstractNumId -> lvl -> format)
+  const numToAbs = {};
+  const numMatches = numberingXml.match(/<w:num\s+[^>]*>[\s\S]*?<\/w:num>/g) || [];
+  for (const nm of numMatches) {
+    const numId = (nm.match(/w:numId="(\d+)"/) || [])[1];
+    const absId = (nm.match(/<w:abstractNumId\s+w:val="(\d+)"/) || [])[1];
+    if (numId && absId) numToAbs[numId] = absId;
+  }
+
+  const absFormats = {};
+  const absMatches = numberingXml.match(/<w:abstractNum\s+[^>]*>[\s\S]*?<\/w:abstractNum>/g) || [];
+  for (const am of absMatches) {
+    const absId = (am.match(/w:abstractNumId="(\d+)"/) || [])[1];
+    const lvlMatches = am.match(/<w:lvl\s+[^>]*>[\s\S]*?<\/w:lvl>/g) || [];
+    absFormats[absId] = {};
+    for (const lm of lvlMatches) {
+      const ilvl = (lm.match(/w:ilvl="(\d+)"/) || [])[1] || '0';
+      const numFmt = (lm.match(/<w:numFmt\s+w:val="([^"]+)"/) || [])[1] || 'decimal';
+      const lvlText = (lm.match(/<w:lvlText\s+w:val="([^"]+)"/) || [])[1] || '%1.';
+      absFormats[absId][ilvl] = { numFmt, lvlText };
+    }
+  }
+
+  const numCounters = {};
+  let currentQuestionNum = null;
+
+  function resetOptionCounters() {
+    Object.keys(numCounters).forEach((k) => {
+      const absId = numToAbs[k];
+      const fmtInfo = (absFormats[absId] && absFormats[absId]['0']) || {};
+      if (fmtInfo.numFmt === 'upperLetter' || fmtInfo.numFmt === 'lowerLetter') {
+        delete numCounters[k];
+      }
+    });
+  }
+
+  function getListPrefix(numId, ilvl = '0') {
+    if (!numId) return null;
+    const absId = numToAbs[numId];
+    const fmtInfo = (absFormats[absId] && absFormats[absId][ilvl]) || { numFmt: 'decimal', lvlText: '%1.' };
+
+    if (!numCounters[numId]) numCounters[numId] = 0;
+    numCounters[numId]++;
+    const count = numCounters[numId];
+
+    if (fmtInfo.numFmt === 'upperLetter') {
+      const letter = String.fromCharCode(64 + Math.min(count, 26));
+      return { prefix: `${letter}. `, isQuestion: false, isOption: true, letter, count };
+    } else if (fmtInfo.numFmt === 'lowerLetter') {
+      const letter = String.fromCharCode(96 + Math.min(count, 26));
+      return { prefix: `${letter}. `, isQuestion: false, isOption: true, letter: letter.toUpperCase(), count };
+    } else if (fmtInfo.numFmt === 'decimal') {
+      return { prefix: `${count}. `, isQuestion: true, isOption: false, count };
+    } else if (fmtInfo.numFmt === 'bullet') {
+      return { prefix: `- `, isQuestion: false, isOption: false, count };
+    }
+    return { prefix: `${count}. `, isQuestion: true, isOption: false, count };
+  }
+
+  const paragraphs = docXml.match(/<w:p(?:\s|>).*?<\/w:p>/gs) || [];
+  const lines = [];
+  const coloredKeysByNumber = {};
+  const coloredKeysInOrder = [];
+
+  for (let i = 0; i < paragraphs.length; i++) {
+    const p = paragraphs[i];
+
+    // Penomoran otomatis Word
+    const numPr = p.match(/<w:numPr>.*?<\/w:numPr>/s);
+    const numId = numPr ? (numPr[0].match(/<w:numId\s+w:val="(\d+)"/) || [])[1] : null;
+    const ilvl = numPr ? (numPr[0].match(/<w:ilvl\s+w:val="(\d+)"/) || [])[1] : '0';
+
+    let listInfo = null;
+    if (numId) {
+      listInfo = getListPrefix(numId, ilvl);
+      if (listInfo?.isQuestion) {
+        currentQuestionNum = listInfo.count;
+        resetOptionCounters();
+      }
+    }
+
+    // Gambar tersemat dalam paragraf ini
+    let imgUri = null;
+    const blipMatches = p.match(/<(?:a:blip|v:imagedata)\s+[^>]*(?:r:embed|r:id)="([^"]+)"/g) || [];
+    for (const bm of blipMatches) {
+      const rId = (bm.match(/(?:r:embed|r:id)="([^"]+)"/) || [])[1];
+      const target = rels[rId];
+      if (target) {
+        const imgPath = target.startsWith('word/') ? target : `word/${target}`;
+        const imgFile = zip.file(imgPath);
+        if (imgFile) {
+          const imgBase64 = await imgFile.async('base64');
+          const ext = target.split('.').pop().toLowerCase();
+          const mime = ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
+          imgUri = `data:${mime};base64,${imgBase64}`;
+          break;
+        }
+      }
+    }
+
+    // Teks dan warna teks
+    const runs = p.match(/<w:r\b[\s\S]*?<\/w:r>/g) || [];
+    let pText = '';
+    let isRed = false;
+
+    runs.forEach((r) => {
+      const c = r.match(/<w:color\s+w:val="([^"]+)"/i);
+      const h = r.match(/<w:highlight\s+w:val="([^"]+)"/i);
+      const t = (r.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [])
+        .map((x) => x.replace(/<[^>]+>/g, ''))
+        .join('');
+      if (t) {
+        pText += t;
+        const colorVal = c ? c[1] : null;
+        const highlightVal = h ? h[1] : null;
+        if (isAnswerColor(colorVal) || ['red', 'magenta'].includes(String(highlightVal).toLowerCase())) {
+          isRed = true;
+        }
+      }
+    });
+
+    const cleanText = pText.replace(/\s+/g, ' ').trim();
+
+    // Deteksi nomor soal eksplisit di teks
+    const manualQMatch = cleanText.match(/^(?:soal\s*|pertanyaan\s*)?(?:nomor\s*)?(\d+)\s*[.)\]:\-]/i) ||
+                         cleanText.match(/^(?:soal|nomor|no\.?)\s*(?:nomor\s*)?(\d+)\s*$/i);
+    if (manualQMatch) {
+      currentQuestionNum = Number(manualQMatch[1]);
+      resetOptionCounters();
+    }
+
+    // Kunci jawaban berwarna
+    if (isRed) {
+      let optKey = listInfo?.isOption ? listInfo.letter : null;
+      if (!optKey) {
+        const explicitOpt = cleanText.match(/^([A-E])\s*[.)\]:\-]/i);
+        if (explicitOpt) optKey = explicitOpt[1].toUpperCase();
+      }
+      if (optKey) {
+        if (currentQuestionNum && !coloredKeysByNumber[currentQuestionNum]) {
+          coloredKeysByNumber[currentQuestionNum] = optKey;
+        }
+        coloredKeysInOrder.push(optKey);
+      }
+    }
+
+    const prefix = listInfo?.prefix || '';
+
+    if (imgUri && !cleanText) {
+      // Paragraf khusus gambar (bisa berupa opsi bergambar A-D)
+      if (listInfo?.isOption) {
+        lines.push(`${prefix.trim()} GAMBAR: ${imgUri}`);
+      } else {
+        lines.push(`GAMBAR: ${imgUri}`);
+      }
+    } else {
+      if (imgUri) {
+        lines.push(`GAMBAR: ${imgUri}`);
+      }
+      const full = (prefix + cleanText).trim();
+      if (full) {
+        lines.push(full);
+      }
+    }
+  }
+
+  return { lines, coloredKeysByNumber, coloredKeysInOrder };
 }
 
 // Mengekstrak opsi jawaban yang diberi tinta merah/stabilo langsung dari XML Word (.docx)
@@ -299,14 +492,36 @@ function parseQuestionImport(text, options = {}) {
       return;
     }
 
-    const optionImageMatch = line.match(/^(?:gambar|image)\s*([A-E])?\s*[:=]\s*(.+)$/i);
+    // Opsi berupa gambar dengan prefix huruf, misal "A. GAMBAR: data:image/png;base64,..."
+    const optionImagePrefixMatch = line.match(/^([A-E])(?:[\s.)\]:-]+)\s*(?:gambar|image)\s*[:=]\s*(.+)$/i);
+    if (optionImagePrefixMatch) {
+      const key = optionImagePrefixMatch[1].toUpperCase();
+      current.options.push({ key, text: '', imageUrl: optionImagePrefixMatch[2].trim() });
+      currentOption = key;
+      return;
+    }
+
+    const optionImageMatch = line.match(/^(?:gambar|image)\s*([A-E])\s*[:=]\s*(.+)$/i);
     if (optionImageMatch) {
-      const optionKey = optionImageMatch[1]?.toUpperCase();
-      const option = optionKey ? current.options.find((item) => item.key === optionKey) : null;
-      const activeOption = currentOption ? current.options.find((item) => item.key === currentOption) : null;
-      if (option || activeOption) (option || activeOption).imageUrl = optionImageMatch[2].trim();
-      else current.imageUrl = optionImageMatch[2].trim();
-      currentOption = null;
+      const optionKey = optionImageMatch[1].toUpperCase();
+      const option = current.options.find((item) => item.key === optionKey);
+      if (option) option.imageUrl = optionImageMatch[2].trim();
+      else current.options.push({ key: optionKey, text: '', imageUrl: optionImageMatch[2].trim() });
+      currentOption = optionKey;
+      return;
+    }
+
+    const generalImageMatch = line.match(/^(?:gambar|image)\s*[:=]\s*(.+)$/i);
+    if (generalImageMatch) {
+      const imgUrl = generalImageMatch[1].trim();
+      if (!current.options.length) {
+        current.imageUrl = imgUrl;
+      } else if (currentOption) {
+        const opt = current.options.find((o) => o.key === currentOption);
+        if (opt) opt.imageUrl = imgUrl;
+      } else {
+        current.imageUrl = imgUrl;
+      }
       return;
     }
 
@@ -337,7 +552,17 @@ function parseQuestionImport(text, options = {}) {
     // 1. Kunci sudah terdeteksi di teks eksplisit (cth: KUNCI: B)
     if (question.keyDetected) return;
 
-    // 2. Kunci otomatis terdeteksi dari teks bertinta merah / stabilo pada dokumen Word (.docx)
+    // 2. Kunci tertera dalam tanda kurung di akhir pertanyaan, misal "(jawaban A)" atau "(kunci: B)"
+    const inlineKeyMatch = question.questionText.match(/\((?:kunci|jawaban)\s*[:=]?\s*([A-E])\)/i);
+    if (inlineKeyMatch) {
+      question.correctOption = inlineKeyMatch[1].toUpperCase();
+      question.keyDetected = true;
+      question.keySource = 'TEKS_SOAL';
+      question.questionText = question.questionText.replace(/\s*\((?:kunci|jawaban)\s*[:=]?\s*([A-E])\)/i, '').trim();
+      return;
+    }
+
+    // 3. Kunci otomatis terdeteksi dari teks bertinta merah / stabilo pada dokumen Word (.docx)
     const colorKey = coloredKeysByNumber[question.questionNumber] || coloredKeysInOrder[index];
     if (colorKey) {
       question.correctOption = colorKey;
@@ -346,7 +571,7 @@ function parseQuestionImport(text, options = {}) {
       return;
     }
 
-    // 3. Kunci dari daftar kunci terpisah di akhir dokumen (header Kunci Jawaban)
+    // 4. Kunci dari daftar kunci terpisah di akhir dokumen (header Kunci Jawaban)
     const key = answerKeyByNumber[question.questionNumber] || answerKeyList[index];
     if (key) {
       question.correctOption = key;
@@ -1222,62 +1447,96 @@ export default function TeacherExamsManagementPage() {
     setIsImporting(true);
     try {
       const arrayBuffer = await file.arrayBuffer();
+      let imported = null;
 
-      // Ekstraksi kunci jawaban berwarna (merah/stabilo) langsung dari word/document.xml
-      let coloredKeysByNumber = {};
-      let coloredKeysInOrder = [];
+      // 1. Ekstraksi struktur langsung dari OpenXML Docx (Mendukung penomoran otomatis Word, opsi gambar, dan kunci merah)
       try {
-        const zip = await JSZip.loadAsync(arrayBuffer);
-        const docXmlFile = zip.file('word/document.xml');
-        if (docXmlFile) {
-          const docXml = await docXmlFile.async('string');
-          const res = extractColoredKeysFromDocxXml(docXml);
-          coloredKeysByNumber = res.keysByNumber;
-          coloredKeysInOrder = res.keysInOrder;
+        const extracted = await extractDocxStructure(arrayBuffer);
+        if (extracted && extracted.lines && extracted.lines.length > 0) {
+          const parsed = parseQuestionImport(extracted.lines.join('\n'), {
+            coloredKeysByNumber: extracted.coloredKeysByNumber,
+            coloredKeysInOrder: extracted.coloredKeysInOrder,
+          });
+          if (parsed && parsed.length > 0) {
+            imported = parsed;
+          }
         }
-      } catch (zipErr) {
-        console.warn('Gagal membaca warna XML docx:', zipErr);
+      } catch (xmlErr) {
+        console.warn('Ekstraksi XML docx langsung gagal, beralih ke fallback mammoth:', xmlErr);
       }
 
-      const result = await mammoth.convertToHtml(
-        { arrayBuffer },
-        {
-          convertImage: mammoth.images.imgElement((image) =>
-            image.read('base64').then((base64) => ({
-              src: `data:${image.contentType};base64,${base64}`,
-            }))
-          ),
+      // 2. Fallback menggunakan Mammoth jika ekstraksi langsung tidak menghasilkan soal
+      if (!imported || imported.length === 0) {
+        let coloredKeysByNumber = {};
+        let coloredKeysInOrder = [];
+        try {
+          const zip = await JSZip.loadAsync(arrayBuffer);
+          const docXmlFile = zip.file('word/document.xml');
+          if (docXmlFile) {
+            const docXml = await docXmlFile.async('string');
+            const res = extractColoredKeysFromDocxXml(docXml);
+            coloredKeysByNumber = res.keysByNumber;
+            coloredKeysInOrder = res.keysInOrder;
+          }
+        } catch (zipErr) {
+          console.warn('Gagal membaca warna XML docx:', zipErr);
         }
-      );
-      const body = new DOMParser().parseFromString(result.value, 'text/html').body;
-      const lines = [];
 
-      Array.from(body.children).forEach((element) => {
-        if (element.tagName === 'TABLE') {
-          element.querySelectorAll('tr').forEach((row) => {
-            const cells = Array.from(row.querySelectorAll('th, td'));
-            if (cells.length > 0) {
-              cells.forEach((cell) => {
-                cell.querySelectorAll('img').forEach((image) => {
-                  lines.push(`GAMBAR: ${image.getAttribute('src') || ''}`);
+        const result = await mammoth.convertToHtml(
+          { arrayBuffer },
+          {
+            convertImage: mammoth.images.imgElement((image) =>
+              image.read('base64').then((base64) => ({
+                src: `data:${image.contentType};base64,${base64}`,
+              }))
+            ),
+          }
+        );
+        const body = new DOMParser().parseFromString(result.value, 'text/html').body;
+        const lines = [];
+
+        Array.from(body.children).forEach((element) => {
+          if (element.tagName === 'TABLE') {
+            element.querySelectorAll('tr').forEach((row) => {
+              const cells = Array.from(row.querySelectorAll('th, td'));
+              if (cells.length > 0) {
+                cells.forEach((cell) => {
+                  cell.querySelectorAll('img').forEach((image) => {
+                    lines.push(`GAMBAR: ${image.getAttribute('src') || ''}`);
+                  });
+                  const text = String(cell.textContent || '').replace(/\s+/g, ' ').trim();
+                  if (text) lines.push(text);
                 });
-                const text = String(cell.textContent || '').replace(/\s+/g, ' ').trim();
-                if (text) lines.push(text);
+              }
+            });
+            return;
+          }
+
+          if (element.tagName === 'OL' || element.tagName === 'UL') {
+            element.querySelectorAll('li').forEach((li) => {
+              li.querySelectorAll('img').forEach((image) => {
+                lines.push(`GAMBAR: ${image.getAttribute('src') || ''}`);
               });
-            }
+              const liText = String(li.textContent || '').replace(/\s+/g, ' ').trim();
+              if (liText) lines.push(liText);
+            });
+            return;
+          }
+
+          element.querySelectorAll('img').forEach((image) => {
+            lines.push(`GAMBAR: ${image.getAttribute('src') || ''}`);
           });
-          return;
-        }
-
-        element.querySelectorAll('img').forEach((image) => {
-          lines.push(`GAMBAR: ${image.getAttribute('src') || ''}`);
+          const text = String(element.textContent || '').replace(/\s+/g, ' ').trim();
+          if (text) lines.push(text);
         });
-        const text = String(element.textContent || '').replace(/\s+/g, ' ').trim();
-        if (text) lines.push(text);
-      });
 
-      const imported = parseQuestionImport(lines.join('\n'), { coloredKeysByNumber, coloredKeysInOrder });
-      if (imported.length === 0) {
+        const fallbackParsed = parseQuestionImport(lines.join('\n'), { coloredKeysByNumber, coloredKeysInOrder });
+        if (fallbackParsed && fallbackParsed.length > 0) {
+          imported = fallbackParsed;
+        }
+      }
+
+      if (!imported || imported.length === 0) {
         throw new Error('Struktur soal tidak dikenali. Pastikan file memuat nomor soal (cth: 1. Soal atau Soal 1) dan opsi A-D.');
       }
       setDocxImported(imported);
