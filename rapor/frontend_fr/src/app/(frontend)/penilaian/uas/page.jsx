@@ -66,6 +66,7 @@ export default function PenilaianUASPage() {
   const [currentUser, setCurrentUser] = useState(null);
   const [subjects, setSubjects] = useState([]);
   const [classes, setClasses] = useState([]);
+  const [teacherAssignments, setTeacherAssignments] = useState([]);
   const [subject, setSubject] = useState('');
   const [className, setClassName] = useState('');
   const [rows, setRows] = useState([]);
@@ -144,6 +145,8 @@ export default function PenilaianUASPage() {
             teacherClasses = filtered;
           }
 
+          setTeacherAssignments(teacherClasses);
+
           const classNames = [...new Set(teacherClasses.map((c) => c.class_code || c.name || c.id).filter(Boolean))];
           setClasses(classNames);
           if (classNames.length > 0) {
@@ -176,6 +179,27 @@ export default function PenilaianUASPage() {
     };
     fetchMasterData();
   }, []);
+
+  // Sinkronkan daftar rombel pengampu sesuai Mata Pelajaran yang dipilih guru di e-Rapor
+  useEffect(() => {
+    if (!teacherAssignments || teacherAssignments.length === 0) return;
+    const subLow = String(subject || '').toLowerCase().trim();
+    const matchedAssignments = subLow
+      ? teacherAssignments.filter((c) => {
+          const cc = String(c.course_code || c.course_id || '').toLowerCase().trim();
+          return !cc || cc === subLow || cc === `crs-${subLow}`;
+        })
+      : teacherAssignments;
+
+    const listToUse = matchedAssignments.length > 0 ? matchedAssignments : teacherAssignments;
+    const scopedClasses = [...new Set(listToUse.map((c) => c.class_code || c.name || c.id).filter(Boolean))];
+    setClasses(scopedClasses);
+    if (scopedClasses.length > 0) {
+      setClassName((prev) => (scopedClasses.includes(prev) ? prev : scopedClasses[0]));
+    } else {
+      setClassName('');
+    }
+  }, [subject, teacherAssignments]);
 
   const predicateTemplatesRef = useRef(predicateTemplates);
   useEffect(() => {
@@ -307,43 +331,89 @@ export default function PenilaianUASPage() {
           return false;
         };
 
+        const cleanName = (n) => String(n || '').toLowerCase().replace(/[.,]/g, ' ').replace(/\s+/g, ' ').trim();
+        const myUid = String(currentUser?.id || currentUser?.nimNip || currentUser?.nip || '').toLowerCase().trim();
+        const myName = cleanName(currentUser?.fullName || currentUser?.full_name || currentUser?.name || '');
+
+        const isOwnedByMe = (ex) => {
+          const exTid = String(ex.teacher_id || ex.teacherId || '').toLowerCase().trim();
+          const exTname = cleanName(ex.teacherName || ex.teacher_name || '');
+          if (myUid && exTid && exTid !== 'user-elearning-default' && myUid === exTid) return true;
+          if (myName && exTname && exTname !== 'bapak/ibu guru' && (exTname.includes(myName) || myName.includes(exTname))) return true;
+          return false;
+        };
+
+        const isCoordinatorExamObj = (ex) =>
+          ex.examCategory === 'SEMESTER_UAS' || Boolean(ex.isCoordinatorExam) || Boolean(ex.targetGradeLevel);
+
+        const getExamGrade = (ex) =>
+          extractGradeLevelDigit(ex.targetGradeLevel || ex.className || ex.class_code || ex.rawDescription || ex.title || '');
+
+        // Daftar rombel & jenjang yang benar-benar diampu guru ini di e-Rapor
+        const teacherAssignedNorms = new Set((classes || []).map((c) => normalizeClassCode(c)).filter(Boolean));
+        const teacherAssignedGrades = new Set((classes || []).map((c) => extractGradeLevelDigit(c)).filter(Boolean));
+
+        const isAllowedForTeacherScope = (ex) => {
+          if (!isTeacherRole) return true;
+          const isCoord = isCoordinatorExamObj(ex);
+          if (!isCoord) {
+            // Ujian reguler hanya boleh muncul jika dibuat oleh guru pengampu sendiri
+            return isOwnedByMe(ex);
+          }
+          // Ujian koordinator ASAS/UAS boleh diakses jika jenjang atau rombelnya termasuk rombel pengampu guru di e-Rapor
+          const exGrade = getExamGrade(ex);
+          if (exGrade && teacherAssignedGrades.has(exGrade)) return true;
+          const exNorm = normalizeClassCode(ex.className || ex.class_code || '');
+          if (exNorm && teacherAssignedNorms.has(exNorm)) return true;
+          if (Array.isArray(ex.targetClasses) && ex.targetClasses.some((tc) => teacherAssignedNorms.has(normalizeClassCode(tc)))) {
+            return true;
+          }
+          return isOwnedByMe(ex);
+        };
+
         const checkClassMatch = (ex) => {
           const exNorm = normalizeClassCode(ex.className || ex.class_code || '');
-          const isCoordinator = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel) || /uas|asas/i.test(ex.title || '');
-          const exGrade = extractGradeLevelDigit(ex.targetGradeLevel || ex.className || ex.title || ex.rawDescription || '');
+          const isCoord = isCoordinatorExamObj(ex);
+          const exGrade = getExamGrade(ex);
 
           if (exNorm && exNorm === cNorm) return true;
           if (Array.isArray(ex.targetClasses) && ex.targetClasses.length > 0) {
             if (ex.targetClasses.some((tc) => normalizeClassCode(tc) === cNorm)) return true;
           }
-          if (isCoordinator && classGrade && exGrade && classGrade === exGrade) {
+          if (isCoord && ex.targetGradeLevel && classGrade && String(ex.targetGradeLevel) === classGrade) {
             return true;
           }
-          if (ex.targetGradeLevel && classGrade && String(ex.targetGradeLevel) === classGrade) {
+          if (isCoord && classGrade && exGrade && classGrade === exGrade) {
             return true;
           }
-          if (isCoordinator && !exGrade) return true;
-
           return false;
         };
 
-        // Filter ujian yang sesuai dengan Mapel
-        const sameSubjectExams = (allExams || []).filter(checkSubMatch);
+        // Filter ujian yang sesuai Mapel & ruang lingkup guru pengampu di e-Rapor
+        const sameSubjectExams = (allExams || []).filter((ex) => checkSubMatch(ex) && isAllowedForTeacherScope(ex));
 
-        // Ujian yang sesuai kelas/tingkat aktif
+        // Ujian yang sesuai rombel/tingkat aktif yang sedang dibuka
         const filtered = sameSubjectExams.filter(checkClassMatch);
 
-        // Ujian mapel yang sama tetapi di jenjang/tingkat lain (misal: Tingkat 9 saat guru buka Kelas VII-C)
+        // Ujian mapel & pengampu yang sama di jenjang lain yang juga diampu guru (jika mengajar lintas tingkat)
         const others = sameSubjectExams.filter((ex) => !checkClassMatch(ex));
 
-        // Urutkan: Ujian UAS / ASAS Semester diutamakan paling atas
+        // Urutkan: milik guru sendiri / UAS Koordinator diutamakan, lalu terbaru
         const sortExams = (list) => {
           return [...list].sort((a, b) => {
-            const aIsUas = a.examCategory === 'SEMESTER_UAS' || a.isCoordinatorExam || /uas|asas/i.test(a.title);
-            const bIsUas = b.examCategory === 'SEMESTER_UAS' || b.isCoordinatorExam || /uas|asas/i.test(b.title);
+            const aMine = isOwnedByMe(a);
+            const bMine = isOwnedByMe(b);
+            if (aMine && !bMine) return -1;
+            if (!aMine && bMine) return 1;
+
+            const aIsUas = isCoordinatorExamObj(a);
+            const bIsUas = isCoordinatorExamObj(b);
             if (aIsUas && !bIsUas) return -1;
             if (!aIsUas && bIsUas) return 1;
-            return 0;
+
+            const aTime = new Date(a.created_at || a.startDateTime || 0).getTime() || 0;
+            const bTime = new Date(b.created_at || b.startDateTime || 0).getTime() || 0;
+            return bTime - aTime;
           });
         };
 
@@ -354,12 +424,10 @@ export default function PenilaianUASPage() {
         setOtherGradeExams(sortedOthers);
 
         if (sortedFiltered.length > 0) {
-          // Pilih otomatis ujian bertipe UAS / ASAS yang sesuai jenjang
-          const defaultExam = sortedFiltered.find((e) => e.examCategory === 'SEMESTER_UAS' || /uas|asas/i.test(e.title)) || sortedFiltered[0];
+          const defaultExam = sortedFiltered.find((e) => isOwnedByMe(e) && isCoordinatorExamObj(e))
+            || sortedFiltered.find((e) => isCoordinatorExamObj(e))
+            || sortedFiltered[0];
           setSelectedExamId(defaultExam.id);
-        } else if (sortedOthers.length > 0) {
-          // Biarkan kosong sampai guru memilih sesi atau memilih jenjang yang sesuai
-          setSelectedExamId('');
         } else {
           setSelectedExamId('');
         }
@@ -369,7 +437,7 @@ export default function PenilaianUASPage() {
     };
 
     fetchMatchingExams();
-  }, [className, subject, subjects]);
+  }, [className, subject, subjects, classes, currentUser, isTeacherRole]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -867,27 +935,30 @@ export default function PenilaianUASPage() {
                 <>
                   <option value="">— Pilih Sesi Ujian CBT Sumber —</option>
                   {availableCbtExams.length > 0 && (
-                    <optgroup label={`Sesi Ujian Sesuai: ${className} (Tingkat ${extractGradeLevelDigit(className) || 'Ini'})`}>
+                    <optgroup label={`Sesi Ujian Pengampu: ${className} (Tingkat ${extractGradeLevelDigit(className) || 'Ini'})`}>
                       {availableCbtExams.map((ex) => {
-                        const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || /uas|asas/i.test(ex.title);
+                        const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+                        const lvl = extractGradeLevelDigit(ex.targetGradeLevel || ex.className || ex.rawDescription || ex.title) || extractGradeLevelDigit(className);
+                        const creatorLabel = ex.teacherName || ex.teacher_name || 'Koordinator Mapel';
                         return (
                           <option key={ex.id} value={ex.id}>
-                            {isUasType ? '[UAS / ASAS Semester] ' : '[Ujian Reguler] '}
-                            {ex.title} (Mapel: {ex.subject}) — Token: {ex.token || '-'}
+                            {isUasType ? `[ASAS Tk. ${lvl || '-'} • ${className}] ` : `[Reguler • ${className}] `}
+                            {ex.title} — Pengampu/PJ: {creatorLabel} • Token: {ex.token || '-'}
                           </option>
                         );
                       })}
                     </optgroup>
                   )}
                   {otherGradeExams.length > 0 && (
-                    <optgroup label="Sesi Ujian Mapel Ini di Jenjang/Tingkat Lain">
+                    <optgroup label="Sesi Ujian Mapel Ini di Rombel/Tingkat Lain yang Diampu">
                       {otherGradeExams.map((ex) => {
-                        const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || /uas|asas/i.test(ex.title);
-                        const lvl = extractGradeLevelDigit(ex.targetGradeLevel || ex.className || ex.title);
+                        const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+                        const lvl = extractGradeLevelDigit(ex.targetGradeLevel || ex.className || ex.rawDescription || ex.title);
+                        const creatorLabel = ex.teacherName || ex.teacher_name || 'Koordinator Mapel';
                         return (
                           <option key={ex.id} value={ex.id}>
-                            {isUasType ? `[ASAS Tk. ${lvl || '?'}] ` : `[Ujian Reguler] `}
-                            {ex.title} (Mapel: {ex.subject}) — Token: {ex.token || '-'}
+                            {isUasType ? `[ASAS Tk. ${lvl || '?'}] ` : `[Reguler • ${ex.className || '-'}] `}
+                            {ex.title} — Pengampu/PJ: {creatorLabel} • Token: {ex.token || '-'}
                           </option>
                         );
                       })}
