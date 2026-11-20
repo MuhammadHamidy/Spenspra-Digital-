@@ -84,7 +84,7 @@ export default function Navbar({ onToggleMobileSidebar = () => {} }) {
     if (pathname === '/') return { section: 'e-Rapor', sub: 'Ringkasan Utama' };
     if (pathname.startsWith('/sso/callback')) return { section: 'Autentikasi SSO', sub: 'Menyelesaikan Autentikasi' };
     if (pathname.startsWith('/penilaian/pts')) return { section: 'Penilaian', sub: 'Input Nilai USTS' };
-    if (pathname.startsWith('/penilaian/uas')) return { section: 'Penilaian', sub: 'Input Nilai UAS (Coming Soon)' };
+    if (pathname.startsWith('/penilaian/uas')) return { section: 'Penilaian', sub: 'Input Nilai UAS / ASAS' };
     if (pathname.startsWith('/admin/monitoring')) return { section: 'Monitoring', sub: 'Supervisi & Pengesahan' };
     if (pathname.startsWith('/wali-kelas')) return { section: 'Penilaian', sub: 'Wali Kelas' };
     if (pathname.includes('/attendance/session/')) return { section: 'Presensi', sub: 'Pemindai QR Kelas' };

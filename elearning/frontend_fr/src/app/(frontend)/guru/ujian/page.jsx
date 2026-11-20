@@ -78,6 +78,46 @@ function isAnswerColor(hexOrName) {
   return false;
 }
 
+// Kompresi otomatis gambar Base64 di browser (Client-Side HTML5 Canvas Compression)
+// Menurunkan resolusi berlebih dan kompresi JPEG 75-80% agar ukuran gambar kecil (<80KB) dan ringan diakses ratusan siswa serentak.
+async function compressImageBase64(base64Uri, maxWidth = 960, quality = 0.78) {
+  if (typeof window === 'undefined' || !base64Uri || !base64Uri.startsWith('data:image')) {
+    return base64Uri;
+  }
+  // Jika ukuran string sudah cukup ringkas (< 65KB), lewati kompresi
+  if (base64Uri.length < 65000) {
+    return base64Uri;
+  }
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(base64Uri);
+        // Latar putih agar diagram PNG transparan dari Word tidak menjadi hitam pekat saat disimpan sebagai JPEG
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressed = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressed.length < base64Uri.length ? compressed : base64Uri);
+      };
+      img.onerror = () => resolve(base64Uri);
+      img.src = base64Uri;
+    } catch (_) {
+      resolve(base64Uri);
+    }
+  });
+}
+
 // Ekstraksi struktur dokumen Word (.docx) secara langsung dari XML OpenXML:
 // Menangani penomoran otomatis Word (w:numPr), opsi A-D, gambar tersemat (Base64), dan kunci jawaban berwarna merah.
 async function extractDocxStructure(arrayBuffer) {
@@ -196,7 +236,8 @@ async function extractDocxStructure(arrayBuffer) {
           const imgBase64 = await imgFile.async('base64');
           const ext = target.split('.').pop().toLowerCase();
           const mime = ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
-          imgUri = `data:${mime};base64,${imgBase64}`;
+          const rawUri = `data:${mime};base64,${imgBase64}`;
+          imgUri = await compressImageBase64(rawUri, 960, 0.78);
           break;
         }
       }
@@ -1246,13 +1287,11 @@ export default function TeacherExamsManagementPage() {
   const handleImageUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Ukuran berkas gambar maksimal 2MB!');
-      return;
-    }
     const reader = new FileReader();
-    reader.onload = () => {
-      setImageUrl(reader.result);
+    reader.onload = async () => {
+      const rawUri = String(reader.result || '');
+      const compressed = await compressImageBase64(rawUri, 960, 0.78);
+      setImageUrl(compressed);
       setIsImageOpen(true);
     };
     reader.readAsDataURL(file);
@@ -1261,12 +1300,12 @@ export default function TeacherExamsManagementPage() {
   const handleOptionImageUpload = (setter) => (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Ukuran gambar opsi maksimal 2MB!');
-      return;
-    }
     const reader = new FileReader();
-    reader.onload = () => setter(String(reader.result || ''));
+    reader.onload = async () => {
+      const rawUri = String(reader.result || '');
+      const compressed = await compressImageBase64(rawUri, 500, 0.75);
+      setter(compressed);
+    };
     reader.readAsDataURL(file);
   };
 
@@ -1527,8 +1566,8 @@ export default function TeacherExamsManagementPage() {
           { arrayBuffer },
           {
             convertImage: mammoth.images.imgElement((image) =>
-              image.read('base64').then((base64) => ({
-                src: `data:${image.contentType};base64,${base64}`,
+              image.read('base64').then(async (base64) => ({
+                src: await compressImageBase64(`data:${image.contentType};base64,${base64}`, 960, 0.78),
               }))
             ),
           }

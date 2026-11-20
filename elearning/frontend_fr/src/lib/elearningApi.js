@@ -839,6 +839,10 @@ export const elearningApi = {
     return true;
   },
 
+  getStudents: async (className = '') => {
+    return elearningApi.getStudentsByClass(className);
+  },
+
   getStudentsByClass: async (className = '') => {
     try {
       const { accountApiAdapter } = await import('@/lib/features/auth/infrastructure/accountApiAdapter');

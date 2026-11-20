@@ -62,7 +62,7 @@ func NewFiber(cfg *Config) *fiber.App {
 	}
 	bodyLimit := cfg.BodyLimit
 	if bodyLimit == 0 {
-		bodyLimit = 4 * 1024 * 1024 // 4MB
+		bodyLimit = 10 * 1024 * 1024 // 10MB default buffer for bulk question imports
 	}
 
 	app := fiber.New(fiber.Config{
