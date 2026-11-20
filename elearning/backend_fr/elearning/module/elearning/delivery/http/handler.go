@@ -1416,7 +1416,7 @@ func (h *ELearningHandler) GetStudentSession(c *fiber.Ctx) error {
 
 	sess, err := h.useCase.GetStudentSessionByExamAndStudent(c.Context(), examID, studentID)
 	if err != nil || sess == nil {
-		return c.Status(http.StatusNotFound).JSON(responses.Fail("NOT_FOUND", "Sesi ujian siswa tidak ditemukan"))
+		return c.Status(http.StatusOK).JSON(responses.Success((*domain.CBTStudentSession)(nil), "Sesi ujian siswa belum dibuat"))
 	}
 
 	subAt := ""
