@@ -379,6 +379,16 @@ func (in *CBTExamInput) ToDomain() domain.CBTExam {
 	startT := parseTime(in.StartDateTime, in.ScheduledDate, in.StartTime)
 	endT := parseTime(in.EndDateTime, in.ScheduledDate, in.EndTime)
 
+	now := time.Now()
+	switch {
+	case endT != nil && !now.Before(*endT):
+		stat = "COMPLETED"
+	case startT != nil && now.Before(*startT):
+		stat = "UPCOMING"
+	case startT != nil:
+		stat = "ACTIVE"
+	}
+
 	return domain.CBTExam{
 		ID:                in.ID,
 		Title:             strings.TrimSpace(in.Title),
@@ -416,6 +426,8 @@ func formatExamForFrontend(e domain.CBTExam) fiber.Map {
 	eTime := ""
 	sDateTime := ""
 	eDateTime := ""
+	status := strings.ToUpper(strings.TrimSpace(e.Status))
+	now := time.Now()
 
 	if e.StartTime != nil {
 		sDateTime = e.StartTime.Format(time.RFC3339)
@@ -425,6 +437,20 @@ func formatExamForFrontend(e domain.CBTExam) fiber.Map {
 	if e.EndTime != nil {
 		eDateTime = e.EndTime.Format(time.RFC3339)
 		eTime = e.EndTime.Format("15:04")
+	}
+
+	if status != "COMPLETED" && status != "CLOSED" {
+		if e.EndTime != nil && !now.Before(*e.EndTime) {
+			status = "COMPLETED"
+		} else if e.StartTime != nil {
+			if now.Before(*e.StartTime) {
+				status = "UPCOMING"
+			} else {
+				status = "ACTIVE"
+			}
+		} else if status == "" {
+			status = "UPCOMING"
+		}
 	}
 
 	showScore := true
@@ -480,7 +506,7 @@ func formatExamForFrontend(e domain.CBTExam) fiber.Map {
 		"show_score_to_student":   showScore,
 		"showAnswersToStudent":    showAnswers,
 		"show_answers_to_student": showAnswers,
-		"status":                  e.Status,
+		"status":                  status,
 		"created_at":              e.CreatedAt,
 		"updated_at":              e.UpdatedAt,
 	}
@@ -696,6 +722,16 @@ func (h *ELearningHandler) UpdateExam(c *fiber.Ctx) error {
 	}
 	if endT := parseTime(input.EndDateTime, input.ScheduledDate, input.EndTime); endT != nil {
 		req.EndTime = endT
+	}
+
+	now := time.Now()
+	switch {
+	case req.EndTime != nil && !now.Before(*req.EndTime):
+		req.Status = "COMPLETED"
+	case req.StartTime != nil && now.Before(*req.StartTime):
+		req.Status = "UPCOMING"
+	case req.StartTime != nil:
+		req.Status = "ACTIVE"
 	}
 
 	if err := h.useCase.UpdateExam(c.Context(), id, &req); err != nil {
@@ -1133,6 +1169,17 @@ func (h *ELearningHandler) SaveExamQuestions(c *fiber.Ctx) error {
 // Student Runner & Anti-Cheat Handlers
 func (h *ELearningHandler) StartStudentExam(c *fiber.Ctx) error {
 	id := c.Params("id")
+	exam, err := h.useCase.GetExamDetail(c.Context(), id)
+	if err != nil {
+		return c.Status(http.StatusNotFound).JSON(responses.Fail("NOT_FOUND", "Ujian tidak ditemukan"))
+	}
+	now := time.Now()
+	if exam.EndTime != nil && !now.Before(*exam.EndTime) {
+		return c.Status(http.StatusForbidden).JSON(responses.Fail("EXAM_CLOSED", "Waktu ujian telah berakhir"))
+	}
+	if exam.StartTime != nil && now.Before(*exam.StartTime) {
+		return c.Status(http.StatusForbidden).JSON(responses.Fail("EXAM_NOT_STARTED", "Ujian belum memasuki jadwal pengerjaan"))
+	}
 	type StartReq struct {
 		Token            string `json:"token"`
 		StudentID        string `json:"student_id"`
@@ -1417,6 +1464,15 @@ func (h *ELearningHandler) GetStudentSession(c *fiber.Ctx) error {
 	sess, err := h.useCase.GetStudentSessionByExamAndStudent(c.Context(), examID, studentID)
 	if err != nil || sess == nil {
 		return c.Status(http.StatusOK).JSON(responses.Success((*domain.CBTStudentSession)(nil), "Sesi ujian siswa belum dibuat"))
+	}
+
+	exam, examErr := h.useCase.GetExamDetail(c.Context(), examID)
+	if examErr == nil && exam.EndTime != nil && !time.Now().Before(*exam.EndTime) &&
+		(sess.Status == "IN_PROGRESS" || sess.Status == "LOCKED") {
+		_ = h.useCase.FinishStudentExam(c.Context(), sess.ID, sess.Score, nil)
+		sess.Status = "SUBMITTED"
+		now := time.Now()
+		sess.SubmittedAt = &now
 	}
 
 	subAt := ""

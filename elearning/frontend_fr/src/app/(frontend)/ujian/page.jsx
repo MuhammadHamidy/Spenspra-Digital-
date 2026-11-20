@@ -121,11 +121,6 @@ export default function StudentExamsHubPage() {
       endDate = new Date(exam.end_time);
     }
 
-    // Jika guru memulai secara manual (ACTIVE)
-    if (s === 'ACTIVE') {
-      return { status: 'ACTIVE', label: 'Aktif / Tersedia', canStart: true };
-    }
-
     if (startDate && !isNaN(startDate.getTime())) {
       if (currentTime < startDate) {
         const timeDiffMs = startDate.getTime() - currentTime.getTime();

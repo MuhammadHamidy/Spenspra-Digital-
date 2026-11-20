@@ -62,8 +62,25 @@ function parseQuestionImport(text) {
   let current = null;
   let currentOption = null;
 
+  const expandInlineOptions = (line) => {
+    const markerRegex = /(?:^|[\s\u00A0]+)([A-E])\s*[.)\]:\-]\s+/g;
+    const markers = Array.from(line.matchAll(markerRegex));
+    if (markers.length < 2) return [line];
+    const segments = [];
+    for (let i = 0; i < markers.length; i += 1) {
+      const marker = markers[i];
+      const key = marker[1];
+      const contentStart = marker.index + marker[0].length;
+      const contentEnd = i + 1 < markers.length ? markers[i + 1].index : line.length;
+      let content = line.slice(contentStart, contentEnd).trim();
+      content = content.replace(/^[\s\u00A0]+/, '').replace(/\s+$/, '');
+      segments.push(`${key}. ${content}`);
+    }
+    return segments;
+  };
+
   const startQuestion = (line) => {
-    const match = line.match(/^(?:soal\s*)?(\d+)\s*[\.\):\-]\s*(.+)$/i);
+    const match = line.match(/^(?:soal\s*|pertanyaan\s*)?(?:nomor\s*)?(\d+)\s*[.)\]:\-]\s*(.+)$/i);
     const labeledMatch = line.match(/^(?:soal|pertanyaan)\s*[:\-]\s*(.+)$/i);
     if (!match && !labeledMatch) return false;
     if (current?.questionText && current.options.length >= 2) questions.push(current);
@@ -81,6 +98,13 @@ function parseQuestionImport(text) {
   };
 
   lines.forEach((line) => {
+    const expandedLines = expandInlineOptions(line);
+    expandedLines.forEach((expandedLine) => {
+      parseLine(expandedLine);
+    });
+  });
+
+  function parseLine(line) {
     if (startQuestion(line)) return;
     if (!current) return;
 
@@ -91,14 +115,14 @@ function parseQuestionImport(text) {
       return;
     }
 
-    const answerMatch = line.match(/^(?:kunci|jawaban|answer)\s*[:\-]\s*([A-E])/i);
+    const answerMatch = line.match(/^(?:kunci(?:\s+(?:jawaban|benar))?|jawaban(?:\s+benar)?|answer)\s*[:=.-]\s*(?:opsi\s*)?([A-E])/i);
     if (answerMatch) {
       current.correctOption = answerMatch[1].toUpperCase();
       currentOption = null;
       return;
     }
 
-    const pointsMatch = line.match(/^(?:poin|points|bobot|nilai)\s*[:=]\s*(\d+(?:[.,]\d+)?)\s*(?:poin)?$/i);
+    const pointsMatch = line.match(/^(?:poin|points|bobot|nilai|skor)\s*[:=.-]\s*(\d+(?:[.,]\d+)?)\s*(?:poin|point|nilai|skor)?$/i);
     if (pointsMatch) {
       current.points = Number(pointsMatch[1].replace(',', '.')) || 10;
       currentOption = null;
@@ -116,7 +140,7 @@ function parseQuestionImport(text) {
       return;
     }
 
-    const optionMatch = line.match(/^([A-E])\s*[\.\):\-]\s*(.+)$/i);
+    const optionMatch = line.match(/^([A-E])(?:[\s.)\]:-]+)\s*(.+)$/i);
     if (optionMatch) {
       const key = optionMatch[1].toUpperCase();
       current.options.push({ key, text: optionMatch[2].trim() });
@@ -132,7 +156,7 @@ function parseQuestionImport(text) {
     } else {
       current.questionText = `${current.questionText} ${line}`.trim();
     }
-  });
+  }
 
   if (current?.questionText && current.options.length >= 2) questions.push(current);
   return questions.map((question, index) => ({
@@ -229,9 +253,15 @@ export default function TeacherExamsManagementPage() {
   const [docxFileName, setDocxFileName] = useState('');
   const [isQuickEditMode, setIsQuickEditMode] = useState(false);
   const [bulkPoints, setBulkPoints] = useState(10);
+  const [scheduleClock, setScheduleClock] = useState(() => new Date());
 
   useEffect(() => {
     loadInitialData();
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => setScheduleClock(new Date()), 1000);
+    return () => clearInterval(timer);
   }, []);
 
   const loadInitialData = async () => {
@@ -373,6 +403,10 @@ export default function TeacherExamsManagementPage() {
 
     const startDateTime = `${examDate}T${startTime}:00`;
     const endDateTime = `${examDate}T${endTime}:00`;
+    if (new Date(endDateTime).getTime() <= new Date(startDateTime).getTime()) {
+      alert('Jam berakhir ujian harus lebih besar dari jam mulai!');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -450,16 +484,16 @@ export default function TeacherExamsManagementPage() {
   };
 
   const getExamStatus = (ex) => {
-    if (ex.status === 'COMPLETED') return 'COMPLETED';
-    if (ex.status === 'ACTIVE') return 'ACTIVE';
     if (ex.startDateTime && ex.endDateTime) {
-      const now = new Date();
+      const now = scheduleClock;
       const start = new Date(ex.startDateTime);
       const end = new Date(ex.endDateTime);
       if (now < start) return 'UPCOMING';
       if (now >= start && now <= end) return 'ACTIVE';
       if (now > end) return 'COMPLETED';
     }
+    if (ex.status === 'COMPLETED' || ex.status === 'CLOSED') return 'COMPLETED';
+    if (ex.status === 'ACTIVE') return 'ACTIVE';
     return ex.status || 'ACTIVE';
   };
 
@@ -952,8 +986,9 @@ export default function TeacherExamsManagementPage() {
   const handleImportDocx = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.docx')) {
-      alert('Pilih file Word .docx. Format .doc lama belum didukung.');
+    const extension = file.name.toLowerCase().split('.').pop();
+    if (!['docx', 'dotx', 'docm', 'dotm'].includes(extension)) {
+      alert('Pilih file Word modern (.docx, .docm, .dotx, atau .dotm). Format .doc lama belum didukung.');
       return;
     }
 
@@ -973,7 +1008,27 @@ export default function TeacherExamsManagementPage() {
       );
       const body = new DOMParser().parseFromString(result.value, 'text/html').body;
       const lines = [];
-      body.querySelectorAll('p, li, tr').forEach((element) => {
+      let inTable = false;
+
+      Array.from(body.children).forEach((element) => {
+        if (element.tagName === 'TABLE') {
+          inTable = true;
+          element.querySelectorAll('tr').forEach((row) => {
+            const cells = Array.from(row.querySelectorAll('th, td'));
+            if (cells.length > 0) {
+              cells.forEach((cell) => {
+                cell.querySelectorAll('img').forEach((image) => {
+                  lines.push(`GAMBAR: ${image.getAttribute('src') || ''}`);
+                });
+                const text = String(cell.textContent || '').replace(/\s+/g, ' ').trim();
+                if (text) lines.push(text);
+              });
+            }
+          });
+          inTable = false;
+          return;
+        }
+
         element.querySelectorAll('img').forEach((image) => {
           lines.push(`GAMBAR: ${image.getAttribute('src') || ''}`);
         });
@@ -2161,12 +2216,17 @@ POIN: 5`}
                   <strong>Kunci: B</strong>, dan <strong>Poin: 5</strong> tetap didukung.
                 </div>
                 <label className="flex cursor-pointer flex-col gap-1 rounded-xl border-2 border-dashed border-primary-200 bg-primary-50/50 p-4 text-center hover:bg-primary-50">
-                  <span className="text-xs font-bold text-primary-800">Pilih file Word (.docx)</span>
+                  <span className="text-xs font-bold text-primary-800">Pilih file Word (.docx, .docm, .dotx, .dotm)</span>
                   <span className="text-[10px] text-primary-600">
                     Sistem mencoba mendeteksi stimulus, soal, opsi, kunci, poin, dan gambar tertanam.
                   </span>
                   {docxFileName && <span className="text-[10px] font-semibold text-emerald-700">{docxFileName}</span>}
-                  <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleImportDocx} className="hidden" />
+                  <input
+                    type="file"
+                    accept=".docx,.docm,.dotx,.dotm,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-word.document.macroEnabled.12,application/vnd.openxmlformats-officedocument.wordprocessingml.template"
+                    onChange={handleImportDocx}
+                    className="hidden"
+                  />
                 </label>
                 <textarea
                   value={importText}

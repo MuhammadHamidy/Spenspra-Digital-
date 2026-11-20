@@ -60,13 +60,43 @@ export default function CBTExamRunnerPage({ params }) {
         setExam(examData);
         setQuestions(questionsData || []);
 
+        const scheduleEnd = examData.endDateTime
+          ? new Date(examData.endDateTime)
+          : (examData.scheduledDate && examData.endTime
+              ? new Date(`${examData.scheduledDate}T${examData.endTime}:00`)
+              : null);
+        const scheduleStart = examData.startDateTime
+          ? new Date(examData.startDateTime)
+          : (examData.scheduledDate && examData.startTime
+              ? new Date(`${examData.scheduledDate}T${examData.startTime}:00`)
+              : null);
+        if (scheduleStart && !isNaN(scheduleStart.getTime()) && Date.now() < scheduleStart.getTime()) {
+          alert('Ujian belum memasuki jadwal pengerjaan.');
+          router.push('/ujian');
+          return;
+        }
+        if (scheduleEnd && !isNaN(scheduleEnd.getTime()) && Date.now() >= scheduleEnd.getTime()) {
+          alert('Waktu ujian telah berakhir.');
+          router.push('/ujian');
+          return;
+        }
+
         // Resume or get active session
         const sess = await elearningApi.startExamSession(examId, examData.token || '', currentUser);
         setSession(sess);
         if (sess) {
           setAnswers(sess.answers || {});
           setDoubtfuls(sess.doubtfuls || {});
-          setSecondsLeft(sess.remainingSeconds || (examData.durationMinutes || 60) * 60);
+          const scheduleEnd = examData.endDateTime
+            ? new Date(examData.endDateTime)
+            : (examData.scheduledDate && examData.endTime
+                ? new Date(`${examData.scheduledDate}T${examData.endTime}:00`)
+                : null);
+          const durationSeconds = (examData.durationMinutes || 60) * 60;
+          const scheduleRemaining = scheduleEnd && !isNaN(scheduleEnd.getTime())
+            ? Math.max(0, Math.floor((scheduleEnd.getTime() - Date.now()) / 1000))
+            : durationSeconds;
+          setSecondsLeft(Math.min(sess.remainingSeconds || durationSeconds, scheduleRemaining));
 
           // Sinkronkan jawaban lokal ke backend jika ada
           if (sess.sessionId && sess.answers && Object.keys(sess.answers).length > 0) {
@@ -209,6 +239,18 @@ export default function CBTExamRunnerPage({ params }) {
     if (loading || finishResult || isLocked) return;
 
     const timer = setInterval(() => {
+      const scheduleEnd = exam?.endDateTime
+        ? new Date(exam.endDateTime)
+        : (exam?.scheduledDate && exam?.endTime
+            ? new Date(`${exam.scheduledDate}T${exam.endTime}:00`)
+            : null);
+
+      if (scheduleEnd && !isNaN(scheduleEnd.getTime()) && Date.now() >= scheduleEnd.getTime()) {
+        clearInterval(timer);
+        handleFinishExam(true);
+        return 0;
+      }
+
       setSecondsLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
