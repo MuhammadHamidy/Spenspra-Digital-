@@ -212,6 +212,44 @@ export function extractGradeLevelDigit(c) {
   return m ? m[1] : '';
 }
 
+export function resolveQuestionStudentAnswer(q, idx, answersObj) {
+  if (!answersObj) return null;
+  const qNum = q.questionNumber || (idx + 1);
+  const direct =
+    answersObj[q.id] ??
+    answersObj[String(q.id)] ??
+    answersObj[qNum] ??
+    answersObj[String(qNum)] ??
+    answersObj[idx + 1] ??
+    answersObj[String(idx + 1)] ??
+    answersObj[`q-${qNum}`] ??
+    answersObj[`q_${qNum}`] ??
+    answersObj[`q-${idx + 1}`] ??
+    answersObj[`q_${idx + 1}`];
+  if (direct !== undefined && direct !== null) return direct;
+
+  const values = Object.values(answersObj);
+  const byQuestionId = values.find(
+    (v) => v && typeof v === 'object' && (v.questionId === q.id || v.question_id === q.id || String(v.questionId) === String(q.id))
+  );
+  if (byQuestionId) return byQuestionId;
+
+  const byQuestionNumber = values.find(
+    (v) => v && typeof v === 'object' && (
+      v.questionNumber === qNum ||
+      v.question_number === qNum ||
+      v.questionNumber === idx + 1 ||
+      v.question_number === idx + 1
+    )
+  );
+  if (byQuestionNumber) return byQuestionNumber;
+
+  if (Array.isArray(answersObj) && answersObj[idx] !== undefined) {
+    return answersObj[idx];
+  }
+  return null;
+}
+
 function cleanTeacherNameStr(n) {
   return String(n || '')
     .toLowerCase()
@@ -1384,6 +1422,15 @@ export const elearningApi = {
     const studentId = String(student?.id || student?.nisn || 'std-demo');
     const studentName = student?.fullName || student?.full_name || student?.name || 'Siswa Spenspra';
     const className = student?.className || student?.class_name || exam.className || '7A';
+    const studentNisn = String(
+      student?.nisn ||
+      student?.studentNISN ||
+      student?.student_nisn ||
+      student?.username ||
+      student?.identityNumber ||
+      student?.nimNip ||
+      ''
+    );
 
     // 1. Daftarkan dan aktifkan sesi secara resmi di server PostgreSQL
     let serverSessionId = null;
@@ -1398,6 +1445,7 @@ export const elearningApi = {
           studentName: studentName,
           class_code: className,
           className: className,
+          nisn: studentNisn,
         }),
       });
       if (res?.success && res?.data) {
@@ -1410,6 +1458,11 @@ export const elearningApi = {
     const sessionKey = `exam_session_${examId}_${studentId}`;
     let existing = getLocal(sessionKey, null);
     if (existing && existing.status !== 'SUBMITTED') {
+      if (studentNisn && (!existing.nisn || existing.nisn === '-')) {
+        existing.nisn = studentNisn;
+        existing.student_nisn = studentNisn;
+        existing.studentNISN = studentNisn;
+      }
       if (serverSessionId && existing.sessionId !== serverSessionId) {
         existing.sessionId = serverSessionId;
         setLocal(sessionKey, existing);
@@ -1422,6 +1475,9 @@ export const elearningApi = {
       examId,
       studentId,
       studentName,
+      nisn: studentNisn || '-',
+      student_nisn: studentNisn || '-',
+      studentNISN: studentNisn || '-',
       className,
       startTime: new Date().toISOString(),
       durationSeconds: (exam.durationMinutes || 60) * 60,
@@ -1671,36 +1727,44 @@ export const elearningApi = {
     const reviewItems = questions.map((q, idx) => {
       const qPoints = Number(q.points) > 0 ? Number(q.points) : 10;
       totalExamPoints += qPoints;
-      const ans = mergedAnswers[q.id] || {};
+      const ans = resolveQuestionStudentAnswer(q, idx, mergedAnswers) || {};
       let isCorrect = false;
       let studentAnswerDisplay = '-';
       let correctAnswerDisplay = '-';
 
-      if (q.type === 'MCQ') {
+      const qType = String(q.type || q.questionType || q.question_type || 'MCQ').toUpperCase();
+
+      if (qType === 'MCQ' || qType === 'PILIHAN_GANDA') {
         totalAutoGraded += 1;
         totalAutoPoints += qPoints;
-        const studentOptKey = (ans.selectedOption || '').trim().toUpperCase();
-        const correctOptKey = (q.correctOption || '').trim().toUpperCase();
+        const rawOpt = typeof ans === 'string' ? ans : (ans.selectedOption || ans.selected_option || '');
+        const studentOptKey = String(rawOpt || '').trim().toUpperCase();
+        const correctOptKey = String(q.correctOption || q.correct_option || 'A').trim().toUpperCase();
         isCorrect = Boolean(studentOptKey && studentOptKey === correctOptKey);
         if (isCorrect) {
           correctCount += 1;
           earnedAutoPoints += qPoints;
         }
-        const sOpt = (q.options || []).find((o) => o.key === studentOptKey);
-        const cOpt = (q.options || []).find((o) => o.key === correctOptKey);
-        studentAnswerDisplay = studentOptKey ? `${studentOptKey}. ${sOpt?.text || ''}` : 'Tidak dijawab';
-        correctAnswerDisplay = correctOptKey ? `${correctOptKey}. ${cOpt?.text || ''}` : '-';
-      } else if (q.type === 'COMPLEX_MCQ') {
+        const sOpt = (q.options || []).find((o) => o.key.toUpperCase() === studentOptKey);
+        const cOpt = (q.options || []).find((o) => o.key.toUpperCase() === correctOptKey);
+        studentAnswerDisplay = studentOptKey ? `${studentOptKey}. ${sOpt?.text || (sOpt?.imageUrl ? '[Gambar]' : '')}` : 'Tidak dijawab';
+        correctAnswerDisplay = correctOptKey ? `${correctOptKey}. ${cOpt?.text || (cOpt?.imageUrl ? '[Gambar]' : '')}` : '-';
+      } else if (qType === 'COMPLEX_MCQ') {
         totalAutoGraded += 1;
         totalAutoPoints += qPoints;
-        const studentOpts = Array.isArray(ans.selectedOptions) && ans.selectedOptions.length > 0
-          ? ans.selectedOptions
-          : (typeof ans.selectedOption === 'string' && ans.selectedOption && !ans.selectedOption.startsWith('{')
-              ? ans.selectedOption.split(',').map((s) => s.trim()).filter(Boolean)
-              : []);
-        const correctOpts = Array.isArray(q.correctOptions) && q.correctOptions.length > 0
+        let studentOpts = [];
+        if (Array.isArray(ans?.selectedOptions)) {
+          studentOpts = ans.selectedOptions;
+        } else if (typeof ans?.selectedOption === 'string' && ans.selectedOption && !ans.selectedOption.startsWith('{')) {
+          studentOpts = ans.selectedOption.split(',').map((s) => s.trim()).filter(Boolean);
+        } else if (typeof ans?.selected_option === 'string' && ans.selected_option && !ans.selected_option.startsWith('{')) {
+          studentOpts = ans.selected_option.split(',').map((s) => s.trim()).filter(Boolean);
+        } else if (typeof ans === 'string' && ans && !ans.startsWith('{')) {
+          studentOpts = ans.split(',').map((s) => s.trim()).filter(Boolean);
+        }
+        const correctOpts = (Array.isArray(q.correctOptions) && q.correctOptions.length > 0)
           ? q.correctOptions
-          : (q.correctOption ? [q.correctOption] : []);
+          : ((q.correctOption || q.correct_answer || 'A').split(',').map((s) => s.trim()).filter(Boolean));
         const sortedStudent = [...studentOpts].map((s) => s.toUpperCase()).sort().join(',');
         const sortedCorrect = [...correctOpts].map((s) => s.toUpperCase()).sort().join(',');
         isCorrect = Boolean(sortedStudent && sortedStudent === sortedCorrect);
@@ -1710,10 +1774,11 @@ export const elearningApi = {
         }
         studentAnswerDisplay = studentOpts.length > 0 ? studentOpts.join(', ') : 'Tidak dijawab';
         correctAnswerDisplay = correctOpts.length > 0 ? correctOpts.join(', ') : '-';
-      } else if (q.type === 'TRUE_FALSE') {
+      } else if (qType === 'TRUE_FALSE') {
         totalAutoGraded += 1;
         totalAutoPoints += qPoints;
-        const studentAns = String(ans.selectedOption || (ans.trueFalseAnswer !== undefined ? (ans.trueFalseAnswer ? 'TRUE' : 'FALSE') : '')).toUpperCase();
+        const rawStudent = typeof ans === 'string' ? ans : (ans.selectedOption ?? (ans.trueFalseAnswer !== undefined ? (ans.trueFalseAnswer ? 'TRUE' : 'FALSE') : ''));
+        const studentAns = String(rawStudent || '').trim().toUpperCase();
         const expected = String(q.trueFalseAnswer !== undefined ? (q.trueFalseAnswer ? 'TRUE' : 'FALSE') : (q.correctOption || 'TRUE')).toUpperCase();
         isCorrect = Boolean(studentAns && (studentAns === expected || (studentAns === 'TRUE' && expected === 'BENAR') || (studentAns === 'FALSE' && expected === 'SALAH')));
         if (isCorrect) {
@@ -1722,7 +1787,7 @@ export const elearningApi = {
         }
         studentAnswerDisplay = (studentAns === 'TRUE' || studentAns === 'BENAR') ? 'Benar' : (studentAns === 'FALSE' || studentAns === 'SALAH') ? 'Salah' : 'Tidak dijawab';
         correctAnswerDisplay = (expected === 'TRUE' || expected === 'BENAR') ? 'Benar' : 'Salah';
-      } else if (q.type === 'MATCHING') {
+      } else if (qType === 'MATCHING') {
         totalAutoGraded += 1;
         totalAutoPoints += qPoints;
         let matchingAns = ans.matchingAnswers;
@@ -1798,6 +1863,14 @@ export const elearningApi = {
       session.isEssayOnly = totalAutoGraded === 0 && totalEssay > 0;
       session.answers = mergedAnswers;
       session.reviewItems = reviewItems;
+      if (!session.nisn || session.nisn === '-') {
+        const studentNisn = String(studentId || '').trim();
+        if (studentNisn && studentNisn !== 'std-demo' && studentNisn !== 'std-active') {
+          session.nisn = studentNisn;
+          session.student_nisn = studentNisn;
+          session.studentNISN = studentNisn;
+        }
+      }
       setLocal(`exam_session_${examId}_${sId}`, session);
 
       // Update teacher monitor

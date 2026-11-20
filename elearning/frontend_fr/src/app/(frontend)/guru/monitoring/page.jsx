@@ -195,7 +195,24 @@ export default function LiveProctoringMonitoringPage() {
       setSessions(Array.isArray(liveSessions) ? liveSessions : []);
 
       // 2. Fetch official class roster for this exam
-      if (currentExam?.className) {
+      const isCoordinator = currentExam?.isCoordinatorExam || currentExam?.examCategory === 'SEMESTER_UAS' || Boolean(currentExam?.targetGradeLevel);
+      if (isCoordinator) {
+        // Untuk ujian koordinator jenjang (cth: ASAS TK. 9), muat seluruh siswa atau siswa jenjang terkait
+        const allStudents = await elearningApi.getStudents();
+        const gradeLvl = String(currentExam?.targetGradeLevel || '').trim();
+        const filtered = Array.isArray(allStudents)
+          ? (gradeLvl
+              ? allStudents.filter((st) => {
+                  const sCls = String(st.className || st.class_name || '').toUpperCase();
+                  if (gradeLvl === '7') return sCls.includes('VII') || sCls.includes('7');
+                  if (gradeLvl === '8') return sCls.includes('VIII') || sCls.includes('8');
+                  if (gradeLvl === '9') return sCls.includes('IX') || sCls.includes('9');
+                  return true;
+                })
+              : allStudents)
+          : [];
+        setClassStudents(filtered);
+      } else if (currentExam?.className) {
         const students = await elearningApi.getStudentsByClass(currentExam.className);
         setClassStudents(Array.isArray(students) ? students : []);
       }
@@ -612,13 +629,21 @@ export default function LiveProctoringMonitoringPage() {
         const actualViolCount = vList.filter((v) => isActualCheatingViolation(v.type)).length;
         const finalViolCount = actualViolCount > 0 ? actualViolCount : (vList.length === 0 ? Number(s.violationsCount ?? s.violation_count ?? 0) : 0);
 
+        const foundStudent = (classStudents || []).find(
+          (st) => String(st.id) === sId ||
+                 (st.fullName && st.fullName.toLowerCase() === (s.studentName || s.student_name || '').toLowerCase())
+        );
+        const resolvedNisn = (s.nisn && s.nisn !== '-')
+          ? s.nisn
+          : (foundStudent?.nisn || s.student_nisn || s.studentNISN || '-');
+
         roster.unshift({
           ...s,
           sessionId: sKey || `ses-${Date.now()}`,
           studentId: sId || 'std-active',
-          nisn: s.nisn || s.student_nisn || '-',
-          studentName: s.studentName || s.student_name || 'Siswa Peserta',
-          className: s.className || s.class_code || selectedExam?.className || '-',
+          nisn: resolvedNisn,
+          studentName: s.studentName || s.student_name || foundStudent?.fullName || 'Siswa Peserta',
+          className: s.className || s.class_code || foundStudent?.className || selectedExam?.className || '-',
           status: s.status || 'IN_PROGRESS',
           score: s.score,
           violationsCount: finalViolCount,
@@ -699,7 +724,11 @@ export default function LiveProctoringMonitoringPage() {
               </span>
             </div>
             <p className="text-xs text-neutral-500">
-              <span className="font-bold text-neutral-800">{activeStudentAnswers.studentName}</span> • Kelas {activeStudentAnswers.className || selectedExam?.className} • NISN: {activeStudentAnswers.nisn || '-'}
+              <span className="font-bold text-neutral-800">{activeStudentAnswers.studentName}</span> • Kelas {activeStudentAnswers.className || selectedExam?.className} • NISN: {
+                (activeStudentAnswers.nisn && activeStudentAnswers.nisn !== '-')
+                  ? activeStudentAnswers.nisn
+                  : (classStudents.find((s) => String(s.id) === String(activeStudentAnswers.studentId) || (s.fullName && s.fullName.toLowerCase() === (activeStudentAnswers.studentName || '').toLowerCase()))?.nisn || activeStudentAnswers.studentNISN || activeStudentAnswers.student_nisn || '-')
+              }
             </p>
           </div>
 
@@ -1037,7 +1066,7 @@ export default function LiveProctoringMonitoringPage() {
                               key={opt.key}
                               className={`p-3 rounded-lg border text-xs sm:text-sm flex items-center justify-between gap-3 ${cardStyle}`}
                             >
-                              <div className="flex items-center gap-2.5">
+                              <div className="flex items-center gap-2.5 flex-1 min-w-0">
                                 <span
                                   className={`w-7 h-7 rounded-md flex items-center justify-center font-bold text-xs shrink-0 ${
                                     isStudentPick
@@ -1051,7 +1080,16 @@ export default function LiveProctoringMonitoringPage() {
                                 >
                                   {opt.key}
                                 </span>
-                                <span className="leading-snug">{opt.text}</span>
+                                <div className="space-y-1 flex-1 min-w-0">
+                                  {opt.text && <span className="leading-snug block">{opt.text}</span>}
+                                  {(opt.imageUrl || opt.image_url) && (
+                                    <img
+                                      src={opt.imageUrl || opt.image_url}
+                                      alt={`Opsi ${opt.key}`}
+                                      className="max-h-44 max-w-full rounded border border-neutral-200 bg-white p-1 object-contain my-1"
+                                    />
+                                  )}
+                                </div>
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0">
                                 {isStudentPick && (
@@ -1120,7 +1158,7 @@ export default function LiveProctoringMonitoringPage() {
                                     key={opt.key}
                                     className={`p-3 rounded-lg border text-xs sm:text-sm flex items-center justify-between gap-3 ${cardStyle}`}
                                   >
-                                    <div className="flex items-center gap-2.5">
+                                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
                                       <div
                                         className={`w-6 h-6 rounded flex items-center justify-center font-bold text-xs border shrink-0 ${
                                           isStudentPick
@@ -1131,7 +1169,16 @@ export default function LiveProctoringMonitoringPage() {
                                         {isStudentPick ? '✓' : ''}
                                       </div>
                                       <span className="font-bold text-neutral-800 shrink-0">{opt.key}.</span>
-                                      <span className="leading-snug">{opt.text}</span>
+                                      <div className="space-y-1 flex-1 min-w-0">
+                                        {opt.text && <span className="leading-snug block">{opt.text}</span>}
+                                        {(opt.imageUrl || opt.image_url) && (
+                                          <img
+                                            src={opt.imageUrl || opt.image_url}
+                                            alt={`Opsi ${opt.key}`}
+                                            className="max-h-40 max-w-full rounded border border-neutral-200 bg-white p-1 object-contain my-1"
+                                          />
+                                        )}
+                                      </div>
                                     </div>
                                     <div className="flex items-center gap-1.5 shrink-0">
                                       {isStudentPick && (

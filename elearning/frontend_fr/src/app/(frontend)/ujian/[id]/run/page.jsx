@@ -1054,9 +1054,9 @@ export default function CBTExamRunnerPage({ params }) {
                       <div
                         key={opt.key}
                         onClick={() => handleSelectOption(opt.key)}
-                        className={`flex items-center gap-3 p-3.5 sm:p-4 rounded-full border-2 transition-all cursor-pointer ${
+                        className={`flex items-center gap-3.5 p-3.5 sm:p-4 rounded-2xl border-2 transition-all cursor-pointer ${
                           isSelected
-                            ? 'bg-primary-50 border-primary-500 shadow-xs'
+                            ? 'bg-primary-50 border-primary-500 shadow-xs ring-1 ring-primary-500/20'
                             : 'bg-white border-neutral-200 hover:border-primary-300 hover:bg-neutral-50/50'
                         }`}
                       >
@@ -1069,9 +1069,20 @@ export default function CBTExamRunnerPage({ params }) {
                         >
                           {opt.key}
                         </div>
-                        <span className="text-xs sm:text-sm text-neutral-800 leading-normal pt-0.5">
-                          {opt.text}
-                        </span>
+                        <div className="flex-1 min-w-0 pt-0.5">
+                          {opt.text && (
+                            <span className="text-xs sm:text-sm text-neutral-800 leading-normal block">
+                              {opt.text}
+                            </span>
+                          )}
+                          {(opt.imageUrl || opt.image_url) && (
+                            <img
+                              src={opt.imageUrl || opt.image_url}
+                              alt={`Pilihan ${opt.key}`}
+                              className="max-h-44 max-w-full rounded border border-neutral-200 bg-white p-1 object-contain my-1"
+                            />
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -1112,9 +1123,20 @@ export default function CBTExamRunnerPage({ params }) {
                         <span className="w-6 h-6 rounded-md bg-neutral-100 text-neutral-700 font-bold text-xs flex items-center justify-center shrink-0">
                           {opt.key}
                         </span>
-                        <span className="text-xs sm:text-sm text-neutral-800 leading-normal flex-1">
-                          {opt.text}
-                        </span>
+                        <div className="flex-1 min-w-0 pt-0.5">
+                          {opt.text && (
+                            <span className="text-xs sm:text-sm text-neutral-800 leading-normal block">
+                              {opt.text}
+                            </span>
+                          )}
+                          {(opt.imageUrl || opt.image_url) && (
+                            <img
+                              src={opt.imageUrl || opt.image_url}
+                              alt={`Pilihan ${opt.key}`}
+                              className="max-h-44 max-w-full rounded border border-neutral-200 bg-white p-1 object-contain my-1"
+                            />
+                          )}
+                        </div>
                       </div>
                     );
                   })}

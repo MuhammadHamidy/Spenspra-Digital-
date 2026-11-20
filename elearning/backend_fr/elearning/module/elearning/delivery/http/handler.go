@@ -785,9 +785,10 @@ func (h *ELearningHandler) DeleteExam(c *fiber.Ctx) error {
 }
 
 type CBTQuestionOptionInput struct {
-	Key      string `json:"key"`
-	Text     string `json:"text"`
-	ImageURL string `json:"imageUrl,omitempty"`
+	Key           string `json:"key"`
+	Text          string `json:"text"`
+	ImageURL      string `json:"imageUrl,omitempty"`
+	ImageURLSnake string `json:"image_url,omitempty"`
 }
 
 type CBTMatchingPairInput struct {
@@ -869,17 +870,24 @@ func (in *CBTQuestionInput) ToDomain(examID string, index int) domain.CBTQuestio
 
 	for _, opt := range in.Options {
 		k := strings.ToUpper(strings.TrimSpace(opt.Key))
+		optVal := opt.Text
+		if optVal == "" && (opt.ImageURL != "" || opt.ImageURLSnake != "") {
+			optVal = opt.ImageURL
+			if optVal == "" {
+				optVal = opt.ImageURLSnake
+			}
+		}
 		switch k {
 		case "A":
-			optA = opt.Text
+			optA = optVal
 		case "B":
-			optB = opt.Text
+			optB = optVal
 		case "C":
-			optC = opt.Text
+			optC = optVal
 		case "D":
-			optD = opt.Text
+			optD = optVal
 		case "E":
-			optE = opt.Text
+			optE = optVal
 		}
 	}
 
@@ -1001,31 +1009,35 @@ func formatQuestionForFrontend(q domain.CBTQuestion) fiber.Map {
 	opts := []fiber.Map{}
 	if len(meta.Options) > 0 {
 		for _, option := range meta.Options {
-			if strings.TrimSpace(option.Text) == "" && strings.TrimSpace(option.ImageURL) == "" {
+			img := option.ImageURL
+			if img == "" {
+				img = option.ImageURLSnake
+			}
+			if strings.TrimSpace(option.Text) == "" && strings.TrimSpace(img) == "" {
 				continue
 			}
 			opts = append(opts, fiber.Map{
 				"key":      option.Key,
 				"text":     option.Text,
-				"imageUrl": option.ImageURL,
+				"imageUrl": img,
 			})
 		}
 	} else {
-		if q.OptionA != "" {
-			opts = append(opts, fiber.Map{"key": "A", "text": q.OptionA})
+		mapOpt := func(k, val string) {
+			if val == "" {
+				return
+			}
+			if strings.HasPrefix(val, "data:image") || strings.HasPrefix(val, "http") {
+				opts = append(opts, fiber.Map{"key": k, "text": "", "imageUrl": val})
+			} else {
+				opts = append(opts, fiber.Map{"key": k, "text": val})
+			}
 		}
-		if q.OptionB != "" {
-			opts = append(opts, fiber.Map{"key": "B", "text": q.OptionB})
-		}
-		if q.OptionC != "" {
-			opts = append(opts, fiber.Map{"key": "C", "text": q.OptionC})
-		}
-		if q.OptionD != "" {
-			opts = append(opts, fiber.Map{"key": "D", "text": q.OptionD})
-		}
-		if q.OptionE != "" {
-			opts = append(opts, fiber.Map{"key": "E", "text": q.OptionE})
-		}
+		mapOpt("A", q.OptionA)
+		mapOpt("B", q.OptionB)
+		mapOpt("C", q.OptionC)
+		mapOpt("D", q.OptionD)
+		mapOpt("E", q.OptionE)
 	}
 
 	qType := q.QuestionType

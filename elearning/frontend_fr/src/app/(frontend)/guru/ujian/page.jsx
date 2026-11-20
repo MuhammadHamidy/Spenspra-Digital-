@@ -249,19 +249,20 @@ async function extractDocxStructure(arrayBuffer) {
     }
 
     const prefix = listInfo?.prefix || '';
+    const full = (prefix + cleanText).trim();
+    const explicitOpt = full.match(/^([A-E])\s*[.)\]:\-]\s*(.*)$/i);
 
-    if (imgUri && !cleanText) {
-      // Paragraf khusus gambar (bisa berupa opsi bergambar A-D)
-      if (listInfo?.isOption) {
-        lines.push(`${prefix.trim()} GAMBAR: ${imgUri}`);
+    if (imgUri) {
+      if (listInfo?.isOption || explicitOpt) {
+        // Paragraf opsi jawaban (A, B, C, D) yang memiliki gambar
+        const optLetter = listInfo?.isOption ? listInfo.letter : explicitOpt[1].toUpperCase();
+        const remText = explicitOpt ? explicitOpt[2].trim() : cleanText;
+        lines.push(`${optLetter}. ${remText ? remText + ' ' : ''}GAMBAR: ${imgUri}`);
       } else {
         lines.push(`GAMBAR: ${imgUri}`);
+        if (full) lines.push(full);
       }
     } else {
-      if (imgUri) {
-        lines.push(`GAMBAR: ${imgUri}`);
-      }
-      const full = (prefix + cleanText).trim();
       if (full) {
         lines.push(full);
       }
@@ -492,11 +493,22 @@ function parseQuestionImport(text, options = {}) {
       return;
     }
 
-    // Opsi berupa gambar dengan prefix huruf, misal "A. GAMBAR: data:image/png;base64,..."
-    const optionImagePrefixMatch = line.match(/^([A-E])(?:[\s.)\]:-]+)\s*(?:gambar|image)\s*[:=]\s*(.+)$/i);
+    // Opsi berupa gambar atau teks bergambar (cth: "A. GAMBAR: ...", "A. Garis bilangan GAMBAR: ...")
+    const optionImagePrefixMatch = line.match(/^([A-E])(?:[\s.)\]:-]+)\s*(.*?)(?:gambar|image)\s*[:=]\s*(.+)$/i);
     if (optionImagePrefixMatch) {
       const key = optionImagePrefixMatch[1].toUpperCase();
-      current.options.push({ key, text: '', imageUrl: optionImagePrefixMatch[2].trim() });
+      const txt = (optionImagePrefixMatch[2] || '').trim();
+      const img = optionImagePrefixMatch[3].trim();
+      current.options.push({ key, text: txt, imageUrl: img });
+      currentOption = key;
+      return;
+    }
+
+    // Opsi bertuliskan huruf saja, misal "A." atau "A)" tanpa teks (gambarnya berada di baris berikutnya)
+    const bareOptionMatch = line.match(/^([A-E])\s*[.)\]:-]?\s*$/i);
+    if (bareOptionMatch) {
+      const key = bareOptionMatch[1].toUpperCase();
+      current.options.push({ key, text: '', imageUrl: '' });
       currentOption = key;
       return;
     }
@@ -514,11 +526,15 @@ function parseQuestionImport(text, options = {}) {
     const generalImageMatch = line.match(/^(?:gambar|image)\s*[:=]\s*(.+)$/i);
     if (generalImageMatch) {
       const imgUrl = generalImageMatch[1].trim();
+      if (currentOption) {
+        const opt = current.options.find((o) => o.key === currentOption);
+        if (opt) {
+          opt.imageUrl = imgUrl;
+          return;
+        }
+      }
       if (!current.options.length) {
         current.imageUrl = imgUrl;
-      } else if (currentOption) {
-        const opt = current.options.find((o) => o.key === currentOption);
-        if (opt) opt.imageUrl = imgUrl;
       } else {
         current.imageUrl = imgUrl;
       }

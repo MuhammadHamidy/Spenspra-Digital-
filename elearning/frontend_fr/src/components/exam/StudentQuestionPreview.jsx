@@ -126,8 +126,14 @@ export function StudentQuestionView({ question: q, number, showKey = false }) {
                   {opt.key}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className="text-xs sm:text-sm text-neutral-800 leading-normal">{opt.text}</span>
-                  {opt.imageUrl && <img src={opt.imageUrl} alt={`Opsi ${opt.key}`} className="mt-1 max-h-24 rounded object-contain" />}
+                  {opt.text && <span className="text-xs sm:text-sm text-neutral-800 leading-normal block">{opt.text}</span>}
+                  {(opt.imageUrl || opt.image_url) && (
+                    <img
+                      src={opt.imageUrl || opt.image_url}
+                      alt={`Opsi ${opt.key}`}
+                      className="mt-1.5 max-h-36 max-w-full rounded border border-neutral-200 bg-white p-1 object-contain"
+                    />
+                  )}
                 </div>
                 {isKey && (
                   <span className="text-[10px] font-bold text-emerald-700 shrink-0 pr-2">
@@ -173,8 +179,14 @@ export function StudentQuestionView({ question: q, number, showKey = false }) {
                   {opt.key}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <span className="text-xs sm:text-sm text-neutral-800">{opt.text}</span>
-                  {opt.imageUrl && <img src={opt.imageUrl} alt={`Opsi ${opt.key}`} className="mt-1 max-h-24 rounded object-contain" />}
+                  {opt.text && <span className="text-xs sm:text-sm text-neutral-800 leading-normal block">{opt.text}</span>}
+                  {(opt.imageUrl || opt.image_url) && (
+                    <img
+                      src={opt.imageUrl || opt.image_url}
+                      alt={`Opsi ${opt.key}`}
+                      className="mt-1.5 max-h-36 max-w-full rounded border border-neutral-200 bg-white p-1 object-contain"
+                    />
+                  )}
                 </div>
                 {isKey && (
                   <span className="text-[10px] font-bold text-emerald-700 shrink-0">
