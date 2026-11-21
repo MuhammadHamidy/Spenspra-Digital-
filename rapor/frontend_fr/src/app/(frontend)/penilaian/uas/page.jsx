@@ -84,7 +84,6 @@ export default function PenilaianUASPage() {
 
   // CBT Integration States
   const [availableCbtExams, setAvailableCbtExams] = useState([]);
-  const [otherGradeExams, setOtherGradeExams] = useState([]);
   const [selectedExamId, setSelectedExamId] = useState('');
   const [isSyncingCbt, setIsSyncingCbt] = useState(false);
   const [cbtNotice, setCbtNotice] = useState(null);
@@ -297,7 +296,6 @@ export default function PenilaianUASPage() {
     const fetchMatchingExams = async () => {
       if (!className || !subject) {
         setAvailableCbtExams([]);
-        setOtherGradeExams([]);
         setSelectedExamId('');
         return;
       }
@@ -309,24 +307,36 @@ export default function PenilaianUASPage() {
         const subjectName = (currentSubjectObj?.name || subject || '').toLowerCase();
 
         const normStr = (s) => String(s || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+        const normSubjectName = (s) =>
+          String(s || '')
+            .toLowerCase()
+            .trim()
+            .replace(/\([^)]*\)/g, '')
+            .replace(/[^a-z0-9]/g, '');
+
         const curSubCodeNorm = normStr(subject);
-        const curSubNameNorm = normStr(subjectName);
+        const curSubNameNorm = normSubjectName(subjectName);
 
         const checkSubMatch = (ex) => {
-          const exSub = normStr(ex.subject || ex.course_name || '');
+          const rawExSub = String(ex.subject || ex.course_name || '').trim();
+          const exSub = normSubjectName(rawExSub);
           const exCode = normStr(ex.subjectCode || ex.course_id || '');
-          const exTitle = normStr(ex.title || '');
-          const exDesc = normStr(ex.description || ex.rawDescription || '');
 
-          // Direct match on code or name
-          if (exCode && curSubCodeNorm && (exCode === curSubCodeNorm || exCode.includes(curSubCodeNorm) || curSubCodeNorm.includes(exCode))) return true;
-          if (exSub && curSubNameNorm && (exSub.includes(curSubNameNorm) || curSubNameNorm.includes(exSub))) return true;
-          if (exCode && curSubNameNorm && curSubNameNorm.includes(exCode)) return true;
-          if (exSub && curSubCodeNorm && (exSub.includes(curSubCodeNorm) || curSubCodeNorm === exSub)) return true;
+          // 1. Jika ujian memiliki nama mapel resmi, WAJIB cocok secara ketat berdasarkan nama mapel
+          //    (mencegah kode fallback lama seperti "INF" membocorkan mapel lain ke Informatika)
+          if (exSub && exSub !== 'umum' && exSub !== 'mapel') {
+            if (!curSubNameNorm) return false;
+            if (exSub === curSubNameNorm) return true;
+            if (exSub.length >= 5 && curSubNameNorm.length >= 5) {
+              if (exSub.startsWith(curSubNameNorm) || curSubNameNorm.startsWith(exSub)) return true;
+            }
+            return false;
+          }
 
-          // Check title and description for subject name or code
-          if (curSubNameNorm && (exTitle.includes(curSubNameNorm) || exDesc.includes(curSubNameNorm))) return true;
-          if (curSubCodeNorm && (exTitle.includes(curSubCodeNorm) || exDesc.includes(curSubCodeNorm))) return true;
+          // 2. Fallback hanya jika ujian tidak memiliki nama mapel: cocokkan kode mapel secara persis
+          if (exCode && exCode !== 'mapel' && curSubCodeNorm && exCode === curSubCodeNorm) {
+            return true;
+          }
 
           return false;
         };
@@ -392,13 +402,10 @@ export default function PenilaianUASPage() {
         // Filter ujian yang sesuai Mapel & ruang lingkup guru pengampu di e-Rapor
         const sameSubjectExams = (allExams || []).filter((ex) => checkSubMatch(ex) && isAllowedForTeacherScope(ex));
 
-        // Ujian yang sesuai rombel/tingkat aktif yang sedang dibuka
+        // Hanya tampilkan ujian yang benar-benar cocok dengan rombel/tingkat aktif yang sedang dibuka
         const filtered = sameSubjectExams.filter(checkClassMatch);
 
-        // Ujian mapel & pengampu yang sama di jenjang lain yang juga diampu guru (jika mengajar lintas tingkat)
-        const others = sameSubjectExams.filter((ex) => !checkClassMatch(ex));
-
-        // Urutkan: milik guru sendiri / UAS Koordinator diutamakan, lalu terbaru
+        // Urutkan: UAS Koordinator / milik guru sendiri diutamakan, lalu terbaru
         const sortExams = (list) => {
           return [...list].sort((a, b) => {
             const aMine = isOwnedByMe(a);
@@ -418,14 +425,11 @@ export default function PenilaianUASPage() {
         };
 
         const sortedFiltered = sortExams(filtered);
-        const sortedOthers = sortExams(others);
 
         setAvailableCbtExams(sortedFiltered);
-        setOtherGradeExams(sortedOthers);
 
         if (sortedFiltered.length > 0) {
-          const defaultExam = sortedFiltered.find((e) => isOwnedByMe(e) && isCoordinatorExamObj(e))
-            || sortedFiltered.find((e) => isCoordinatorExamObj(e))
+          const defaultExam = sortedFiltered.find((e) => isCoordinatorExamObj(e))
             || sortedFiltered[0];
           setSelectedExamId(defaultExam.id);
         } else {
@@ -533,9 +537,7 @@ export default function PenilaianUASPage() {
       return;
     }
 
-    const chosenExam =
-      availableCbtExams.find((e) => e.id === selectedExamId) ||
-      otherGradeExams.find((e) => e.id === selectedExamId);
+    const chosenExam = availableCbtExams.find((e) => e.id === selectedExamId);
 
     if (!chosenExam) {
       alert('Data ujian CBT yang dipilih tidak ditemukan.');
@@ -929,78 +931,36 @@ export default function PenilaianUASPage() {
               onChange={(e) => setSelectedExamId(e.target.value)}
               className="w-full rounded-xl border-2 border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-2xs outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 transition-all"
             >
-              {availableCbtExams.length === 0 && otherGradeExams.length === 0 ? (
-                <option value="">— Belum ada sesi ujian CBT untuk {subjects.find((s) => s.code === subject)?.name || subject} di Kelas {className} —</option>
+              {availableCbtExams.length === 0 ? (
+                <option value="">— Belum ada sesi ujian CBT untuk {subjects.find((s) => s.code === subject)?.name || subject} di {className.startsWith('Kelas') ? className : `Kelas ${className}`} —</option>
               ) : (
                 <>
                   <option value="">— Pilih Sesi Ujian CBT Sumber —</option>
-                  {availableCbtExams.length > 0 && (
-                    <optgroup label={`Sesi Ujian Pengampu: ${className} (Tingkat ${extractGradeLevelDigit(className) || 'Ini'})`}>
-                      {(() => {
-                        const cleanActiveClass = String(className || '').replace(/^kelas\s+/i, '').trim();
-                        const baseLabels = availableCbtExams.map((ex) => {
-                          const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
-                          const fallbackName = `${isUasType ? 'ASAS' : 'Reguler'} ${ex.subject || ex.course_name || subjects.find((s) => s.code === subject)?.name || subject}`;
-                          const examName = String(ex.title || '').trim() || fallbackName;
-                          return `${examName}-${cleanActiveClass}`;
-                        });
-                        const labelCounts = baseLabels.reduce((acc, lbl) => {
-                          acc[lbl] = (acc[lbl] || 0) + 1;
-                          return acc;
-                        }, {});
-                        return availableCbtExams.map((ex, idx) => {
-                          const base = baseLabels[idx];
-                          const displayLabel = labelCounts[base] > 1 && ex.token ? `${base} (${ex.token})` : base;
-                          return (
-                            <option key={ex.id} value={ex.id}>
-                              {displayLabel}
-                            </option>
-                          );
-                        });
-                      })()}
-                    </optgroup>
-                  )}
-                  {otherGradeExams.length > 0 && (
-                    <optgroup label="Sesi Ujian Mapel Ini di Rombel/Tingkat Lain yang Diampu">
-                      {(() => {
-                        const baseLabels = otherGradeExams.map((ex) => {
-                          const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
-                          const fallbackName = `${isUasType ? 'ASAS' : 'Reguler'} ${ex.subject || ex.course_name || subjects.find((s) => s.code === subject)?.name || subject}`;
-                          const examName = String(ex.title || '').trim() || fallbackName;
-                          const lvl = extractGradeLevelDigit(ex.targetGradeLevel || ex.className || ex.rawDescription || ex.title);
-                          const clsPart = isUasType && lvl ? `Tingkat ${lvl}` : String(ex.className || '-').replace(/^kelas\s+/i, '').trim();
-                          return `${examName}-${clsPart}`;
-                        });
-                        const labelCounts = baseLabels.reduce((acc, lbl) => {
-                          acc[lbl] = (acc[lbl] || 0) + 1;
-                          return acc;
-                        }, {});
-                        return otherGradeExams.map((ex, idx) => {
-                          const base = baseLabels[idx];
-                          const displayLabel = labelCounts[base] > 1 && ex.token ? `${base} (${ex.token})` : base;
-                          return (
-                            <option key={ex.id} value={ex.id}>
-                              {displayLabel}
-                            </option>
-                          );
-                        });
-                      })()}
-                    </optgroup>
-                  )}
+                  {(() => {
+                    const cleanActiveClass = String(className || '').replace(/^kelas\s+/i, '').trim();
+                    const baseLabels = availableCbtExams.map((ex) => {
+                      const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+                      const fallbackName = `${isUasType ? 'ASAS' : 'Reguler'} ${ex.subject || ex.course_name || subjects.find((s) => s.code === subject)?.name || subject}`;
+                      const examName = String(ex.title || '').trim() || fallbackName;
+                      return `${examName}-${cleanActiveClass}`;
+                    });
+                    const labelCounts = baseLabels.reduce((acc, lbl) => {
+                      acc[lbl] = (acc[lbl] || 0) + 1;
+                      return acc;
+                    }, {});
+                    return availableCbtExams.map((ex, idx) => {
+                      const base = baseLabels[idx];
+                      const displayLabel = labelCounts[base] > 1 && ex.token ? `${base} (${ex.token})` : base;
+                      return (
+                        <option key={ex.id} value={ex.id}>
+                          {displayLabel}
+                        </option>
+                      );
+                    });
+                  })()}
                 </>
               )}
             </select>
-
-            {availableCbtExams.length === 0 && otherGradeExams.length > 0 && (
-              <div className="flex items-start gap-2 text-[11px] text-amber-800 bg-amber-50/90 border border-amber-200/80 px-3 py-2 rounded-xl mt-2 leading-relaxed">
-                <span className="font-bold shrink-0">💡 Info Jenjang:</span>
-                <div>
-                  Ujian CBT yang terdaftar dibuat untuk <strong>Tingkat {extractGradeLevelDigit(otherGradeExams[0].targetGradeLevel || otherGradeExams[0].title) || '9'}</strong> (contoh: <em>{otherGradeExams[0].title}</em>).
-                  Ujian tersebut akan otomatis terseleksi saat memilih rombel tingkat tersebut (contoh: <strong>Kelas IX-A s/d IX-J</strong>).
-                  Anda juga dapat memilihnya langsung dari opsi dropdown di atas jika ingin menarik nilainya.
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="flex items-end">

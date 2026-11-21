@@ -575,10 +575,10 @@ func (h *ELearningHandler) CreateExam(c *fiber.Ctx) error {
 	req := input.ToDomain()
 
 	if req.CourseName == "" {
-		req.CourseName = "Informatika"
+		req.CourseName = "Umum"
 	}
 	if req.CourseID == "" {
-		req.CourseID = "INF"
+		req.CourseID = "MAPEL"
 	}
 
 	if req.TeacherName == "" {
