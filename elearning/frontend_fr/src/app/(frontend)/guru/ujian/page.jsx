@@ -685,6 +685,9 @@ export default function TeacherExamsManagementPage() {
   const [targetGradeLevel, setTargetGradeLevel] = useState('7'); // '7' | '8' | '9'
   const [supervisorPin, setSupervisorPin] = useState(() => generateRandomPin(6));
   const [examFilterTab, setExamFilterTab] = useState('ALL'); // 'ALL' | 'SEMESTER_UAS' | 'REGULAR'
+  const [classFilter, setClassFilter] = useState('ALL'); // 'ALL' | 'GRADE_7' | 'GRADE_8' | 'GRADE_9' | rombel
+  const [examPage, setExamPage] = useState(1);
+  const [examPageSize, setExamPageSize] = useState(5);
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('');
   const [subjectCode, setSubjectCode] = useState('');
@@ -3620,7 +3623,77 @@ export default function TeacherExamsManagementPage() {
     if (examFilterTab === 'SEMESTER_UAS') return isUas;
     if (examFilterTab === 'REGULAR') return !isUas;
     return true;
+  }).filter((ex) => {
+    if (classFilter === 'ALL') return true;
+    const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+    const exText = `${ex.targetGradeLevel || ''} ${ex.className || ''} ${ex.rawDescription || ''} ${ex.title || ''}`.toUpperCase();
+    const detectGrade = (txt) => {
+      const s = String(txt || '').toUpperCase();
+      if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VIII|8)\b|\bVIII[-_\sA-Z0-9]|\[ASAS:8\]|^8$/.test(s)) return '8';
+      if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VII|7)\b|\bVII[-_\sA-Z0-9]|\[ASAS:7\]|^7$/.test(s)) return '7';
+      if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:IX|9)\b|\bIX[-_\sA-Z0-9]|\[ASAS:9\]|^9$/.test(s)) return '9';
+      return '';
+    };
+    const exGrade = String(ex.targetGradeLevel || '').trim() || detectGrade(exText);
+
+    if (classFilter.startsWith('GRADE_')) {
+      const targetLvl = classFilter.replace('GRADE_', '');
+      return exGrade === targetLvl;
+    }
+
+    const norm = (val) => String(val || '').toLowerCase().replace(/^kelas\s*/i, '').replace(/[^a-z0-9]/g, '');
+    const targetNorm = norm(classFilter);
+    const targetGrade = detectGrade(classFilter);
+    if (norm(ex.className) === targetNorm) return true;
+    if (Array.isArray(ex.targetClasses) && ex.targetClasses.some((tc) => norm(tc) === targetNorm)) return true;
+    if (isUas && targetGrade && exGrade === targetGrade) return true;
+    return false;
   });
+
+  // Opsi filter kelas & tingkat berdasarkan rombel & ujian yang ada
+  const classFilterOptions = (() => {
+    const gradeSet = new Set();
+    const rombelSet = new Set();
+    const detectGrade = (txt) => {
+      const s = String(txt || '').toUpperCase();
+      if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VIII|8)\b|\bVIII[-_\sA-Z0-9]|\[ASAS:8\]|^8$/.test(s)) return '8';
+      if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VII|7)\b|\bVII[-_\sA-Z0-9]|\[ASAS:7\]|^7$/.test(s)) return '7';
+      if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:IX|9)\b|\bIX[-_\sA-Z0-9]|\[ASAS:9\]|^9$/.test(s)) return '9';
+      return '';
+    };
+
+    exams.forEach((ex) => {
+      const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+      const lvl = String(ex.targetGradeLevel || '').trim() || detectGrade(`${ex.className || ''} ${ex.rawDescription || ''}`);
+      if (lvl) gradeSet.add(lvl);
+      if (!isUas && ex.className) {
+        rombelSet.add(String(ex.className).replace(/^kelas\s+/i, '').trim());
+      }
+    });
+
+    (classes || []).forEach((c) => {
+      const cName = typeof c === 'string' ? c : (c?.name || c?.class_code || '');
+      if (cName) {
+        const clean = String(cName).replace(/^kelas\s+/i, '').trim();
+        rombelSet.add(clean);
+        const lvl = detectGrade(clean);
+        if (lvl) gradeSet.add(lvl);
+      }
+    });
+
+    const grades = ['7', '8', '9'].filter((g) => gradeSet.has(g));
+    const rombels = Array.from(rombelSet).sort((a, b) => a.localeCompare(b, 'id', { numeric: true }));
+    return { grades, rombels };
+  })();
+
+  const totalExamPages = Math.max(1, Math.ceil(filteredExams.length / examPageSize));
+  const safeExamPage = Math.min(examPage, totalExamPages);
+  const paginatedExams = filteredExams.slice(
+    (safeExamPage - 1) * examPageSize,
+    safeExamPage * examPageSize
+  );
+  const pageStartIdx = filteredExams.length === 0 ? 0 : (safeExamPage - 1) * examPageSize + 1;
+  const pageEndIdx = Math.min(safeExamPage * examPageSize, filteredExams.length);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
@@ -3646,61 +3719,130 @@ export default function TeacherExamsManagementPage() {
         </Button>
       </div>
 
-      {/* Filter Tabs Segmented Control (Responsive Horizontal Scroll on Mobile) */}
-      <div className="max-w-full overflow-x-auto pb-1">
-        <div className="bg-slate-100 p-1.5 rounded-2xl inline-flex items-center gap-1.5 border border-slate-200/90 shadow-2xs min-w-max">
-          <button
-            type="button"
-            onClick={() => setExamFilterTab('ALL')}
-            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
-              examFilterTab === 'ALL'
-                ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-            }`}
-          >
-            <span>Semua Ujian</span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              examFilterTab === 'ALL' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
-            }`}>
-              {exams.length}
-            </span>
-          </button>
+      {/* Filter Tabs & Filter Per Kelas / Tingkat */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="max-w-full overflow-x-auto pb-1 lg:pb-0">
+          <div className="bg-slate-100 p-1.5 rounded-2xl inline-flex items-center gap-1.5 border border-slate-200/90 shadow-2xs min-w-max">
+            <button
+              type="button"
+              onClick={() => {
+                setExamFilterTab('ALL');
+                setExamPage(1);
+              }}
+              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                examFilterTab === 'ALL'
+                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              <span>Semua Ujian</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                examFilterTab === 'ALL' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
+              }`}>
+                {exams.length}
+              </span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setExamFilterTab('SEMESTER_UAS')}
-            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
-              examFilterTab === 'SEMESTER_UAS'
-                ? 'bg-primary-500 text-white shadow-xs'
-                : 'text-slate-600 hover:text-primary-500 hover:bg-white/60'
-            }`}
-          >
-            <AppIcon name="medal" color={examFilterTab === 'SEMESTER_UAS' ? 'white' : 'blue'} size={14} />
-            <span>UAS / ASAS Semester</span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              examFilterTab === 'SEMESTER_UAS' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
-            }`}>
-              {uasCount}
-            </span>
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                setExamFilterTab('SEMESTER_UAS');
+                setExamPage(1);
+              }}
+              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                examFilterTab === 'SEMESTER_UAS'
+                  ? 'bg-primary-500 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-primary-500 hover:bg-white/60'
+              }`}
+            >
+              <AppIcon name="medal" color={examFilterTab === 'SEMESTER_UAS' ? 'white' : 'blue'} size={14} />
+              <span>UAS / ASAS Semester</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                examFilterTab === 'SEMESTER_UAS' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
+              }`}>
+                {uasCount}
+              </span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setExamFilterTab('REGULAR')}
-            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
-              examFilterTab === 'REGULAR'
-                ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-            }`}
-          >
-            <AppIcon name="course" color={examFilterTab === 'REGULAR' ? 'purple' : 'grey'} size={14} />
-            <span>Ujian Reguler / Harian</span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              examFilterTab === 'REGULAR' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
-            }`}>
-              {regularCount}
-            </span>
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                setExamFilterTab('REGULAR');
+                setExamPage(1);
+              }}
+              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                examFilterTab === 'REGULAR'
+                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              <AppIcon name="course" color={examFilterTab === 'REGULAR' ? 'purple' : 'grey'} size={14} />
+              <span>Ujian Reguler / Harian</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                examFilterTab === 'REGULAR' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
+              }`}>
+                {regularCount}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Filter Per Kelas / Tingkat & Jumlah per Halaman */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-2xs">
+            <AppIcon name="filter" color="grey" size={14} />
+            <label htmlFor="exam-class-filter" className="text-[11px] font-bold text-slate-500 whitespace-nowrap">
+              Kelas:
+            </label>
+            <select
+              id="exam-class-filter"
+              value={classFilter}
+              onChange={(e) => {
+                setClassFilter(e.target.value);
+                setExamPage(1);
+              }}
+              className="text-xs font-bold text-slate-800 bg-transparent outline-none cursor-pointer pr-1"
+            >
+              <option value="ALL">Semua Kelas / Tingkat</option>
+              {classFilterOptions.grades.length > 0 && (
+                <optgroup label="Per Jenjang Tingkat">
+                  {classFilterOptions.grades.map((g) => (
+                    <option key={`GRADE_${g}`} value={`GRADE_${g}`}>
+                      Tingkat {g} (Semua Kelas {g})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {classFilterOptions.rombels.length > 0 && (
+                <optgroup label="Per Rombel Kelas">
+                  {classFilterOptions.rombels.map((r) => (
+                    <option key={r} value={r}>
+                      Kelas {r}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-2xs">
+            <label htmlFor="exam-page-size" className="text-[11px] font-bold text-slate-500 whitespace-nowrap">
+              Tampilkan:
+            </label>
+            <select
+              id="exam-page-size"
+              value={examPageSize}
+              onChange={(e) => {
+                setExamPageSize(Number(e.target.value) || 5);
+                setExamPage(1);
+              }}
+              className="text-xs font-bold text-slate-800 bg-transparent outline-none cursor-pointer"
+            >
+              <option value={5}>5 / hal</option>
+              <option value={10}>10 / hal</option>
+              <option value={20}>20 / hal</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -3719,12 +3861,14 @@ export default function TeacherExamsManagementPage() {
               <AppIcon name="document-book" color="grey" size={32} />
               <p className="text-xs font-bold text-neutral-700">Belum Ada Jadwal Ujian CBT</p>
               <p className="text-[11px] text-neutral-400">
-                Klik tombol &ldquo;Buat Jadwal Ujian&rdquo; di atas untuk membuat sesi ujian baru.
+                {classFilter !== 'ALL'
+                  ? 'Tidak ada sesi ujian pada kelas/tingkat yang dipilih. Ubah filter kelas untuk melihat sesi lainnya.'
+                  : 'Klik tombol "Buat Jadwal Ujian" di atas untuk membuat sesi ujian baru.'}
               </p>
             </div>
           </Card>
         ) : (
-          filteredExams.map((ex) => {
+          paginatedExams.map((ex) => {
             const currentStatus = getExamStatus(ex);
             const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
             const examDateStr = ex.scheduledDate || (ex.startDateTime ? ex.startDateTime.split('T')[0] : '');
@@ -3927,13 +4071,15 @@ export default function TeacherExamsManagementPage() {
                       <AppIcon name="document-book" color="grey" size={32} />
                       <p className="text-xs font-bold text-neutral-700">Belum Ada Jadwal Ujian CBT</p>
                       <p className="text-[11px] text-neutral-400">
-                        Klik tombol &ldquo;Buat Jadwal Ujian&rdquo; di atas untuk membuat sesi ujian baru.
+                        {classFilter !== 'ALL'
+                          ? 'Tidak ada sesi ujian pada kelas/tingkat yang dipilih. Ubah filter kelas untuk melihat sesi lainnya.'
+                          : 'Klik tombol "Buat Jadwal Ujian" di atas untuk membuat sesi ujian baru.'}
                       </p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                filteredExams.map((ex) => {
+                paginatedExams.map((ex) => {
                   const currentStatus = getExamStatus(ex);
                   const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
                   const examDateStr = ex.scheduledDate || (ex.startDateTime ? ex.startDateTime.split('T')[0] : '');
@@ -4116,6 +4262,56 @@ export default function TeacherExamsManagementPage() {
           </table>
         </div>
       </Card>
+
+      {/* Pagination Controls (Mobile & Desktop) */}
+      {!loading && filteredExams.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3 shadow-2xs text-xs">
+          <div className="text-neutral-600 font-medium">
+            Menampilkan <span className="font-bold text-neutral-900">{pageStartIdx}–{pageEndIdx}</span> dari{' '}
+            <span className="font-bold text-neutral-900">{filteredExams.length}</span> sesi ujian
+            {classFilter !== 'ALL' && (
+              <span className="ml-1.5 text-primary-700 font-bold">
+                ({classFilter.startsWith('GRADE_') ? `Tingkat ${classFilter.replace('GRADE_', '')}` : `Kelas ${classFilter}`})
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap justify-center">
+            <button
+              type="button"
+              disabled={safeExamPage <= 1}
+              onClick={() => setExamPage((p) => Math.max(1, p - 1))}
+              className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+            >
+              ‹ Sebelumnya
+            </button>
+
+            {Array.from({ length: totalExamPages }, (_, i) => i + 1).map((pageNum) => (
+              <button
+                key={pageNum}
+                type="button"
+                onClick={() => setExamPage(pageNum)}
+                className={`min-w-8 px-2.5 py-1.5 rounded-xl font-bold transition cursor-pointer ${
+                  pageNum === safeExamPage
+                    ? 'bg-primary-500 text-white shadow-xs'
+                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {pageNum}
+              </button>
+            ))}
+
+            <button
+              type="button"
+              disabled={safeExamPage >= totalExamPages}
+              onClick={() => setExamPage((p) => Math.min(totalExamPages, p + 1))}
+              className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+            >
+              Berikutnya ›
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation Modal */}
       <ConfirmModal

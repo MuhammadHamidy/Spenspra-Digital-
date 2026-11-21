@@ -936,32 +936,55 @@ export default function PenilaianUASPage() {
                   <option value="">— Pilih Sesi Ujian CBT Sumber —</option>
                   {availableCbtExams.length > 0 && (
                     <optgroup label={`Sesi Ujian Pengampu: ${className} (Tingkat ${extractGradeLevelDigit(className) || 'Ini'})`}>
-                      {availableCbtExams.map((ex) => {
-                        const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
-                        const lvl = extractGradeLevelDigit(ex.targetGradeLevel || ex.className || ex.rawDescription || ex.title) || extractGradeLevelDigit(className);
-                        const creatorLabel = ex.teacherName || ex.teacher_name || 'Koordinator Mapel';
-                        return (
-                          <option key={ex.id} value={ex.id}>
-                            {isUasType ? `[ASAS Tk. ${lvl || '-'} • ${className}] ` : `[Reguler • ${className}] `}
-                            {ex.title} — Pengampu/PJ: {creatorLabel} • Token: {ex.token || '-'}
-                          </option>
-                        );
-                      })}
+                      {(() => {
+                        const cleanActiveClass = String(className || '').replace(/^kelas\s+/i, '').trim();
+                        const baseLabels = availableCbtExams.map((ex) => {
+                          const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+                          const cat = isUasType ? 'ASAS' : 'Reguler';
+                          const subjName = ex.subject || ex.course_name || subjects.find((s) => s.code === subject)?.name || subject;
+                          return `${cat}-${subjName}-${cleanActiveClass}`;
+                        });
+                        const labelCounts = baseLabels.reduce((acc, lbl) => {
+                          acc[lbl] = (acc[lbl] || 0) + 1;
+                          return acc;
+                        }, {});
+                        return availableCbtExams.map((ex, idx) => {
+                          const base = baseLabels[idx];
+                          const displayLabel = labelCounts[base] > 1 && ex.title ? `${base} (${ex.title})` : base;
+                          return (
+                            <option key={ex.id} value={ex.id}>
+                              {displayLabel}
+                            </option>
+                          );
+                        });
+                      })()}
                     </optgroup>
                   )}
                   {otherGradeExams.length > 0 && (
                     <optgroup label="Sesi Ujian Mapel Ini di Rombel/Tingkat Lain yang Diampu">
-                      {otherGradeExams.map((ex) => {
-                        const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
-                        const lvl = extractGradeLevelDigit(ex.targetGradeLevel || ex.className || ex.rawDescription || ex.title);
-                        const creatorLabel = ex.teacherName || ex.teacher_name || 'Koordinator Mapel';
-                        return (
-                          <option key={ex.id} value={ex.id}>
-                            {isUasType ? `[ASAS Tk. ${lvl || '?'}] ` : `[Reguler • ${ex.className || '-'}] `}
-                            {ex.title} — Pengampu/PJ: {creatorLabel} • Token: {ex.token || '-'}
-                          </option>
-                        );
-                      })}
+                      {(() => {
+                        const baseLabels = otherGradeExams.map((ex) => {
+                          const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+                          const cat = isUasType ? 'ASAS' : 'Reguler';
+                          const subjName = ex.subject || ex.course_name || subjects.find((s) => s.code === subject)?.name || subject;
+                          const lvl = extractGradeLevelDigit(ex.targetGradeLevel || ex.className || ex.rawDescription || ex.title);
+                          const clsPart = isUasType && lvl ? `Tingkat ${lvl}` : String(ex.className || '-').replace(/^kelas\s+/i, '').trim();
+                          return `${cat}-${subjName}-${clsPart}`;
+                        });
+                        const labelCounts = baseLabels.reduce((acc, lbl) => {
+                          acc[lbl] = (acc[lbl] || 0) + 1;
+                          return acc;
+                        }, {});
+                        return otherGradeExams.map((ex, idx) => {
+                          const base = baseLabels[idx];
+                          const displayLabel = labelCounts[base] > 1 && ex.title ? `${base} (${ex.title})` : base;
+                          return (
+                            <option key={ex.id} value={ex.id}>
+                              {displayLabel}
+                            </option>
+                          );
+                        });
+                      })()}
                     </optgroup>
                   )}
                 </>
