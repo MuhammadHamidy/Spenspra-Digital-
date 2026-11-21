@@ -940,9 +940,9 @@ export default function PenilaianUASPage() {
                         const cleanActiveClass = String(className || '').replace(/^kelas\s+/i, '').trim();
                         const baseLabels = availableCbtExams.map((ex) => {
                           const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
-                          const cat = isUasType ? 'ASAS' : 'Reguler';
-                          const subjName = ex.subject || ex.course_name || subjects.find((s) => s.code === subject)?.name || subject;
-                          return `${cat}-${subjName}-${cleanActiveClass}`;
+                          const fallbackName = `${isUasType ? 'ASAS' : 'Reguler'} ${ex.subject || ex.course_name || subjects.find((s) => s.code === subject)?.name || subject}`;
+                          const examName = String(ex.title || '').trim() || fallbackName;
+                          return `${examName}-${cleanActiveClass}`;
                         });
                         const labelCounts = baseLabels.reduce((acc, lbl) => {
                           acc[lbl] = (acc[lbl] || 0) + 1;
@@ -950,7 +950,7 @@ export default function PenilaianUASPage() {
                         }, {});
                         return availableCbtExams.map((ex, idx) => {
                           const base = baseLabels[idx];
-                          const displayLabel = labelCounts[base] > 1 && ex.title ? `${base} (${ex.title})` : base;
+                          const displayLabel = labelCounts[base] > 1 && ex.token ? `${base} (${ex.token})` : base;
                           return (
                             <option key={ex.id} value={ex.id}>
                               {displayLabel}
@@ -965,11 +965,11 @@ export default function PenilaianUASPage() {
                       {(() => {
                         const baseLabels = otherGradeExams.map((ex) => {
                           const isUasType = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
-                          const cat = isUasType ? 'ASAS' : 'Reguler';
-                          const subjName = ex.subject || ex.course_name || subjects.find((s) => s.code === subject)?.name || subject;
+                          const fallbackName = `${isUasType ? 'ASAS' : 'Reguler'} ${ex.subject || ex.course_name || subjects.find((s) => s.code === subject)?.name || subject}`;
+                          const examName = String(ex.title || '').trim() || fallbackName;
                           const lvl = extractGradeLevelDigit(ex.targetGradeLevel || ex.className || ex.rawDescription || ex.title);
                           const clsPart = isUasType && lvl ? `Tingkat ${lvl}` : String(ex.className || '-').replace(/^kelas\s+/i, '').trim();
-                          return `${cat}-${subjName}-${clsPart}`;
+                          return `${examName}-${clsPart}`;
                         });
                         const labelCounts = baseLabels.reduce((acc, lbl) => {
                           acc[lbl] = (acc[lbl] || 0) + 1;
@@ -977,7 +977,7 @@ export default function PenilaianUASPage() {
                         }, {});
                         return otherGradeExams.map((ex, idx) => {
                           const base = baseLabels[idx];
-                          const displayLabel = labelCounts[base] > 1 && ex.title ? `${base} (${ex.title})` : base;
+                          const displayLabel = labelCounts[base] > 1 && ex.token ? `${base} (${ex.token})` : base;
                           return (
                             <option key={ex.id} value={ex.id}>
                               {displayLabel}
