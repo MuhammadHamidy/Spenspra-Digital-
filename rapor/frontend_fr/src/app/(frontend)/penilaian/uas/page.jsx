@@ -55,6 +55,13 @@ const getPredicate = (score) => {
   return 'D';
 };
 
+const formatCleanNisn = (val) => {
+  const cleaned = String(val || '')
+    .trim()
+    .replace(/^(?:siswa|student|nisn)[_\-\s]+/i, '');
+  return cleaned || '-';
+};
+
 const INITIAL_PREDICATE_DESCRIPTIONS = {
   A: 'Sangat baik dalam memahami materi pembelajaran akhir semester dan mampu menyelesaikannya secara mandiri.',
   B: 'Baik dalam memahami materi pembelajaran akhir semester dan mampu menyelesaikannya dengan tepat.',
@@ -241,7 +248,7 @@ export default function PenilaianUASPage() {
               id: g.student_id,
               absenNo: idx + 1,
               person_id: g.person_id || null,
-              nisn: g.nisn || '-',
+              nisn: formatCleanNisn(g.nisn),
               name: g.student_name || 'Siswa',
               className: g.class_name || className,
               score: hasScore ? String(g.score) : '',
@@ -267,7 +274,7 @@ export default function PenilaianUASPage() {
                 id: s.id,
                 absenNo: idx + 1,
                 person_id: s.person_id || null,
-                nisn: s.nisn || s.nim_nip || '-',
+                nisn: formatCleanNisn(s.nisn || s.nim_nip),
                 name: s.full_name || s.fullName || s.name || 'Siswa',
                 className,
                 score: '',
@@ -553,7 +560,7 @@ export default function PenilaianUASPage() {
 
       (sessions || []).forEach((sess) => {
         const sId = String(sess.studentId || sess.student_id || sess.id || '');
-        const sNisn = String(sess.nisn || '');
+        const sNisn = formatCleanNisn(sess.nisn);
         const sName = String(sess.studentName || sess.student_name || '').toLowerCase().trim();
         const score = typeof sess.score === 'number' ? sess.score : (sess.score !== undefined && sess.score !== null ? Number(sess.score) : null);
 

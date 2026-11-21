@@ -38,6 +38,53 @@ export default function CBTExamRunnerPage({ params }) {
   const [supervisorPinError, setSupervisorPinError] = useState('');
   const [isUnlocking, setIsUnlocking] = useState(false);
 
+  // Ukuran Font Soal (A- / A / A+)
+  const [fontSize, setFontSize] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('cbt_exam_font_size');
+        if (saved && ['sm', 'base', 'lg', 'xl'].includes(saved)) return saved;
+      } catch (_) {}
+    }
+    return 'base';
+  });
+
+  const handleChangeFontSize = (sizeKey) => {
+    setFontSize(sizeKey);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('cbt_exam_font_size', sizeKey);
+      } catch (_) {}
+    }
+  };
+
+  const fontClasses = {
+    sm: {
+      stimulus: 'text-xs leading-relaxed',
+      question: 'text-xs sm:text-sm leading-relaxed',
+      option: 'text-xs leading-normal',
+    },
+    base: {
+      stimulus: 'text-xs sm:text-sm leading-relaxed',
+      question: 'text-sm sm:text-base leading-relaxed',
+      option: 'text-xs sm:text-sm leading-normal',
+    },
+    lg: {
+      stimulus: 'text-sm sm:text-base leading-relaxed',
+      question: 'text-base sm:text-lg leading-relaxed',
+      option: 'text-sm sm:text-base leading-normal',
+    },
+    xl: {
+      stimulus: 'text-base sm:text-lg leading-relaxed',
+      question: 'text-lg sm:text-xl leading-relaxed',
+      option: 'text-base sm:text-lg leading-normal',
+    },
+  }[fontSize] || {
+    stimulus: 'text-xs sm:text-sm leading-relaxed',
+    question: 'text-sm sm:text-base leading-relaxed',
+    option: 'text-xs sm:text-sm leading-normal',
+  };
+
   // Load Exam and Student Session
   useEffect(() => {
     const currentUser = tokenStorage.getUser();
@@ -158,8 +205,9 @@ export default function CBTExamRunnerPage({ params }) {
     maxViolations: 1, // Solusi 2: Zero-Tolerance (1x pelanggaran langsung terkunci)
     zeroTolerance: true,
     enabled: !loading && !finishResult && Boolean(session),
+    // Jika ujian memiliki PIN Pengawas khusus, HANYA terima PIN Pengawas (jangan terima Token Ujian siswa!)
     unlockPin: exam?.supervisorPin || exam?.token || '',
-    altUnlockPins: [exam?.supervisorPin, exam?.token].filter(Boolean),
+    altUnlockPins: exam?.supervisorPin ? [exam.supervisorPin] : [exam?.token].filter(Boolean),
     onLock: handleLockSession,
     onViolation: handleViolationRecorded,
     onUnlock: async (unlockInfo) => {
@@ -174,13 +222,6 @@ export default function CBTExamRunnerPage({ params }) {
       setSupervisorPinError('');
     },
   });
-
-  // Auto-request fullscreen saat sesi ujian aktif
-  useEffect(() => {
-    if (!loading && session && !isLocked) {
-      requestFullscreen();
-    }
-  }, [loading, session, isLocked, requestFullscreen]);
 
   // Kiosk-Mode Touch & Overscroll Lockdown (Cegah munculnya tab bar browser saat scrolling di HP)
   useEffect(() => {
@@ -207,17 +248,22 @@ export default function CBTExamRunnerPage({ params }) {
 
     const examToken = String(exam?.token || '').trim().toUpperCase();
     const officialSupervisorPin = String(exam?.supervisorPin || '').trim().toUpperCase();
-    const isValidPin = (officialSupervisorPin && entered === officialSupervisorPin) || (examToken && entered === examToken);
 
-    const res = unlockSession(entered);
-    if (!res.success && !isValidPin) {
-      setSupervisorPinError(res.message || 'PIN Pengawas tidak cocok!');
+    // Tolak tegas jika siswa mencoba memasukkan Token Ujian padahal ujian memiliki PIN Pengawas khusus
+    if (officialSupervisorPin && examToken && officialSupervisorPin !== examToken && entered === examToken) {
+      setSupervisorPinError('Token ujian tidak dapat digunakan untuk membuka kunci! Minta PIN Pengawas ruangan.');
       setIsUnlocking(false);
       return;
     }
 
-    if (!res.success && isValidPin) {
-      unlockSession(entered);
+    const expectedPin = officialSupervisorPin || examToken;
+    const isValidPin = Boolean(expectedPin && entered === expectedPin);
+
+    const res = unlockSession(entered);
+    if (!res.success || !isValidPin) {
+      setSupervisorPinError(res.message || 'PIN Pengawas tidak cocok! Hubungi Pengawas di kelas.');
+      setIsUnlocking(false);
+      return;
     }
 
     // Beritahukan ke server backend agar status sesi di database dan monitor guru kembali IN_PROGRESS
@@ -952,29 +998,60 @@ export default function CBTExamRunnerPage({ params }) {
         {/* RIGHT: Konten Soal */}
         <div className="flex-1 min-w-0 space-y-4">
           <div className="bg-white rounded-[12px] border border-neutral-200 shadow-sm p-5 sm:p-7 space-y-5">
-            {/* Heading Soal */}
-            <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
+            {/* Heading Soal + Pengatur Ukuran Font + Ragu-ragu */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-neutral-100">
               <h2 className="text-base sm:text-lg font-bold text-neutral-900">
                 Soal Nomor {currentIndex + 1}
               </h2>
-              {/* Ragu-ragu Toggle */}
-              <button
-                type="button"
-                onClick={handleToggleDoubtful}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer border ${
-                  doubtfuls[currentQ?.id]
-                    ? 'bg-amber-400 text-neutral-900 border-amber-500'
-                    : 'bg-neutral-50 text-neutral-600 border-neutral-300 hover:bg-neutral-100'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={Boolean(doubtfuls[currentQ?.id])}
-                  onChange={() => {}}
-                  className="rounded text-amber-500 focus:ring-0"
-                />
-                <span>Ragu-Ragu</span>
-              </button>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Pengatur Ukuran Font */}
+                <div
+                  className="inline-flex items-center rounded-full border border-neutral-200 bg-neutral-50 p-0.5"
+                  role="group"
+                  aria-label="Ukuran Huruf Soal"
+                >
+                  {[
+                    { key: 'sm', label: 'A-', title: 'Ukuran Huruf Kecil' },
+                    { key: 'base', label: 'A', title: 'Ukuran Huruf Normal' },
+                    { key: 'lg', label: 'A+', title: 'Ukuran Huruf Besar' },
+                    { key: 'xl', label: 'A++', title: 'Ukuran Huruf Sangat Besar' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => handleChangeFontSize(opt.key)}
+                      title={opt.title}
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer ${
+                        fontSize === opt.key
+                          ? 'bg-primary-600 text-white shadow-2xs'
+                          : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200/70'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Ragu-ragu Toggle */}
+                <button
+                  type="button"
+                  onClick={handleToggleDoubtful}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer border ${
+                    doubtfuls[currentQ?.id]
+                      ? 'bg-amber-400 text-neutral-900 border-amber-500'
+                      : 'bg-neutral-50 text-neutral-600 border-neutral-300 hover:bg-neutral-100'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(doubtfuls[currentQ?.id])}
+                    onChange={() => {}}
+                    className="rounded text-amber-500 focus:ring-0"
+                  />
+                  <span>Ragu-Ragu</span>
+                </button>
+              </div>
             </div>
 
             {/* Question Content */}
@@ -986,7 +1063,7 @@ export default function CBTExamRunnerPage({ params }) {
                     <AppIcon name="file" color="yellow" size={15} />
                     <span>Wacana / Stimulus Kasus</span>
                   </div>
-                  <div className="text-xs sm:text-sm font-sans whitespace-pre-wrap leading-relaxed text-amber-950">
+                  <div className={`${fontClasses.stimulus} font-sans whitespace-pre-wrap text-amber-950`}>
                     {currentQ.stimulusText}
                   </div>
                 </div>
@@ -1007,7 +1084,7 @@ export default function CBTExamRunnerPage({ params }) {
               )}
 
               {/* 3. Teks Pertanyaan */}
-              <div className="text-sm sm:text-base text-neutral-900 leading-relaxed whitespace-pre-wrap font-medium">
+              <div className={`${fontClasses.question} text-neutral-900 whitespace-pre-wrap font-medium`}>
                 {currentQ?.questionText}
               </div>
 
@@ -1071,7 +1148,7 @@ export default function CBTExamRunnerPage({ params }) {
                         </div>
                         <div className="flex-1 min-w-0 pt-0.5">
                           {opt.text && (
-                            <span className="text-xs sm:text-sm text-neutral-800 leading-normal block">
+                            <span className={`${fontClasses.option} text-neutral-800 block`}>
                               {opt.text}
                             </span>
                           )}
@@ -1125,7 +1202,7 @@ export default function CBTExamRunnerPage({ params }) {
                         </span>
                         <div className="flex-1 min-w-0 pt-0.5">
                           {opt.text && (
-                            <span className="text-xs sm:text-sm text-neutral-800 leading-normal block">
+                            <span className={`${fontClasses.option} text-neutral-800 block`}>
                               {opt.text}
                             </span>
                           )}
@@ -1366,73 +1443,79 @@ export default function CBTExamRunnerPage({ params }) {
         </div>
       </Modal>
 
-      {/* 4. FULLSCREEN SCREEN LOCK MODAL (LOCKED BY SYSTEM - SOLUSI 2) */}
+      {/* 4. FULLSCREEN SCREEN LOCK MODAL (LOCKED BY SYSTEM - KOMPATIBEL CHROME, MI BROWSER, SAFARI, FIREFOX) */}
       {isLocked && (
-        <div className="fixed inset-0 z-50 bg-neutral-950/95 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 select-none overflow-y-auto">
-          <div className="max-w-md w-full max-h-[92dvh] flex flex-col my-auto bg-white rounded-xl sm:rounded-2xl p-4 sm:p-7 text-center space-y-4 sm:space-y-5 shadow-2xl border-2 border-danger-500 animate-in zoom-in-95 overflow-y-auto">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-danger-100 text-danger-600 mx-auto flex items-center justify-center shadow-inner shrink-0 animate-bounce">
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-            </div>
-
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-100 text-red-800 text-[11px] font-bold uppercase tracking-wider border border-red-300 animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-red-600 animate-ping"></span>
-                <AppIcon name="notification" color="red" size={14} />
-                <span>ALARM & SIRENE AKTIF!</span>
+        <div
+          className="fixed inset-0 z-[9999] bg-neutral-950/95 overflow-y-auto overscroll-contain touch-manipulation"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
+          <div className="min-h-full w-full flex items-start sm:items-center justify-center p-3 sm:p-4 py-6">
+            <div className="max-w-md w-full bg-white rounded-2xl p-4 sm:p-6 text-center space-y-4 shadow-2xl border-2 border-danger-500">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-danger-100 text-danger-600 mx-auto flex items-center justify-center shadow-inner shrink-0">
+                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
               </div>
-              <h3 className="text-xl font-black text-neutral-900 tracking-tight">
-                Lembar Ujian Terkunci!
-              </h3>
-              <p className="text-xs text-neutral-600 leading-relaxed">
-                {warningMessage || 'Terdeteksi menekan tombol Home, menarik panel notifikasi HP, berpindah tab, atau keluar dari peramban ujian.'}
-              </p>
-            </div>
 
-            {/* Kotak Pengawas Ruangan */}
-            <form onSubmit={handleSupervisorUnlockSubmit} className="pt-2 border-t border-neutral-100 space-y-3 text-left">
-              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] space-y-1">
-                <p className="font-bold flex items-center gap-1.5">
-                  <AppIcon name="profile" color="yellow" size={15} />
-                  <span>Petunjuk Pengawas Ruangan:</span>
-                </p>
-                <p className="text-amber-800 leading-relaxed">
-                  Sirene darurat sedang berbunyi. Masukkan <strong>PIN Pengawas</strong> atau <strong>Token Ujian</strong> di bawah ini untuk menghentikan sirene dan membuka kembali lembar ujian siswa.
+              <div className="space-y-1.5">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-100 text-red-800 text-[11px] font-bold uppercase tracking-wider border border-red-300">
+                  <span className="w-2 h-2 rounded-full bg-red-600 animate-ping"></span>
+                  <AppIcon name="notification" color="red" size={14} />
+                  <span>ALARM & SIRENE AKTIF!</span>
+                </div>
+                <h3 className="text-lg sm:text-xl font-black text-neutral-900 tracking-tight">
+                  Lembar Ujian Terkunci!
+                </h3>
+                <p className="text-xs text-neutral-600 leading-relaxed">
+                  {warningMessage || 'Terdeteksi menekan tombol Home, menarik panel notifikasi HP, berpindah tab, atau keluar dari peramban ujian.'}
                 </p>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-neutral-800">
-                  PIN Buka Kunci Pengawas
-                </label>
-                <input
-                  type="password"
-                  placeholder="Masukkan PIN Pengawas / Token"
-                  value={supervisorPinInput}
-                  onChange={(e) => {
-                    setSupervisorPinInput(e.target.value.toUpperCase());
-                    setSupervisorPinError('');
-                  }}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-center tracking-widest text-sm font-bold uppercase text-neutral-900 bg-neutral-50"
-                  autoFocus
-                />
-                {supervisorPinError && (
-                  <p className="text-[11px] text-danger-600 font-semibold">{supervisorPinError}</p>
-                )}
-              </div>
+              {/* Kotak Pengawas Ruangan */}
+              <form onSubmit={handleSupervisorUnlockSubmit} className="pt-2 border-t border-neutral-100 space-y-3 text-left select-text">
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] space-y-1">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <AppIcon name="profile" color="yellow" size={15} />
+                    <span>Petunjuk Pengawas Ruangan:</span>
+                  </p>
+                  <p className="text-amber-800 leading-relaxed">
+                    Sirene darurat sedang berbunyi. Masukkan <strong>PIN Pengawas</strong> resmi di bawah ini untuk menghentikan sirene dan membuka kembali lembar ujian siswa.
+                  </p>
+                </div>
 
-              <Button
-                type="submit"
-                variant="accent"
-                size="md"
-                loading={isUnlocking}
-                className="w-full font-bold shadow-xs min-h-[44px] flex items-center justify-center gap-2"
-              >
-                <AppIcon name="unlock" color="black" size={16} />
-                <span>Matikan Alarm & Buka Kunci Ujian</span>
-              </Button>
-            </form>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-neutral-800 block">
+                    PIN Buka Kunci Pengawas
+                  </label>
+                  <input
+                    type="password"
+                    inputMode="text"
+                    autoComplete="off"
+                    placeholder="Masukkan PIN Pengawas"
+                    value={supervisorPinInput}
+                    onChange={(e) => {
+                      setSupervisorPinInput(e.target.value.toUpperCase());
+                      setSupervisorPinError('');
+                    }}
+                    className="w-full px-3.5 py-3 rounded-xl border-2 border-neutral-300 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 font-mono text-center tracking-widest text-base font-bold uppercase text-neutral-900 bg-neutral-50 select-text touch-manipulation"
+                  />
+                  {supervisorPinError && (
+                    <p className="text-[11px] text-danger-600 font-semibold">{supervisorPinError}</p>
+                  )}
+                </div>
+
+                <Button
+                  type="submit"
+                  variant="accent"
+                  size="md"
+                  loading={isUnlocking}
+                  className="w-full font-bold shadow-xs min-h-[46px] flex items-center justify-center gap-2 touch-manipulation cursor-pointer"
+                >
+                  <AppIcon name="unlock" color="black" size={16} />
+                  <span>Matikan Alarm & Buka Kunci Ujian</span>
+                </Button>
+              </form>
+            </div>
           </div>
         </div>
       )}

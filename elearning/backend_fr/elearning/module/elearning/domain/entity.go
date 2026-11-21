@@ -184,6 +184,7 @@ type Repository interface {
 	GetSessionByID(ctx context.Context, sessionID string) (*CBTStudentSession, error)
 	RecordViolation(ctx context.Context, log *CBTViolationLog) (*CBTStudentSession, error)
 	UnlockSession(ctx context.Context, sessionID string) error
+	DeleteSession(ctx context.Context, sessionID string) error
 	SubmitExamSession(ctx context.Context, sessionID string, score float64) error
 	SaveStudentAnswer(ctx context.Context, ans *CBTStudentAnswer) error
 	BatchSaveStudentAnswers(ctx context.Context, sessionID string, answers []CBTStudentAnswer) error
@@ -223,6 +224,7 @@ type UseCase interface {
 	GetStudentSessionByID(ctx context.Context, sessionID string) (*CBTStudentSession, error)
 	LogViolation(ctx context.Context, log *CBTViolationLog) (*CBTStudentSession, error)
 	UnlockStudent(ctx context.Context, sessionID string) error
+	DeleteStudentSession(ctx context.Context, sessionID string) error
 	SaveStudentAnswer(ctx context.Context, ans *CBTStudentAnswer) error
 	FinishStudentExam(ctx context.Context, sessionID string, score float64, answers []CBTStudentAnswer) error
 	GetStudentAnswers(ctx context.Context, sessionID string) (map[string]CBTStudentAnswer, error)

@@ -296,7 +296,7 @@ export default function PenilaianPTSPage() {
           return {
             id: g.student_id,
             person_id: g.person_id || null,
-            nisn: g.nisn,
+            nisn: String(g.nisn || '').trim().replace(/^(?:siswa|student|nisn)[_\-\s]+/i, '') || '-',
             name: g.student_name,
             className: g.class_name,
             score: hasScore ? String(g.score) : '',

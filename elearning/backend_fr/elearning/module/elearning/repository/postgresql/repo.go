@@ -392,6 +392,18 @@ func (r *repository) UnlockSession(ctx context.Context, sessionID string) error 
 		}).Error
 }
 
+func (r *repository) DeleteSession(ctx context.Context, sessionID string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Table("cbt_student_answers").Where("session_id = ?", sessionID).Delete(nil).Error; err != nil {
+			return err
+		}
+		if err := tx.Table("cbt_violation_logs").Where("session_id = ?", sessionID).Delete(nil).Error; err != nil {
+			return err
+		}
+		return tx.Table("cbt_student_sessions").Where("id = ?", sessionID).Delete(nil).Error
+	})
+}
+
 type repoMatchingPair struct {
 	ID    interface{} `json:"id"`
 	Left  string      `json:"left"`

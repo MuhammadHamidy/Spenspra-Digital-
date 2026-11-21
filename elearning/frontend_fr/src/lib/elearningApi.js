@@ -2092,6 +2092,51 @@ export const elearningApi = {
     return true;
   },
 
+  deleteStudentSession: async (examId, sessionId, studentId = '') => {
+    const sId = String(studentId || '');
+    const sessId = String(sessionId || '');
+
+    // 1. Hapus dari server PostgreSQL
+    if (sessId && !sessId.startsWith('not-joined')) {
+      const res = await fetchJson(`/sessions/${sessId}`, { method: 'DELETE' });
+      if (res && res.success === false && res.error) {
+        const errMsg = typeof res.error === 'string' ? res.error : (res.error.message || 'Gagal menghapus sesi di server');
+        throw new Error(errMsg);
+      }
+    }
+
+    // 2. Bersihkan cache proctoring & sesi lokal
+    if (examId) {
+      const monitorKey = `proctoring_${examId}`;
+      const liveSessions = getLocal(monitorKey, []);
+      const filtered = (Array.isArray(liveSessions) ? liveSessions : []).filter((s) => {
+        const curSess = String(s.sessionId || s.id || '');
+        const curStd = String(s.studentId || s.student_id || '');
+        if (sessId && curSess === sessId) return false;
+        if (sId && curStd === sId) return false;
+        return true;
+      });
+      setLocal(monitorKey, filtered);
+    }
+
+    if (typeof window !== 'undefined') {
+      const keysToRemove = [
+        examId && sId ? `exam_session_${examId}_${sId}` : null,
+        examId && sId ? `spenspra_elearning_exam_session_${examId}_${sId}` : null,
+        sessId ? `exam_session_${sessId}` : null,
+        sessId ? `spenspra_elearning_exam_session_${sessId}` : null,
+        examId && sId ? `essay_grades_${examId}_${sId}` : null,
+      ].filter(Boolean);
+      keysToRemove.forEach((k) => {
+        try {
+          localStorage.removeItem(k);
+        } catch (_) {}
+      });
+    }
+
+    return true;
+  },
+
   getUASClassRecap: async (className) => {
     // 1. Ambil daftar siswa riil di kelas dari SSO (Zero Dummy)
     const rawStudents = await elearningApi.getStudentsByClass(className);

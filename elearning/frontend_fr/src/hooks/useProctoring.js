@@ -34,6 +34,7 @@ export function useProctoring({
   const wakeLockRef = useRef(null);
   const hasEnteredFullscreenRef = useRef(false);
   const lastViolationRef = useRef({ type: '', at: 0 });
+  const unlockGraceUntilRef = useRef(0);
   const isEnabledRef = useRef(enabled);
   isEnabledRef.current = enabled;
   const isLockedRef = useRef(isLocked);
@@ -253,6 +254,7 @@ export function useProctoring({
   const triggerViolation = useCallback(
     (type, message) => {
       if (!isEnabledRef.current || isLockedRef.current) return;
+      if (Date.now() < unlockGraceUntilRef.current) return;
 
       const now = new Date();
       const timeStr = now.toLocaleTimeString('id-ID');
@@ -503,13 +505,15 @@ export function useProctoring({
         // Matikan suara sirene alarm
         stopAlarmSirene();
 
+        // Beri jeda 2.5 detik setelah buka kunci agar transisi keyboard/fullscreen di Mi Browser tidak langsung mengunci ulang
+        unlockGraceUntilRef.current = Date.now() + 2500;
+
         setIsLocked(false);
         isLockedRef.current = false;
         setViolationCount(0);
         setShowWarningModal(false);
 
-        // Kembalikan fullscreen dan wake lock
-        requestFullscreen();
+        // Kembalikan wake lock (fullscreen hanya dipicu manual atau aman tanpa rotasi paksa)
         requestWakeLock();
 
         if (typeof onUnlockRef.current === 'function') {

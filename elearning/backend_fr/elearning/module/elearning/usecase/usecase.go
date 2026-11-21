@@ -236,4 +236,8 @@ func (u *useCase) GetStudentAnswers(ctx context.Context, sessionID string) (map[
 	return res, nil
 }
 
+func (u *useCase) DeleteStudentSession(ctx context.Context, sessionID string) error {
+	return u.repo.DeleteSession(ctx, sessionID)
+}
+
 

@@ -223,88 +223,123 @@ async function extractDocxStructure(arrayBuffer) {
       }
     }
 
-    // Gambar tersemat dalam paragraf ini
-    let imgUri = null;
-    const blipMatches = p.match(/<(?:a:blip|v:imagedata)\s+[^>]*(?:r:embed|r:id)="([^"]+)"/g) || [];
-    for (const bm of blipMatches) {
-      const rId = (bm.match(/(?:r:embed|r:id)="([^"]+)"/) || [])[1];
-      const target = rels[rId];
-      if (target) {
-        const imgPath = target.startsWith('word/') ? target : `word/${target}`;
-        const imgFile = zip.file(imgPath);
-        if (imgFile) {
-          const imgBase64 = await imgFile.async('base64');
-          const ext = target.split('.').pop().toLowerCase();
-          const mime = ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
-          const rawUri = `data:${mime};base64,${imgBase64}`;
-          imgUri = await compressImageBase64(rawUri, 960, 0.78);
-          break;
+    // Pecah paragraf berdasarkan soft line break (<w:br/>) agar opsi A/B/C/D dengan Shift+Enter terpisah 1 gambar = 1 opsi
+    const rawSegments = p.split(/<w:br\b[^>]*\/>/i);
+
+    for (let segIdx = 0; segIdx < rawSegments.length; segIdx++) {
+      const segXml = rawSegments[segIdx];
+      const segRuns = segXml.match(/<w:r\b[\s\S]*?<\/w:r>/g) || [];
+
+      // Baca teks dan gambar dalam urutan kemunculannya di dokumen Word
+      const tokens = [];
+      let segIsRed = false;
+
+      for (const r of segRuns) {
+        const c = r.match(/<w:color\s+w:val="([^"]+)"/i);
+        const h = r.match(/<w:highlight\s+w:val="([^"]+)"/i);
+        const t = (r.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [])
+          .map((x) => x.replace(/<[^>]+>/g, ''))
+          .join('');
+        if (t) {
+          tokens.push({ type: 'text', value: t });
+          const colorVal = c ? c[1] : null;
+          const highlightVal = h ? h[1] : null;
+          if (isAnswerColor(colorVal) || ['red', 'magenta'].includes(String(highlightVal).toLowerCase())) {
+            segIsRed = true;
+          }
+        }
+        const runBlips = r.match(/<(?:a:blip|v:imagedata)\s+[^>]*(?:r:embed|r:id)="([^"]+)"/g) || [];
+        for (const bm of runBlips) {
+          const rId = (bm.match(/(?:r:embed|r:id)="([^"]+)"/) || [])[1];
+          const target = rels[rId];
+          if (target) {
+            const imgPath = target.startsWith('word/') ? target : `word/${target}`;
+            const imgFile = zip.file(imgPath);
+            if (imgFile) {
+              const imgBase64 = await imgFile.async('base64');
+              const ext = target.split('.').pop().toLowerCase();
+              const mime = ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
+              const rawUri = `data:${mime};base64,${imgBase64}`;
+              const compressedUri = await compressImageBase64(rawUri, 960, 0.78);
+              tokens.push({ type: 'image', value: compressedUri });
+            }
+          }
         }
       }
-    }
 
-    // Teks dan warna teks
-    const runs = p.match(/<w:r\b[\s\S]*?<\/w:r>/g) || [];
-    let pText = '';
-    let isRed = false;
+      const segText = tokens
+        .filter((tk) => tk.type === 'text')
+        .map((tk) => tk.value)
+        .join('')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const segImages = tokens.filter((tk) => tk.type === 'image').map((tk) => tk.value);
 
-    runs.forEach((r) => {
-      const c = r.match(/<w:color\s+w:val="([^"]+)"/i);
-      const h = r.match(/<w:highlight\s+w:val="([^"]+)"/i);
-      const t = (r.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [])
-        .map((x) => x.replace(/<[^>]+>/g, ''))
-        .join('');
-      if (t) {
-        pText += t;
-        const colorVal = c ? c[1] : null;
-        const highlightVal = h ? h[1] : null;
-        if (isAnswerColor(colorVal) || ['red', 'magenta'].includes(String(highlightVal).toLowerCase())) {
-          isRed = true;
+      if (!segText && segImages.length === 0) continue;
+
+      // Deteksi nomor soal eksplisit di teks
+      const manualQMatch = segText.match(/^(?:soal\s*|pertanyaan\s*)?(?:nomor\s*)?(\d+)\s*[.)\]:\-]/i) ||
+                           segText.match(/^(?:soal|nomor|no\.?)\s*(?:nomor\s*)?(\d+)\s*$/i);
+      if (manualQMatch) {
+        currentQuestionNum = Number(manualQMatch[1]);
+        resetOptionCounters();
+      }
+
+      const segListInfo = segIdx === 0 ? listInfo : null;
+
+      // Kunci jawaban berwarna
+      if (segIsRed) {
+        let optKey = segListInfo?.isOption ? segListInfo.letter : null;
+        if (!optKey) {
+          const explicitOpt = segText.match(/^([A-E])\s*[.)\]:\-]/i);
+          if (explicitOpt) optKey = explicitOpt[1].toUpperCase();
+        }
+        if (optKey) {
+          if (currentQuestionNum && !coloredKeysByNumber[currentQuestionNum]) {
+            coloredKeysByNumber[currentQuestionNum] = optKey;
+          }
+          coloredKeysInOrder.push(optKey);
         }
       }
-    });
 
-    const cleanText = pText.replace(/\s+/g, ' ').trim();
+      const prefix = segListInfo?.prefix || '';
+      const full = (prefix + segText).trim();
+      const explicitOpt = full.match(/^([A-E])\s*[.)\]:\-]\s*(.*)$/i);
 
-    // Deteksi nomor soal eksplisit di teks
-    const manualQMatch = cleanText.match(/^(?:soal\s*|pertanyaan\s*)?(?:nomor\s*)?(\d+)\s*[.)\]:\-]/i) ||
-                         cleanText.match(/^(?:soal|nomor|no\.?)\s*(?:nomor\s*)?(\d+)\s*$/i);
-    if (manualQMatch) {
-      currentQuestionNum = Number(manualQMatch[1]);
-      resetOptionCounters();
-    }
-
-    // Kunci jawaban berwarna
-    if (isRed) {
-      let optKey = listInfo?.isOption ? listInfo.letter : null;
-      if (!optKey) {
-        const explicitOpt = cleanText.match(/^([A-E])\s*[.)\]:\-]/i);
-        if (explicitOpt) optKey = explicitOpt[1].toUpperCase();
-      }
-      if (optKey) {
-        if (currentQuestionNum && !coloredKeysByNumber[currentQuestionNum]) {
-          coloredKeysByNumber[currentQuestionNum] = optKey;
+      // Kasus khusus: 1 segmen memiliki beberapa gambar sekaligus (cth: A. [img1] B. [img2] C. [img3] D. [img4])
+      if (segImages.length > 1) {
+        let pendingText = prefix;
+        for (const tk of tokens) {
+          if (tk.type === 'text') {
+            pendingText += tk.value;
+          } else if (tk.type === 'image') {
+            const cleanPending = pendingText.replace(/\s+/g, ' ').trim();
+            const optMatch = cleanPending.match(/^([A-E])\s*[.)\]:\-]\s*(.*)$/i);
+            if (optMatch) {
+              const rem = optMatch[2].trim();
+              lines.push(`${optMatch[1].toUpperCase()}. ${rem ? rem + ' ' : ''}GAMBAR: ${tk.value}`);
+            } else if (cleanPending) {
+              lines.push(cleanPending);
+              lines.push(`GAMBAR: ${tk.value}`);
+            } else {
+              lines.push(`GAMBAR: ${tk.value}`);
+            }
+            pendingText = '';
+          }
         }
-        coloredKeysInOrder.push(optKey);
-      }
-    }
-
-    const prefix = listInfo?.prefix || '';
-    const full = (prefix + cleanText).trim();
-    const explicitOpt = full.match(/^([A-E])\s*[.)\]:\-]\s*(.*)$/i);
-
-    if (imgUri) {
-      if (listInfo?.isOption || explicitOpt) {
-        // Paragraf opsi jawaban (A, B, C, D) yang memiliki gambar
-        const optLetter = listInfo?.isOption ? listInfo.letter : explicitOpt[1].toUpperCase();
-        const remText = explicitOpt ? explicitOpt[2].trim() : cleanText;
-        lines.push(`${optLetter}. ${remText ? remText + ' ' : ''}GAMBAR: ${imgUri}`);
-      } else {
-        lines.push(`GAMBAR: ${imgUri}`);
-        if (full) lines.push(full);
-      }
-    } else {
-      if (full) {
+        const trailing = pendingText.replace(/\s+/g, ' ').trim();
+        if (trailing) lines.push(trailing);
+      } else if (segImages.length === 1) {
+        const imgUri = segImages[0];
+        if (segListInfo?.isOption || explicitOpt) {
+          const optLetter = segListInfo?.isOption ? segListInfo.letter : explicitOpt[1].toUpperCase();
+          const remText = explicitOpt ? explicitOpt[2].trim() : segText;
+          lines.push(`${optLetter}. ${remText ? remText + ' ' : ''}GAMBAR: ${imgUri}`);
+        } else {
+          lines.push(`GAMBAR: ${imgUri}`);
+          if (full) lines.push(full);
+        }
+      } else if (full) {
         lines.push(full);
       }
     }
@@ -569,16 +604,26 @@ function parseQuestionImport(text, options = {}) {
       const imgUrl = generalImageMatch[1].trim();
       if (currentOption) {
         const opt = current.options.find((o) => o.key === currentOption);
-        if (opt) {
+        if (opt && !opt.imageUrl) {
           opt.imageUrl = imgUrl;
           return;
         }
+        // Jika opsi aktif sudah memiliki gambar, gambar berikutnya otomatis masuk ke opsi selanjutnya (A->B->C->D->E)
+        const order = ['A', 'B', 'C', 'D', 'E'];
+        const nextIdx = order.indexOf(currentOption) + 1;
+        if (nextIdx > 0 && nextIdx < order.length) {
+          const nextKey = order[nextIdx];
+          const existingNext = current.options.find((o) => o.key === nextKey);
+          if (existingNext) {
+            existingNext.imageUrl = imgUrl;
+          } else {
+            current.options.push({ key: nextKey, text: '', imageUrl: imgUrl });
+          }
+          currentOption = nextKey;
+          return;
+        }
       }
-      if (!current.options.length) {
-        current.imageUrl = imgUrl;
-      } else {
-        current.imageUrl = imgUrl;
-      }
+      current.imageUrl = imgUrl;
       return;
     }
 
@@ -685,9 +730,6 @@ export default function TeacherExamsManagementPage() {
   const [targetGradeLevel, setTargetGradeLevel] = useState('7'); // '7' | '8' | '9'
   const [supervisorPin, setSupervisorPin] = useState(() => generateRandomPin(6));
   const [examFilterTab, setExamFilterTab] = useState('ALL'); // 'ALL' | 'SEMESTER_UAS' | 'REGULAR'
-  const [classFilter, setClassFilter] = useState('ALL'); // 'ALL' | 'GRADE_7' | 'GRADE_8' | 'GRADE_9' | rombel
-  const [examPage, setExamPage] = useState(1);
-  const [examPageSize, setExamPageSize] = useState(5);
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('');
   const [subjectCode, setSubjectCode] = useState('');
@@ -1578,39 +1620,58 @@ export default function TeacherExamsManagementPage() {
         const body = new DOMParser().parseFromString(result.value, 'text/html').body;
         const lines = [];
 
+        const pushNodeInOrder = (rootEl) => {
+          let buf = '';
+          const flushBuf = () => {
+            const t = buf.replace(/\s+/g, ' ').trim();
+            if (t) lines.push(t);
+            buf = '';
+          };
+          const walk = (node) => {
+            if (node.nodeType === 3) {
+              buf += node.textContent || '';
+            } else if (node.nodeType === 1) {
+              const tag = node.tagName;
+              if (tag === 'BR') {
+                flushBuf();
+              } else if (tag === 'IMG') {
+                const src = node.getAttribute('src') || '';
+                const t = buf.replace(/\s+/g, ' ').trim();
+                const optM = t.match(/^([A-E])\s*[.)\]:\-]\s*(.*)$/i);
+                if (optM && src) {
+                  const rem = optM[2].trim();
+                  lines.push(`${optM[1].toUpperCase()}. ${rem ? rem + ' ' : ''}GAMBAR: ${src}`);
+                  buf = '';
+                } else {
+                  flushBuf();
+                  if (src) lines.push(`GAMBAR: ${src}`);
+                }
+              } else {
+                Array.from(node.childNodes).forEach(walk);
+              }
+            }
+          };
+          Array.from(rootEl.childNodes).forEach(walk);
+          flushBuf();
+        };
+
         Array.from(body.children).forEach((element) => {
           if (element.tagName === 'TABLE') {
             element.querySelectorAll('tr').forEach((row) => {
               const cells = Array.from(row.querySelectorAll('th, td'));
               if (cells.length > 0) {
-                cells.forEach((cell) => {
-                  cell.querySelectorAll('img').forEach((image) => {
-                    lines.push(`GAMBAR: ${image.getAttribute('src') || ''}`);
-                  });
-                  const text = String(cell.textContent || '').replace(/\s+/g, ' ').trim();
-                  if (text) lines.push(text);
-                });
+                cells.forEach((cell) => pushNodeInOrder(cell));
               }
             });
             return;
           }
 
           if (element.tagName === 'OL' || element.tagName === 'UL') {
-            element.querySelectorAll('li').forEach((li) => {
-              li.querySelectorAll('img').forEach((image) => {
-                lines.push(`GAMBAR: ${image.getAttribute('src') || ''}`);
-              });
-              const liText = String(li.textContent || '').replace(/\s+/g, ' ').trim();
-              if (liText) lines.push(liText);
-            });
+            element.querySelectorAll('li').forEach((li) => pushNodeInOrder(li));
             return;
           }
 
-          element.querySelectorAll('img').forEach((image) => {
-            lines.push(`GAMBAR: ${image.getAttribute('src') || ''}`);
-          });
-          const text = String(element.textContent || '').replace(/\s+/g, ' ').trim();
-          if (text) lines.push(text);
+          pushNodeInOrder(element);
         });
 
         const fallbackParsed = parseQuestionImport(lines.join('\n'), { coloredKeysByNumber, coloredKeysInOrder });
@@ -3623,77 +3684,7 @@ export default function TeacherExamsManagementPage() {
     if (examFilterTab === 'SEMESTER_UAS') return isUas;
     if (examFilterTab === 'REGULAR') return !isUas;
     return true;
-  }).filter((ex) => {
-    if (classFilter === 'ALL') return true;
-    const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
-    const exText = `${ex.targetGradeLevel || ''} ${ex.className || ''} ${ex.rawDescription || ''} ${ex.title || ''}`.toUpperCase();
-    const detectGrade = (txt) => {
-      const s = String(txt || '').toUpperCase();
-      if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VIII|8)\b|\bVIII[-_\sA-Z0-9]|\[ASAS:8\]|^8$/.test(s)) return '8';
-      if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VII|7)\b|\bVII[-_\sA-Z0-9]|\[ASAS:7\]|^7$/.test(s)) return '7';
-      if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:IX|9)\b|\bIX[-_\sA-Z0-9]|\[ASAS:9\]|^9$/.test(s)) return '9';
-      return '';
-    };
-    const exGrade = String(ex.targetGradeLevel || '').trim() || detectGrade(exText);
-
-    if (classFilter.startsWith('GRADE_')) {
-      const targetLvl = classFilter.replace('GRADE_', '');
-      return exGrade === targetLvl;
-    }
-
-    const norm = (val) => String(val || '').toLowerCase().replace(/^kelas\s*/i, '').replace(/[^a-z0-9]/g, '');
-    const targetNorm = norm(classFilter);
-    const targetGrade = detectGrade(classFilter);
-    if (norm(ex.className) === targetNorm) return true;
-    if (Array.isArray(ex.targetClasses) && ex.targetClasses.some((tc) => norm(tc) === targetNorm)) return true;
-    if (isUas && targetGrade && exGrade === targetGrade) return true;
-    return false;
   });
-
-  // Opsi filter kelas & tingkat berdasarkan rombel & ujian yang ada
-  const classFilterOptions = (() => {
-    const gradeSet = new Set();
-    const rombelSet = new Set();
-    const detectGrade = (txt) => {
-      const s = String(txt || '').toUpperCase();
-      if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VIII|8)\b|\bVIII[-_\sA-Z0-9]|\[ASAS:8\]|^8$/.test(s)) return '8';
-      if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VII|7)\b|\bVII[-_\sA-Z0-9]|\[ASAS:7\]|^7$/.test(s)) return '7';
-      if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:IX|9)\b|\bIX[-_\sA-Z0-9]|\[ASAS:9\]|^9$/.test(s)) return '9';
-      return '';
-    };
-
-    exams.forEach((ex) => {
-      const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
-      const lvl = String(ex.targetGradeLevel || '').trim() || detectGrade(`${ex.className || ''} ${ex.rawDescription || ''}`);
-      if (lvl) gradeSet.add(lvl);
-      if (!isUas && ex.className) {
-        rombelSet.add(String(ex.className).replace(/^kelas\s+/i, '').trim());
-      }
-    });
-
-    (classes || []).forEach((c) => {
-      const cName = typeof c === 'string' ? c : (c?.name || c?.class_code || '');
-      if (cName) {
-        const clean = String(cName).replace(/^kelas\s+/i, '').trim();
-        rombelSet.add(clean);
-        const lvl = detectGrade(clean);
-        if (lvl) gradeSet.add(lvl);
-      }
-    });
-
-    const grades = ['7', '8', '9'].filter((g) => gradeSet.has(g));
-    const rombels = Array.from(rombelSet).sort((a, b) => a.localeCompare(b, 'id', { numeric: true }));
-    return { grades, rombels };
-  })();
-
-  const totalExamPages = Math.max(1, Math.ceil(filteredExams.length / examPageSize));
-  const safeExamPage = Math.min(examPage, totalExamPages);
-  const paginatedExams = filteredExams.slice(
-    (safeExamPage - 1) * examPageSize,
-    safeExamPage * examPageSize
-  );
-  const pageStartIdx = filteredExams.length === 0 ? 0 : (safeExamPage - 1) * examPageSize + 1;
-  const pageEndIdx = Math.min(safeExamPage * examPageSize, filteredExams.length);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
@@ -3719,130 +3710,61 @@ export default function TeacherExamsManagementPage() {
         </Button>
       </div>
 
-      {/* Filter Tabs & Filter Per Kelas / Tingkat */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div className="max-w-full overflow-x-auto pb-1 lg:pb-0">
-          <div className="bg-slate-100 p-1.5 rounded-2xl inline-flex items-center gap-1.5 border border-slate-200/90 shadow-2xs min-w-max">
-            <button
-              type="button"
-              onClick={() => {
-                setExamFilterTab('ALL');
-                setExamPage(1);
-              }}
-              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
-                examFilterTab === 'ALL'
-                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-              }`}
-            >
-              <span>Semua Ujian</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                examFilterTab === 'ALL' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
-              }`}>
-                {exams.length}
-              </span>
-            </button>
+      {/* Filter Tabs Segmented Control (Responsive Horizontal Scroll on Mobile) */}
+      <div className="max-w-full overflow-x-auto pb-1">
+        <div className="bg-slate-100 p-1.5 rounded-2xl inline-flex items-center gap-1.5 border border-slate-200/90 shadow-2xs min-w-max">
+          <button
+            type="button"
+            onClick={() => setExamFilterTab('ALL')}
+            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
+              examFilterTab === 'ALL'
+                ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+            }`}
+          >
+            <span>Semua Ujian</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              examFilterTab === 'ALL' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
+            }`}>
+              {exams.length}
+            </span>
+          </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                setExamFilterTab('SEMESTER_UAS');
-                setExamPage(1);
-              }}
-              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
-                examFilterTab === 'SEMESTER_UAS'
-                  ? 'bg-primary-500 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-primary-500 hover:bg-white/60'
-              }`}
-            >
-              <AppIcon name="medal" color={examFilterTab === 'SEMESTER_UAS' ? 'white' : 'blue'} size={14} />
-              <span>UAS / ASAS Semester</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                examFilterTab === 'SEMESTER_UAS' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
-              }`}>
-                {uasCount}
-              </span>
-            </button>
+          <button
+            type="button"
+            onClick={() => setExamFilterTab('SEMESTER_UAS')}
+            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
+              examFilterTab === 'SEMESTER_UAS'
+                ? 'bg-primary-500 text-white shadow-xs'
+                : 'text-slate-600 hover:text-primary-500 hover:bg-white/60'
+            }`}
+          >
+            <AppIcon name="medal" color={examFilterTab === 'SEMESTER_UAS' ? 'white' : 'blue'} size={14} />
+            <span>UAS / ASAS Semester</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              examFilterTab === 'SEMESTER_UAS' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
+            }`}>
+              {uasCount}
+            </span>
+          </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                setExamFilterTab('REGULAR');
-                setExamPage(1);
-              }}
-              className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
-                examFilterTab === 'REGULAR'
-                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-              }`}
-            >
-              <AppIcon name="course" color={examFilterTab === 'REGULAR' ? 'purple' : 'grey'} size={14} />
-              <span>Ujian Reguler / Harian</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                examFilterTab === 'REGULAR' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
-              }`}>
-                {regularCount}
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {/* Filter Per Kelas / Tingkat & Jumlah per Halaman */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-2xs">
-            <AppIcon name="filter" color="grey" size={14} />
-            <label htmlFor="exam-class-filter" className="text-[11px] font-bold text-slate-500 whitespace-nowrap">
-              Kelas:
-            </label>
-            <select
-              id="exam-class-filter"
-              value={classFilter}
-              onChange={(e) => {
-                setClassFilter(e.target.value);
-                setExamPage(1);
-              }}
-              className="text-xs font-bold text-slate-800 bg-transparent outline-none cursor-pointer pr-1"
-            >
-              <option value="ALL">Semua Kelas / Tingkat</option>
-              {classFilterOptions.grades.length > 0 && (
-                <optgroup label="Per Jenjang Tingkat">
-                  {classFilterOptions.grades.map((g) => (
-                    <option key={`GRADE_${g}`} value={`GRADE_${g}`}>
-                      Tingkat {g} (Semua Kelas {g})
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              {classFilterOptions.rombels.length > 0 && (
-                <optgroup label="Per Rombel Kelas">
-                  {classFilterOptions.rombels.map((r) => (
-                    <option key={r} value={r}>
-                      Kelas {r}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
-          </div>
-
-          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-2xs">
-            <label htmlFor="exam-page-size" className="text-[11px] font-bold text-slate-500 whitespace-nowrap">
-              Tampilkan:
-            </label>
-            <select
-              id="exam-page-size"
-              value={examPageSize}
-              onChange={(e) => {
-                setExamPageSize(Number(e.target.value) || 5);
-                setExamPage(1);
-              }}
-              className="text-xs font-bold text-slate-800 bg-transparent outline-none cursor-pointer"
-            >
-              <option value={5}>5 / hal</option>
-              <option value={10}>10 / hal</option>
-              <option value={20}>20 / hal</option>
-            </select>
-          </div>
+          <button
+            type="button"
+            onClick={() => setExamFilterTab('REGULAR')}
+            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
+              examFilterTab === 'REGULAR'
+                ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+            }`}
+          >
+            <AppIcon name="course" color={examFilterTab === 'REGULAR' ? 'purple' : 'grey'} size={14} />
+            <span>Ujian Reguler / Harian</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              examFilterTab === 'REGULAR' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
+            }`}>
+              {regularCount}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -3861,14 +3783,12 @@ export default function TeacherExamsManagementPage() {
               <AppIcon name="document-book" color="grey" size={32} />
               <p className="text-xs font-bold text-neutral-700">Belum Ada Jadwal Ujian CBT</p>
               <p className="text-[11px] text-neutral-400">
-                {classFilter !== 'ALL'
-                  ? 'Tidak ada sesi ujian pada kelas/tingkat yang dipilih. Ubah filter kelas untuk melihat sesi lainnya.'
-                  : 'Klik tombol "Buat Jadwal Ujian" di atas untuk membuat sesi ujian baru.'}
+                Klik tombol &ldquo;Buat Jadwal Ujian&rdquo; di atas untuk membuat sesi ujian baru.
               </p>
             </div>
           </Card>
         ) : (
-          paginatedExams.map((ex) => {
+          filteredExams.map((ex) => {
             const currentStatus = getExamStatus(ex);
             const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
             const examDateStr = ex.scheduledDate || (ex.startDateTime ? ex.startDateTime.split('T')[0] : '');
@@ -4071,15 +3991,13 @@ export default function TeacherExamsManagementPage() {
                       <AppIcon name="document-book" color="grey" size={32} />
                       <p className="text-xs font-bold text-neutral-700">Belum Ada Jadwal Ujian CBT</p>
                       <p className="text-[11px] text-neutral-400">
-                        {classFilter !== 'ALL'
-                          ? 'Tidak ada sesi ujian pada kelas/tingkat yang dipilih. Ubah filter kelas untuk melihat sesi lainnya.'
-                          : 'Klik tombol "Buat Jadwal Ujian" di atas untuk membuat sesi ujian baru.'}
+                        Klik tombol &ldquo;Buat Jadwal Ujian&rdquo; di atas untuk membuat sesi ujian baru.
                       </p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                paginatedExams.map((ex) => {
+                filteredExams.map((ex) => {
                   const currentStatus = getExamStatus(ex);
                   const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
                   const examDateStr = ex.scheduledDate || (ex.startDateTime ? ex.startDateTime.split('T')[0] : '');
@@ -4262,56 +4180,6 @@ export default function TeacherExamsManagementPage() {
           </table>
         </div>
       </Card>
-
-      {/* Pagination Controls (Mobile & Desktop) */}
-      {!loading && filteredExams.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3 shadow-2xs text-xs">
-          <div className="text-neutral-600 font-medium">
-            Menampilkan <span className="font-bold text-neutral-900">{pageStartIdx}–{pageEndIdx}</span> dari{' '}
-            <span className="font-bold text-neutral-900">{filteredExams.length}</span> sesi ujian
-            {classFilter !== 'ALL' && (
-              <span className="ml-1.5 text-primary-700 font-bold">
-                ({classFilter.startsWith('GRADE_') ? `Tingkat ${classFilter.replace('GRADE_', '')}` : `Kelas ${classFilter}`})
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1.5 flex-wrap justify-center">
-            <button
-              type="button"
-              disabled={safeExamPage <= 1}
-              onClick={() => setExamPage((p) => Math.max(1, p - 1))}
-              className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
-            >
-              ‹ Sebelumnya
-            </button>
-
-            {Array.from({ length: totalExamPages }, (_, i) => i + 1).map((pageNum) => (
-              <button
-                key={pageNum}
-                type="button"
-                onClick={() => setExamPage(pageNum)}
-                className={`min-w-8 px-2.5 py-1.5 rounded-xl font-bold transition cursor-pointer ${
-                  pageNum === safeExamPage
-                    ? 'bg-primary-500 text-white shadow-xs'
-                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                {pageNum}
-              </button>
-            ))}
-
-            <button
-              type="button"
-              disabled={safeExamPage >= totalExamPages}
-              onClick={() => setExamPage((p) => Math.min(totalExamPages, p + 1))}
-              className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
-            >
-              Berikutnya ›
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Confirmation Modal */}
       <ConfirmModal

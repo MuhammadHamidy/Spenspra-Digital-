@@ -256,6 +256,37 @@ export default function LiveProctoringMonitoringPage() {
     });
   };
 
+  const handleDeleteStudentAnswers = (studentItem) => {
+    const sessId = studentItem.sessionId || studentItem.id;
+    const stdId = studentItem.studentId || studentItem.student_id;
+    setConfirmModal({
+      isOpen: true,
+      title: 'Hapus Jawaban & Reset Sesi Siswa?',
+      message: `Yakin ingin menghapus seluruh jawaban, skor, dan log pelanggaran milik ${studentItem.studentName}? Status siswa akan kembali "Belum Bergabung" sehingga dapat mengerjakan ujian ulang dari awal.`,
+      confirmText: 'Ya, Hapus Jawaban',
+      cancelText: 'Batal',
+      isDanger: true,
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        try {
+          await elearningApi.deleteStudentSession(selectedExamId, sessId, stdId);
+          if (
+            activeStudentAnswers &&
+            (activeStudentAnswers.sessionId === sessId || activeStudentAnswers.studentId === stdId)
+          ) {
+            setActiveStudentAnswers(null);
+          }
+          setNotice(`Jawaban dan sesi ujian milik ${studentItem.studentName} berhasil dihapus.`);
+          setTimeout(() => setNotice(null), 4000);
+          loadProctoringData();
+        } catch (e) {
+          setNotice(`Gagal menghapus jawaban siswa: ${e.message}`);
+          setTimeout(() => setNotice(null), 4000);
+        }
+      },
+    });
+  };
+
   const handleOpenStudentAnswers = async (studentItem) => {
     setActiveStudentAnswers(studentItem);
     try {
@@ -732,7 +763,7 @@ export default function LiveProctoringMonitoringPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
             <Button
               variant="outline"
               size="md"
@@ -740,6 +771,16 @@ export default function LiveProctoringMonitoringPage() {
               className="cursor-pointer text-xs font-semibold"
             >
               Kembali
+            </Button>
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => handleDeleteStudentAnswers(activeStudentAnswers)}
+              className="cursor-pointer text-xs font-bold border-rose-200 text-rose-700 hover:bg-rose-50 hover:border-rose-300 flex items-center gap-1.5"
+              title="Hapus seluruh jawaban & reset sesi ujian siswa ini"
+            >
+              <AppIcon name="delete" color="red" size={14} />
+              <span>Hapus Jawaban</span>
             </Button>
             <Button
               variant="primary"
@@ -1806,15 +1847,27 @@ export default function LiveProctoringMonitoringPage() {
                   {(s.status !== 'NOT_STARTED' || violations.length > 0 || isLocked) && (
                     <div className="flex flex-wrap items-center gap-2">
                       {s.status !== 'NOT_STARTED' && (
-                        <Button
-                          variant="primary"
-                          size="xs"
-                          onClick={() => handleOpenStudentAnswers(s)}
-                          className="flex-1 font-bold cursor-pointer flex items-center justify-center gap-1.5 shadow-xs whitespace-nowrap"
-                        >
-                          <AppIcon name="edit" color="white" size={13} />
-                          <span>Periksa Jawaban</span>
-                        </Button>
+                        <>
+                          <Button
+                            variant="primary"
+                            size="xs"
+                            onClick={() => handleOpenStudentAnswers(s)}
+                            className="flex-1 font-bold cursor-pointer flex items-center justify-center gap-1.5 shadow-xs whitespace-nowrap"
+                          >
+                            <AppIcon name="edit" color="white" size={13} />
+                            <span>Periksa Jawaban</span>
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => handleDeleteStudentAnswers(s)}
+                            className="font-bold cursor-pointer border-rose-200 text-rose-700 hover:bg-rose-50 hover:border-rose-300 flex items-center justify-center gap-1 shadow-2xs whitespace-nowrap"
+                            title="Hapus jawaban & reset sesi ujian siswa ini"
+                          >
+                            <AppIcon name="delete" color="red" size={13} />
+                            <span>Hapus</span>
+                          </Button>
+                        </>
                       )}
                       {violations.length > 0 && (
                         <Button
@@ -1983,16 +2036,28 @@ export default function LiveProctoringMonitoringPage() {
                       <td className="py-3 px-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">
                           {s.status !== 'NOT_STARTED' && (
-                            <Button
-                              variant="primary"
-                              size="xs"
-                              onClick={() => handleOpenStudentAnswers(s)}
-                              className="font-bold cursor-pointer flex items-center gap-1.5 shadow-xs"
-                              title="Periksa dan koreksi lembar jawaban siswa"
-                            >
-                              <AppIcon name="edit" color="white" size={13} />
-                              <span>Periksa Jawaban</span>
-                            </Button>
+                            <>
+                              <Button
+                                variant="primary"
+                                size="xs"
+                                onClick={() => handleOpenStudentAnswers(s)}
+                                className="font-bold cursor-pointer flex items-center gap-1.5 shadow-xs"
+                                title="Periksa dan koreksi lembar jawaban siswa"
+                              >
+                                <AppIcon name="edit" color="white" size={13} />
+                                <span>Periksa Jawaban</span>
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="xs"
+                                onClick={() => handleDeleteStudentAnswers(s)}
+                                className="font-bold cursor-pointer border-rose-200 text-rose-700 hover:bg-rose-50 hover:border-rose-300 flex items-center gap-1 shadow-2xs"
+                                title="Hapus seluruh jawaban & reset sesi siswa agar dapat ujian ulang"
+                              >
+                                <AppIcon name="delete" color="red" size={13} />
+                                <span>Hapus</span>
+                              </Button>
+                            </>
                           )}
 
                           {violations.length > 0 && (

@@ -118,6 +118,7 @@ func (h *ELearningHandler) RegisterRoutes(app *fiber.App) {
 	api.Get("/sessions/:id/answers", h.GetStudentAnswers)
 	api.Post("/sessions/:id/violations", h.RecordViolation)
 	api.Post("/sessions/:id/unlock", h.UnlockStudent)
+	api.Delete("/sessions/:id", h.DeleteStudentSession)
 	api.Post("/sessions/:id/finish", h.FinishStudentExam)
 	api.Get("/exams/:id/monitoring", h.GetLiveProctoring)
 
@@ -1541,6 +1542,39 @@ func (h *ELearningHandler) GetStudentSession(c *fiber.Ctx) error {
 		"violationsCount":  sess.ViolationCount,
 		"violations_count": sess.ViolationCount,
 	}, "Sesi ujian dimuat"))
+}
+
+func (h *ELearningHandler) DeleteStudentSession(c *fiber.Ctx) error {
+	sessionID := c.Params("id")
+	if strings.TrimSpace(sessionID) == "" {
+		return c.Status(http.StatusBadRequest).JSON(responses.Fail("INVALID_PAYLOAD", "session id wajib diisi"))
+	}
+
+	sess, err := h.useCase.GetStudentSessionByID(c.Context(), sessionID)
+	if err != nil || sess == nil {
+		return c.Status(http.StatusOK).JSON(responses.Success(fiber.Map{"session_id": sessionID}, "Sesi siswa sudah dihapus atau tidak ditemukan"))
+	}
+
+	exam, examErr := h.useCase.GetExamDetail(c.Context(), sess.ExamID)
+	if examErr == nil && exam != nil {
+		isSharedExam := exam.IsCoordinatorExam || exam.ExamCategory == "SEMESTER_UAS" || exam.TargetGradeLevel != ""
+		if !isSharedExam {
+			if permErr := h.requireExamOwner(c, exam); permErr != nil {
+				return c.Status(permErr.Code).JSON(responses.Fail("FORBIDDEN", permErr.Message))
+			}
+		} else {
+			role := actorRole(c)
+			if role != "" && !canManageAll(role) && !isTeacherRole(role) {
+				return c.Status(http.StatusForbidden).JSON(responses.Fail("FORBIDDEN", "hanya guru atau pengawas yang dapat menghapus jawaban siswa"))
+			}
+		}
+	}
+
+	if err := h.useCase.DeleteStudentSession(c.Context(), sessionID); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(responses.Fail("SERVER_ERROR", err.Error()))
+	}
+
+	return c.Status(http.StatusOK).JSON(responses.Success(fiber.Map{"session_id": sessionID}, "Sesi dan jawaban siswa berhasil dihapus"))
 }
 
 func (h *ELearningHandler) GetLiveProctoring(c *fiber.Ctx) error {
