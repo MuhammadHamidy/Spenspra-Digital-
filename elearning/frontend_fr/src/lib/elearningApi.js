@@ -201,9 +201,9 @@ export function normalizeClassCode(c) {
 export function extractGradeLevelDigit(c) {
   if (!c) return '';
   const str = String(c).toUpperCase();
-  if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VIII|8)\b|\bVIII[-A-Z]|\b8[A-H]\b|\[ASAS:8\]/.test(str)) return '8';
-  if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VII|7)\b|\bVII[-A-Z]|\b7[A-H]\b|\[ASAS:7\]/.test(str)) return '7';
-  if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:IX|9)\b|\bIX[-A-Z]|\b9[A-H]\b|\[ASAS:9\]/.test(str)) return '9';
+  if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VIII|8)\b|\bVIII[-_\sA-Z0-9]|\b8[A-Z0-9]\b|\[ASAS:8\]/.test(str)) return '8';
+  if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VII|7)\b|\bVII[-_\sA-Z0-9]|\b7[A-Z0-9]\b|\[ASAS:7\]/.test(str)) return '7';
+  if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:IX|9)\b|\bIX[-_\sA-Z0-9]|\b9[A-Z0-9]\b|\[ASAS:9\]/.test(str)) return '9';
   if (/^(?:8|VIII)$/.test(str.trim())) return '8';
   if (/^(?:7|VII)$/.test(str.trim())) return '7';
   if (/^(?:9|IX)$/.test(str.trim())) return '9';
@@ -1436,8 +1436,33 @@ export const elearningApi = {
       ''
     );
 
-    // 1. Daftarkan dan aktifkan sesi secara resmi di server PostgreSQL
+    // 0. Flush antrean finish offline jika sebelumnya sempat terputus sinyal
+    const sessionKey = `exam_session_${examId}_${studentId}`;
+    let existing = getLocal(sessionKey, null);
+    if (typeof window !== 'undefined') {
+      try {
+        const pending = getLocal('pending_exam_finishes', []);
+        if (Array.isArray(pending) && pending.length > 0) {
+          const remaining = [];
+          for (const item of pending) {
+            try {
+              const r = await fetchJson(`/sessions/${item.sessionId}/finish`, {
+                method: 'POST',
+                body: JSON.stringify(item.payload),
+              });
+              if (!r?.success) remaining.push(item);
+            } catch (_) {
+              remaining.push(item);
+            }
+          }
+          setLocal('pending_exam_finishes', remaining);
+        }
+      } catch (_) {}
+    }
+
+    // 1. Daftarkan / cek sesi secara resmi di server PostgreSQL
     let serverSessionId = null;
+    let serverSessionData = null;
     try {
       const res = await fetchJson(`/exams/${examId}/start`, {
         method: 'POST',
@@ -1453,14 +1478,45 @@ export const elearningApi = {
         }),
       });
       if (res?.success && res?.data) {
+        serverSessionData = res.data;
         serverSessionId = res.data.id || res.data.sessionId;
       }
     } catch (e) {
       console.warn('Sync sesi ujian ke backend:', e);
     }
 
-    const sessionKey = `exam_session_${examId}_${studentId}`;
-    let existing = getLocal(sessionKey, null);
+    // Jika server menyatakan siswa SUDAH SELESAI (SUBMITTED), JANGAN buat sesi baru!
+    if (serverSessionData && String(serverSessionData.status || '').toUpperCase() === 'SUBMITTED') {
+      const submittedSession = {
+        ...(existing || {}),
+        ...serverSessionData,
+        sessionId: serverSessionId || existing?.sessionId,
+        studentId,
+        studentName: serverSessionData.student_name || serverSessionData.studentName || studentName,
+        className: serverSessionData.class_code || serverSessionData.className || className,
+        nisn: studentNisn || existing?.nisn || '-',
+        status: 'SUBMITTED',
+        score: serverSessionData.score ?? existing?.score ?? 0,
+      };
+      setLocal(sessionKey, submittedSession);
+      return submittedSession;
+    }
+
+    // Jika cache lokal menyatakan SUBMITTED (misal baru selesai & server baru pulih), pertahankan SUBMITTED & sinkronkan ulang!
+    if (existing && existing.status === 'SUBMITTED') {
+      const targetSessId = serverSessionId || existing.sessionId;
+      if (targetSessId) {
+        fetchJson(`/sessions/${targetSessId}/finish`, {
+          method: 'POST',
+          body: JSON.stringify({
+            score: existing.score ?? 0,
+            answers: existing.answers || {},
+          }),
+        }).catch(() => {});
+      }
+      return existing;
+    }
+
     if (existing && existing.status !== 'SUBMITTED') {
       if (studentNisn && (!existing.nisn || existing.nisn === '-')) {
         existing.nisn = studentNisn;
@@ -1888,25 +1944,59 @@ export const elearningApi = {
       }
     }
 
-    // Call backend async and synchronize authoritative score
+    // Sinkronkan penyelesaian ujian ke backend dengan mekanisme retry otomatis (3x)
+    // agar status SUBMITTED di database tidak pernah gagal tersimpan walau sinyal Wi-Fi sempat goyang.
     const finalSessId = effSessionId || session?.sessionId;
     if (finalSessId) {
-      try {
-        const res = await fetchJson(`/sessions/${finalSessId}/finish`, {
-          method: 'POST',
-          body: JSON.stringify({
-            score: score !== null ? score : 0,
-            answers: mergedAnswers,
-          }),
-        });
-        if (res?.success && res?.data?.score !== undefined && res?.data?.score !== null) {
-          if (session) {
-            session.score = res.data.score;
-            setLocal(`exam_session_${examId}_${sId}`, session);
+      const finishPayload = {
+        score: score !== null ? score : 0,
+        answers: mergedAnswers,
+      };
+      let serverConfirmed = false;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const res = await fetchJson(`/sessions/${finalSessId}/finish`, {
+            method: 'POST',
+            body: JSON.stringify(finishPayload),
+          });
+          if (res?.success) {
+            serverConfirmed = true;
+            if (res?.data?.score !== undefined && res?.data?.score !== null && session) {
+              session.score = res.data.score;
+              session.status = 'SUBMITTED';
+              setLocal(`exam_session_${examId}_${sId}`, session);
+            }
+            break;
           }
+        } catch (e) {
+          console.warn(`Gagal finish session ke backend (percobaan ${attempt}/3):`, e);
         }
-      } catch (e) {
-        console.warn('Gagal finish session ke backend:', e);
+        if (attempt < 3) {
+          await new Promise((r) => setTimeout(r, attempt * 800));
+        }
+      }
+
+      // Jika jaringan benar-benar terputus saat submit, simpan ke antrean lokal agar otomatis terkirim saat online lagi
+      if (!serverConfirmed && typeof window !== 'undefined') {
+        try {
+          const pending = getLocal('pending_exam_finishes', []);
+          const nextPending = (Array.isArray(pending) ? pending : []).filter((p) => p.sessionId !== finalSessId);
+          nextPending.push({
+            sessionId: finalSessId,
+            examId,
+            studentId: sId,
+            payload: finishPayload,
+            savedAt: new Date().toISOString(),
+          });
+          setLocal('pending_exam_finishes', nextPending);
+        } catch (_) {}
+      } else if (serverConfirmed && typeof window !== 'undefined') {
+        try {
+          const pending = getLocal('pending_exam_finishes', []);
+          if (Array.isArray(pending) && pending.length > 0) {
+            setLocal('pending_exam_finishes', pending.filter((p) => p.sessionId !== finalSessId));
+          }
+        } catch (_) {}
       }
     }
 

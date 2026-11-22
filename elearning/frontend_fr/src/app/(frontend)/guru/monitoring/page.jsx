@@ -7,7 +7,7 @@ import StatusBadge from '@/components/StatusBadge';
 import Modal from '@/components/Modal';
 import ConfirmModal from '@/components/ConfirmModal';
 import AppIcon from '@/components/AppIcon';
-import { elearningApi } from '@/lib/elearningApi';
+import { elearningApi, extractGradeLevelDigit, normalizeClassCode } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
 // Pemeriksaan apakah sebuah event benar-benar merupakan pelanggaran kecurangan siswa
@@ -134,6 +134,7 @@ export default function LiveProctoringMonitoringPage() {
   const [essayScores, setEssayScores] = useState({});
   const [savingGrade, setSavingGrade] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedClassFilter, setSelectedClassFilter] = useState('ALL');
   const [activeFilter, setActiveFilter] = useState('ALL'); // ALL, VIOLATION, LOCKED, IN_PROGRESS, SUBMITTED, NOT_STARTED
   const [notice, setNotice] = useState(null);
   const [confirmModal, setConfirmModal] = useState({
@@ -194,20 +195,18 @@ export default function LiveProctoringMonitoringPage() {
       const liveSessions = Array.isArray(liveData) ? liveData : liveData?.sessions || [];
       setSessions(Array.isArray(liveSessions) ? liveSessions : []);
 
-      // 2. Fetch official class roster for this exam
+      // 2. Fetch official class roster for this exam (KETAT sesuai jenjang/kelas ketentuan soal!)
       const isCoordinator = currentExam?.isCoordinatorExam || currentExam?.examCategory === 'SEMESTER_UAS' || Boolean(currentExam?.targetGradeLevel);
       if (isCoordinator) {
-        // Untuk ujian koordinator jenjang (cth: ASAS TK. 9), muat seluruh siswa atau siswa jenjang terkait
         const allStudents = await elearningApi.getStudents();
-        const gradeLvl = String(currentExam?.targetGradeLevel || '').trim();
+        const gradeLvl = extractGradeLevelDigit(
+          currentExam?.targetGradeLevel || currentExam?.rawDescription || currentExam?.className || currentExam?.title || ''
+        );
         const filtered = Array.isArray(allStudents)
           ? (gradeLvl
               ? allStudents.filter((st) => {
-                  const sCls = String(st.className || st.class_name || '').toUpperCase();
-                  if (gradeLvl === '7') return sCls.includes('VII') || sCls.includes('7');
-                  if (gradeLvl === '8') return sCls.includes('VIII') || sCls.includes('8');
-                  if (gradeLvl === '9') return sCls.includes('IX') || sCls.includes('9');
-                  return true;
+                  const stGrade = extractGradeLevelDigit(st.className || st.class_name || st.rombel || '');
+                  return stGrade === gradeLvl;
                 })
               : allStudents)
           : [];
@@ -226,6 +225,7 @@ export default function LiveProctoringMonitoringPage() {
   // Poll live updates every 4 seconds
   useEffect(() => {
     if (selectedExamId) {
+      setSelectedClassFilter('ALL');
       setLoading(true);
       loadProctoringData();
       const interval = setInterval(loadProctoringData, 4000);
@@ -683,21 +683,57 @@ export default function LiveProctoringMonitoringPage() {
       }
     });
 
-    return roster;
+    // Saring ketat peserta agar HANYA siswa yang kelas/jenjangnya sesuai ketentuan ujian yang muncul
+    const isCoordExam = selectedExam?.isCoordinatorExam || selectedExam?.examCategory === 'SEMESTER_UAS' || Boolean(selectedExam?.targetGradeLevel);
+    const examGrade = extractGradeLevelDigit(
+      selectedExam?.targetGradeLevel || selectedExam?.rawDescription || selectedExam?.className || selectedExam?.title || ''
+    );
+    const examClassNorm = normalizeClassCode(selectedExam?.className || '');
+
+    return roster.filter((item) => {
+      if (!selectedExam) return true;
+      const itemClassRaw = item.className || item.class_code || '';
+      if (isCoordExam && examGrade) {
+        const itemGrade = extractGradeLevelDigit(itemClassRaw);
+        return !itemGrade || itemGrade === examGrade;
+      }
+      if (!isCoordExam && examClassNorm) {
+        const itemNorm = normalizeClassCode(itemClassRaw);
+        return !itemNorm || itemNorm === examClassNorm;
+      }
+      return true;
+    });
   }, [classStudents, sessions, selectedExam]);
 
-  // Statistics
-  const totalStudents = mergedRoster.length;
-  const inProgressCount = mergedRoster.filter((s) => s.status === 'IN_PROGRESS').length;
-  const lockedCount = mergedRoster.filter((s) => s.status === 'LOCKED').length;
-  const submittedCount = mergedRoster.filter((s) => s.status === 'SUBMITTED').length;
-  const notStartedCount = mergedRoster.filter((s) => s.status === 'NOT_STARTED').length;
-  const violatingList = mergedRoster.filter((s) => (s.violationsCount || 0) > 0);
-  const totalViolations = mergedRoster.reduce((acc, curr) => acc + (curr.violationsCount || 0), 0);
+  // Daftar rombel kelas yang tersedia (HANYA sesuai ketentuan kelas ujian yang dibuka)
+  const availableClassFilters = useMemo(() => {
+    const set = new Set();
+    mergedRoster.forEach((s) => {
+      const clean = String(s.className || '').replace(/^kelas\s+/i, '').trim();
+      if (clean && clean !== '-') set.add(clean);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'id', { numeric: true }));
+  }, [mergedRoster]);
+
+  // Roster yang sudah disaring berdasarkan dropdown kelas di navbar monitoring
+  const classScopedRoster = useMemo(() => {
+    if (selectedClassFilter === 'ALL') return mergedRoster;
+    const targetNorm = normalizeClassCode(selectedClassFilter);
+    return mergedRoster.filter((s) => normalizeClassCode(s.className) === targetNorm);
+  }, [mergedRoster, selectedClassFilter]);
+
+  // Statistics (mengikuti kelas yang sesuai ujian & filter rombel aktif)
+  const totalStudents = classScopedRoster.length;
+  const inProgressCount = classScopedRoster.filter((s) => s.status === 'IN_PROGRESS').length;
+  const lockedCount = classScopedRoster.filter((s) => s.status === 'LOCKED').length;
+  const submittedCount = classScopedRoster.filter((s) => s.status === 'SUBMITTED').length;
+  const notStartedCount = classScopedRoster.filter((s) => s.status === 'NOT_STARTED').length;
+  const violatingList = classScopedRoster.filter((s) => (s.violationsCount || 0) > 0);
+  const totalViolations = classScopedRoster.reduce((acc, curr) => acc + (curr.violationsCount || 0), 0);
 
   // Filtered Roster
   const filteredRoster = useMemo(() => {
-    return mergedRoster.filter((s) => {
+    return classScopedRoster.filter((s) => {
       // Tab Filter
       if (activeFilter === 'VIOLATION' && (s.violationsCount || 0) === 0) return false;
       if (activeFilter === 'LOCKED' && s.status !== 'LOCKED') return false;
@@ -714,7 +750,7 @@ export default function LiveProctoringMonitoringPage() {
       }
       return true;
     });
-  }, [mergedRoster, activeFilter, searchQuery]);
+  }, [classScopedRoster, activeFilter, searchQuery]);
 
   // JIKA SEDANG MEMERIKSA JAWABAN SISWA: Tampilkan sebagai Halaman Penuh Mandiri (Bukan Modal Pop-up)
   if (activeStudentAnswers) {
@@ -1680,14 +1716,37 @@ export default function LiveProctoringMonitoringPage() {
             </span>
           </div>
 
-          <div className="w-full md:w-80">
-            <input
-              type="search"
-              placeholder="Cari nama atau NISN siswa..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full text-xs px-3.5 py-2 rounded-xl border-2 border-slate-200 bg-white font-medium text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:border-[#4B3B78] focus:ring-4 focus:ring-[#4B3B78]/10 shadow-2xs transition-all"
-            />
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
+            {availableClassFilters.length > 1 && (
+              <div className="flex items-center gap-1.5 bg-white border-2 border-slate-200 rounded-xl px-3 py-1.5 shadow-2xs shrink-0">
+                <AppIcon name="filter" color="grey" size={13} />
+                <select
+                  value={selectedClassFilter}
+                  onChange={(e) => setSelectedClassFilter(e.target.value)}
+                  className="text-xs font-bold text-slate-800 bg-transparent outline-none cursor-pointer pr-1"
+                  title="Saring peserta per rombel kelas yang sesuai ujian"
+                >
+                  <option value="ALL">
+                    Semua Kelas ({availableClassFilters.length} Rombel)
+                  </option>
+                  {availableClassFilters.map((cls) => (
+                    <option key={cls} value={cls}>
+                      Kelas {cls}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="w-full sm:w-72">
+              <input
+                type="search"
+                placeholder="Cari nama atau NISN siswa..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full text-xs px-3.5 py-2 rounded-xl border-2 border-slate-200 bg-white font-medium text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:border-[#4B3B78] focus:ring-4 focus:ring-[#4B3B78]/10 shadow-2xs transition-all"
+              />
+            </div>
           </div>
         </div>
 

@@ -94,17 +94,19 @@ export default function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 md:p-6 bg-neutral-950/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150"
+      className="fixed inset-0 z-[9999] bg-neutral-950/65 overflow-y-auto overscroll-contain touch-manipulation animate-in fade-in duration-150"
+      style={{ WebkitOverflowScrolling: 'touch' }}
       onClick={onClose}
     >
-      <div
-        ref={modalRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="modal-title"
-        onClick={(e) => e.stopPropagation()}
-        className={`w-full ${resolvedWidth} max-h-[92dvh] sm:max-h-[88vh] flex flex-col bg-white border border-neutral-200 rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden my-auto transition-all`}
-      >
+      <div className="min-h-full w-full flex items-start sm:items-center justify-center p-2.5 sm:p-4 md:p-6 py-4">
+        <div
+          ref={modalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-title"
+          onClick={(e) => e.stopPropagation()}
+          className={`w-full ${resolvedWidth} sm:max-h-[88vh] flex flex-col bg-white border border-neutral-200 rounded-xl sm:rounded-2xl shadow-2xl sm:overflow-hidden my-auto transition-all`}
+        >
         {/* Header - Tetap terlihat di bagian atas */}
         {(title || onClose) && (
           <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-neutral-200 shrink-0 bg-white">
@@ -151,6 +153,7 @@ export default function Modal({
             {footerActions}
           </div>
         )}
+        </div>
       </div>
     </div>
   );

@@ -223,123 +223,88 @@ async function extractDocxStructure(arrayBuffer) {
       }
     }
 
-    // Pecah paragraf berdasarkan soft line break (<w:br/>) agar opsi A/B/C/D dengan Shift+Enter terpisah 1 gambar = 1 opsi
-    const rawSegments = p.split(/<w:br\b[^>]*\/>/i);
-
-    for (let segIdx = 0; segIdx < rawSegments.length; segIdx++) {
-      const segXml = rawSegments[segIdx];
-      const segRuns = segXml.match(/<w:r\b[\s\S]*?<\/w:r>/g) || [];
-
-      // Baca teks dan gambar dalam urutan kemunculannya di dokumen Word
-      const tokens = [];
-      let segIsRed = false;
-
-      for (const r of segRuns) {
-        const c = r.match(/<w:color\s+w:val="([^"]+)"/i);
-        const h = r.match(/<w:highlight\s+w:val="([^"]+)"/i);
-        const t = (r.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [])
-          .map((x) => x.replace(/<[^>]+>/g, ''))
-          .join('');
-        if (t) {
-          tokens.push({ type: 'text', value: t });
-          const colorVal = c ? c[1] : null;
-          const highlightVal = h ? h[1] : null;
-          if (isAnswerColor(colorVal) || ['red', 'magenta'].includes(String(highlightVal).toLowerCase())) {
-            segIsRed = true;
-          }
-        }
-        const runBlips = r.match(/<(?:a:blip|v:imagedata)\s+[^>]*(?:r:embed|r:id)="([^"]+)"/g) || [];
-        for (const bm of runBlips) {
-          const rId = (bm.match(/(?:r:embed|r:id)="([^"]+)"/) || [])[1];
-          const target = rels[rId];
-          if (target) {
-            const imgPath = target.startsWith('word/') ? target : `word/${target}`;
-            const imgFile = zip.file(imgPath);
-            if (imgFile) {
-              const imgBase64 = await imgFile.async('base64');
-              const ext = target.split('.').pop().toLowerCase();
-              const mime = ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
-              const rawUri = `data:${mime};base64,${imgBase64}`;
-              const compressedUri = await compressImageBase64(rawUri, 960, 0.78);
-              tokens.push({ type: 'image', value: compressedUri });
-            }
-          }
+    // Gambar tersemat dalam paragraf ini
+    let imgUri = null;
+    const blipMatches = p.match(/<(?:a:blip|v:imagedata)\s+[^>]*(?:r:embed|r:id)="([^"]+)"/g) || [];
+    for (const bm of blipMatches) {
+      const rId = (bm.match(/(?:r:embed|r:id)="([^"]+)"/) || [])[1];
+      const target = rels[rId];
+      if (target) {
+        const imgPath = target.startsWith('word/') ? target : `word/${target}`;
+        const imgFile = zip.file(imgPath);
+        if (imgFile) {
+          const imgBase64 = await imgFile.async('base64');
+          const ext = target.split('.').pop().toLowerCase();
+          const mime = ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
+          const rawUri = `data:${mime};base64,${imgBase64}`;
+          imgUri = await compressImageBase64(rawUri, 960, 0.78);
+          break;
         }
       }
+    }
 
-      const segText = tokens
-        .filter((tk) => tk.type === 'text')
-        .map((tk) => tk.value)
-        .join('')
-        .replace(/\s+/g, ' ')
-        .trim();
-      const segImages = tokens.filter((tk) => tk.type === 'image').map((tk) => tk.value);
+    // Teks dan warna teks
+    const runs = p.match(/<w:r\b[\s\S]*?<\/w:r>/g) || [];
+    let pText = '';
+    let isRed = false;
 
-      if (!segText && segImages.length === 0) continue;
-
-      // Deteksi nomor soal eksplisit di teks
-      const manualQMatch = segText.match(/^(?:soal\s*|pertanyaan\s*)?(?:nomor\s*)?(\d+)\s*[.)\]:\-]/i) ||
-                           segText.match(/^(?:soal|nomor|no\.?)\s*(?:nomor\s*)?(\d+)\s*$/i);
-      if (manualQMatch) {
-        currentQuestionNum = Number(manualQMatch[1]);
-        resetOptionCounters();
-      }
-
-      const segListInfo = segIdx === 0 ? listInfo : null;
-
-      // Kunci jawaban berwarna
-      if (segIsRed) {
-        let optKey = segListInfo?.isOption ? segListInfo.letter : null;
-        if (!optKey) {
-          const explicitOpt = segText.match(/^([A-E])\s*[.)\]:\-]/i);
-          if (explicitOpt) optKey = explicitOpt[1].toUpperCase();
-        }
-        if (optKey) {
-          if (currentQuestionNum && !coloredKeysByNumber[currentQuestionNum]) {
-            coloredKeysByNumber[currentQuestionNum] = optKey;
-          }
-          coloredKeysInOrder.push(optKey);
+    runs.forEach((r) => {
+      const c = r.match(/<w:color\s+w:val="([^"]+)"/i);
+      const h = r.match(/<w:highlight\s+w:val="([^"]+)"/i);
+      const t = (r.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [])
+        .map((x) => x.replace(/<[^>]+>/g, ''))
+        .join('');
+      if (t) {
+        pText += t;
+        const colorVal = c ? c[1] : null;
+        const highlightVal = h ? h[1] : null;
+        if (isAnswerColor(colorVal) || ['red', 'magenta'].includes(String(highlightVal).toLowerCase())) {
+          isRed = true;
         }
       }
+    });
 
-      const prefix = segListInfo?.prefix || '';
-      const full = (prefix + segText).trim();
-      const explicitOpt = full.match(/^([A-E])\s*[.)\]:\-]\s*(.*)$/i);
+    const cleanText = pText.replace(/\s+/g, ' ').trim();
 
-      // Kasus khusus: 1 segmen memiliki beberapa gambar sekaligus (cth: A. [img1] B. [img2] C. [img3] D. [img4])
-      if (segImages.length > 1) {
-        let pendingText = prefix;
-        for (const tk of tokens) {
-          if (tk.type === 'text') {
-            pendingText += tk.value;
-          } else if (tk.type === 'image') {
-            const cleanPending = pendingText.replace(/\s+/g, ' ').trim();
-            const optMatch = cleanPending.match(/^([A-E])\s*[.)\]:\-]\s*(.*)$/i);
-            if (optMatch) {
-              const rem = optMatch[2].trim();
-              lines.push(`${optMatch[1].toUpperCase()}. ${rem ? rem + ' ' : ''}GAMBAR: ${tk.value}`);
-            } else if (cleanPending) {
-              lines.push(cleanPending);
-              lines.push(`GAMBAR: ${tk.value}`);
-            } else {
-              lines.push(`GAMBAR: ${tk.value}`);
-            }
-            pendingText = '';
-          }
+    // Deteksi nomor soal eksplisit di teks
+    const manualQMatch = cleanText.match(/^(?:soal\s*|pertanyaan\s*)?(?:nomor\s*)?(\d+)\s*[.)\]:\-]/i) ||
+                         cleanText.match(/^(?:soal|nomor|no\.?)\s*(?:nomor\s*)?(\d+)\s*$/i);
+    if (manualQMatch) {
+      currentQuestionNum = Number(manualQMatch[1]);
+      resetOptionCounters();
+    }
+
+    // Kunci jawaban berwarna
+    if (isRed) {
+      let optKey = listInfo?.isOption ? listInfo.letter : null;
+      if (!optKey) {
+        const explicitOpt = cleanText.match(/^([A-E])\s*[.)\]:\-]/i);
+        if (explicitOpt) optKey = explicitOpt[1].toUpperCase();
+      }
+      if (optKey) {
+        if (currentQuestionNum && !coloredKeysByNumber[currentQuestionNum]) {
+          coloredKeysByNumber[currentQuestionNum] = optKey;
         }
-        const trailing = pendingText.replace(/\s+/g, ' ').trim();
-        if (trailing) lines.push(trailing);
-      } else if (segImages.length === 1) {
-        const imgUri = segImages[0];
-        if (segListInfo?.isOption || explicitOpt) {
-          const optLetter = segListInfo?.isOption ? segListInfo.letter : explicitOpt[1].toUpperCase();
-          const remText = explicitOpt ? explicitOpt[2].trim() : segText;
-          lines.push(`${optLetter}. ${remText ? remText + ' ' : ''}GAMBAR: ${imgUri}`);
-        } else {
-          lines.push(`GAMBAR: ${imgUri}`);
-          if (full) lines.push(full);
-        }
-      } else if (full) {
+        coloredKeysInOrder.push(optKey);
+      }
+    }
+
+    const prefix = listInfo?.prefix || '';
+    const full = (prefix + cleanText).trim();
+    const explicitOpt = full.match(/^([A-E])\s*[.)\]:\-]\s*(.*)$/i);
+
+    if (imgUri) {
+      if (listInfo?.isOption || explicitOpt) {
+        // Paragraf opsi jawaban (A, B, C, D) yang memiliki gambar
+        const optLetter = listInfo?.isOption ? listInfo.letter : explicitOpt[1].toUpperCase();
+        const remText = explicitOpt ? explicitOpt[2].trim() : cleanText;
+        lines.push(`${optLetter}. ${remText ? remText + ' ' : ''}GAMBAR: ${imgUri}`);
+      } else {
+        lines.push(`GAMBAR: ${imgUri}`);
+        if (full) lines.push(full);
+      }
+    } else {
+      if (full) {
         lines.push(full);
       }
     }
@@ -604,26 +569,16 @@ function parseQuestionImport(text, options = {}) {
       const imgUrl = generalImageMatch[1].trim();
       if (currentOption) {
         const opt = current.options.find((o) => o.key === currentOption);
-        if (opt && !opt.imageUrl) {
+        if (opt) {
           opt.imageUrl = imgUrl;
           return;
         }
-        // Jika opsi aktif sudah memiliki gambar, gambar berikutnya otomatis masuk ke opsi selanjutnya (A->B->C->D->E)
-        const order = ['A', 'B', 'C', 'D', 'E'];
-        const nextIdx = order.indexOf(currentOption) + 1;
-        if (nextIdx > 0 && nextIdx < order.length) {
-          const nextKey = order[nextIdx];
-          const existingNext = current.options.find((o) => o.key === nextKey);
-          if (existingNext) {
-            existingNext.imageUrl = imgUrl;
-          } else {
-            current.options.push({ key: nextKey, text: '', imageUrl: imgUrl });
-          }
-          currentOption = nextKey;
-          return;
-        }
       }
-      current.imageUrl = imgUrl;
+      if (!current.options.length) {
+        current.imageUrl = imgUrl;
+      } else {
+        current.imageUrl = imgUrl;
+      }
       return;
     }
 
@@ -1620,58 +1575,39 @@ export default function TeacherExamsManagementPage() {
         const body = new DOMParser().parseFromString(result.value, 'text/html').body;
         const lines = [];
 
-        const pushNodeInOrder = (rootEl) => {
-          let buf = '';
-          const flushBuf = () => {
-            const t = buf.replace(/\s+/g, ' ').trim();
-            if (t) lines.push(t);
-            buf = '';
-          };
-          const walk = (node) => {
-            if (node.nodeType === 3) {
-              buf += node.textContent || '';
-            } else if (node.nodeType === 1) {
-              const tag = node.tagName;
-              if (tag === 'BR') {
-                flushBuf();
-              } else if (tag === 'IMG') {
-                const src = node.getAttribute('src') || '';
-                const t = buf.replace(/\s+/g, ' ').trim();
-                const optM = t.match(/^([A-E])\s*[.)\]:\-]\s*(.*)$/i);
-                if (optM && src) {
-                  const rem = optM[2].trim();
-                  lines.push(`${optM[1].toUpperCase()}. ${rem ? rem + ' ' : ''}GAMBAR: ${src}`);
-                  buf = '';
-                } else {
-                  flushBuf();
-                  if (src) lines.push(`GAMBAR: ${src}`);
-                }
-              } else {
-                Array.from(node.childNodes).forEach(walk);
-              }
-            }
-          };
-          Array.from(rootEl.childNodes).forEach(walk);
-          flushBuf();
-        };
-
         Array.from(body.children).forEach((element) => {
           if (element.tagName === 'TABLE') {
             element.querySelectorAll('tr').forEach((row) => {
               const cells = Array.from(row.querySelectorAll('th, td'));
               if (cells.length > 0) {
-                cells.forEach((cell) => pushNodeInOrder(cell));
+                cells.forEach((cell) => {
+                  cell.querySelectorAll('img').forEach((image) => {
+                    lines.push(`GAMBAR: ${image.getAttribute('src') || ''}`);
+                  });
+                  const text = String(cell.textContent || '').replace(/\s+/g, ' ').trim();
+                  if (text) lines.push(text);
+                });
               }
             });
             return;
           }
 
           if (element.tagName === 'OL' || element.tagName === 'UL') {
-            element.querySelectorAll('li').forEach((li) => pushNodeInOrder(li));
+            element.querySelectorAll('li').forEach((li) => {
+              li.querySelectorAll('img').forEach((image) => {
+                lines.push(`GAMBAR: ${image.getAttribute('src') || ''}`);
+              });
+              const liText = String(li.textContent || '').replace(/\s+/g, ' ').trim();
+              if (liText) lines.push(liText);
+            });
             return;
           }
 
-          pushNodeInOrder(element);
+          element.querySelectorAll('img').forEach((image) => {
+            lines.push(`GAMBAR: ${image.getAttribute('src') || ''}`);
+          });
+          const text = String(element.textContent || '').replace(/\s+/g, ' ').trim();
+          if (text) lines.push(text);
         });
 
         const fallbackParsed = parseQuestionImport(lines.join('\n'), { coloredKeysByNumber, coloredKeysInOrder });

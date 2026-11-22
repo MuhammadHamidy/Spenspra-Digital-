@@ -292,14 +292,8 @@ func (r *repository) GetOrCreateSession(ctx context.Context, examID, studentID, 
 		First(&sess).Error
 
 	if err == nil {
-		if sess.Status != "IN_PROGRESS" && sess.Status != "LOCKED" {
-			sess.Status = "IN_PROGRESS"
-			sess.StartedAt = time.Now()
-			r.db.WithContext(ctx).Table("cbt_student_sessions").Where("id = ?", sess.ID).Updates(map[string]interface{}{
-				"status":     "IN_PROGRESS",
-				"started_at": sess.StartedAt,
-			})
-		}
+		// JANGAN PERNAH mereset sesi yang sudah SUBMITTED kembali menjadi IN_PROGRESS!
+		// Jika siswa sudah mengumpulkan ujian, kembalikan sesi SUBMITTED apa adanya.
 		return &sess, nil
 	}
 

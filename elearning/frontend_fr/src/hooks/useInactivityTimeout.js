@@ -47,10 +47,10 @@ export function useInactivityTimeout(onTimeout) {
           const isSpenspra = typeof window !== 'undefined' && window.location.hostname.includes('spenspra.com');
           const isSch = typeof window !== 'undefined' && window.location.hostname.includes('spenspra.sch.id');
           const loginUrl = isSpenspra
-            ? 'https://sso.spenspra.com/login?reason=inactivity&app=belajar'
+            ? 'https://sso.spenspra.com/login?reason=inactivity'
             : isSch
-            ? 'https://sso.spenspra.sch.id/login?reason=inactivity&app=belajar'
-            : (process.env.NEXT_PUBLIC_SSO_LOGIN_URL ? `${process.env.NEXT_PUBLIC_SSO_LOGIN_URL}?reason=inactivity&app=belajar` : 'http://sso.localhost/login?reason=inactivity&app=belajar');
+            ? 'https://sso.spenspra.sch.id/login?reason=inactivity'
+            : (process.env.NEXT_PUBLIC_SSO_LOGIN_URL ? `${process.env.NEXT_PUBLIC_SSO_LOGIN_URL}?reason=inactivity` : 'http://sso.localhost/login?reason=inactivity');
           window.location.href = loginUrl;
         }
       }

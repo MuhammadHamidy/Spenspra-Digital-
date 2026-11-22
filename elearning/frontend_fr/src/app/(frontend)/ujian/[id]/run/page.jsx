@@ -132,6 +132,22 @@ export default function CBTExamRunnerPage({ params }) {
         const sess = await elearningApi.startExamSession(examId, examData.token || '', currentUser);
         setSession(sess);
         if (sess) {
+          // ANTISIPASI: Jika siswa sudah pernah menyelesaikan ujian (SUBMITTED), langsung tampilkan layar selesai
+          // dan JANGAN biarkan siswa mengulang ujian kembali!
+          if (sess.status === 'SUBMITTED') {
+            setAnswers(sess.answers || {});
+            setHasStartedExam(true);
+            setFinishResult({
+              score: sess.score ?? 0,
+              correctCount: sess.correctCount ?? null,
+              totalAutoGraded: sess.totalAutoGraded ?? (questionsData || []).filter((q) => q.type !== 'ESSAY').length,
+              totalQuestions: (questionsData || []).length,
+              reviewItems: sess.reviewItems || [],
+              alreadySubmitted: true,
+            });
+            return;
+          }
+
           setAnswers(sess.answers || {});
           setDoubtfuls(sess.doubtfuls || {});
           const scheduleEnd = examData.endDateTime
@@ -776,10 +792,14 @@ export default function CBTExamRunnerPage({ params }) {
   return (
     <div className="min-h-screen bg-neutral-100 flex flex-col select-none relative font-sans overscroll-none touch-pan-y">
 
-      {/* GERBANG MASUK MODE UJIAN (USER GESTURE UNTUK FULLSCREEN & AUDIO ALARM DI HP) */}
+      {/* GERBANG MASUK MODE UJIAN (SCROLLABLE DI LAYAR LANDSCAPE / ROTATED & SEMUA BROWSER NON-CHROME) */}
       {!hasStartedExam && !finishResult && (
-        <div className="fixed inset-0 z-50 bg-neutral-950/90 backdrop-blur-md flex items-center justify-center p-4 select-none">
-          <div className="max-w-md w-full bg-white rounded-2xl p-6 sm:p-8 text-center space-y-5 shadow-2xl border border-neutral-200 animate-in zoom-in-95">
+        <div
+          className="fixed inset-0 z-[9999] bg-neutral-950/95 overflow-y-auto overscroll-contain touch-manipulation"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
+          <div className="min-h-full w-full flex items-start sm:items-center justify-center p-3 sm:p-4 py-6">
+            <div className="max-w-md w-full bg-white rounded-2xl p-5 sm:p-7 text-center space-y-4 sm:space-y-5 shadow-2xl border border-neutral-200 my-auto">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#4B3B78] to-[#5B3E96] text-white mx-auto flex items-center justify-center text-2xl font-black shadow-md">
               CBT
             </div>
@@ -839,6 +859,7 @@ export default function CBTExamRunnerPage({ params }) {
             <p className="text-[11px] text-neutral-400">
               Durasi pengerjaan: {exam?.durationMinutes || 90} menit • Total {totalQuestions} soal
             </p>
+            </div>
           </div>
         </div>
       )}

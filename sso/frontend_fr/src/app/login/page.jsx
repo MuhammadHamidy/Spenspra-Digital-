@@ -133,6 +133,14 @@ function LoginForm() {
         return;
       }
 
+      // Jika login ulang karena sesi habis (inactivity/expired) atau tidak ada menu aplikasi yang dipilih,
+      // selalu arahkan kembali ke Dashboard Awal / Menu Utama SSO ('/') agar pengguna tidak nyasar ke menu lain.
+      const isSessionReLogin = reason === 'inactivity' || reason === 'expired' || reason === 'session_expired';
+      if (isSessionReLogin) {
+        window.location.href = '/';
+        return;
+      }
+
       // 4. DIRECT REDIRECT BERDASARKAN SISTEM YANG DIPILIH DI AWAL:
       // Pengguna mengklik kartu tertentu (e-Rapor, Belajar, Perpustakaan, atau Presensi) di portal depan,
       // maka sistem LANGSUNG meluncurkan aplikasi tujuan tanpa menampilkan ulang menu dashboard!
@@ -190,13 +198,9 @@ function LoginForm() {
         }
       }
 
-      // 5. Default Civitas (Guru / Siswa / Tendik):
-      // Langsung arahkan ke aplikasi utama Spenspra Belajar (LMS & CBT) tanpa perantara dashboard SSO
-      const belajarBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_ELEARNING_URL || process.env.NEXT_PUBLIC_BELAJAR_URL, 'belajar');
-      const belajarRole = isProctor ? roleName : (isEducator ? 'GURU' : 'SISWA');
-      const bPayload = { ...userPayload, roleName: belajarRole, peran: belajarRole };
-      const bEncoded = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(bPayload)))) : '';
-      window.location.href = `${belajarBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${bEncoded}`;
+      // 5. Default Civitas (Guru / Siswa / Tendik) jika tidak memilih aplikasi spesifik:
+      // Kembalikan ke Dashboard Awal / Menu Utama SSO ('/') agar pengguna dapat memilih aplikasi tujuan dengan tepat.
+      window.location.href = '/';
       return;
     } catch (err) {
       setError(err.message || 'Login gagal. Periksa kembali username/NIP dan kata sandi Anda.');
