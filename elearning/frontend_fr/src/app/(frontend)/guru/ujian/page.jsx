@@ -274,7 +274,7 @@ async function extractDocxStructure(arrayBuffer) {
       resetOptionCounters();
     }
 
-    // Kunci jawaban berwarna
+    // Kunci jawaban berwarna (mendukung 1 opsi untuk PG maupun >=2 opsi untuk PG Kompleks)
     if (isRed) {
       let optKey = listInfo?.isOption ? listInfo.letter : null;
       if (!optKey) {
@@ -282,8 +282,13 @@ async function extractDocxStructure(arrayBuffer) {
         if (explicitOpt) optKey = explicitOpt[1].toUpperCase();
       }
       if (optKey) {
-        if (currentQuestionNum && !coloredKeysByNumber[currentQuestionNum]) {
-          coloredKeysByNumber[currentQuestionNum] = optKey;
+        if (currentQuestionNum) {
+          if (!coloredKeysByNumber[currentQuestionNum]) {
+            coloredKeysByNumber[currentQuestionNum] = [];
+          }
+          if (!coloredKeysByNumber[currentQuestionNum].includes(optKey)) {
+            coloredKeysByNumber[currentQuestionNum].push(optKey);
+          }
         }
         coloredKeysInOrder.push(optKey);
       }
@@ -373,26 +378,78 @@ function extractColoredKeysFromDocxXml(docXml) {
           charPos = runEnd;
           if (r.isColored) {
             const matched = options.find((opt) => runStart < opt.end && runEnd > opt.start);
-            if (matched && !keysByNumber[currentQNum]) {
-              keysByNumber[currentQNum] = matched.key;
-              keysInOrder.push(matched.key);
-              break;
+            if (matched) {
+              if (!keysByNumber[currentQNum]) keysByNumber[currentQNum] = [];
+              if (!keysByNumber[currentQNum].includes(matched.key)) {
+                keysByNumber[currentQNum].push(matched.key);
+                keysInOrder.push(matched.key);
+              }
             }
           }
         }
       } else {
         // Baris tanpa marker eksplisit di awal, cek apakah huruf opsi A-E diwarnai
         const single = trimmed.match(/^([A-E])(?![A-Za-z])/i);
-        if (single && !keysByNumber[currentQNum]) {
+        if (single) {
           const key = single[1].toUpperCase();
-          keysByNumber[currentQNum] = key;
-          keysInOrder.push(key);
+          if (!keysByNumber[currentQNum]) keysByNumber[currentQNum] = [];
+          if (!keysByNumber[currentQNum].includes(key)) {
+            keysByNumber[currentQNum].push(key);
+            keysInOrder.push(key);
+          }
         }
       }
     }
   });
 
   return { keysByNumber, keysInOrder };
+}
+
+function normalizeImportQuestionType(raw) {
+  const s = String(raw || '').trim().toLowerCase();
+  if (!s) return null;
+  if (/^(?:pg\s*kompleks|pgk|kompleks|complex(?:_?mcq)?|multiple[\s_-]*answer|pilihan\s*ganda\s*kompleks|banyak\s*jawaban)$/.test(s)) {
+    return 'COMPLEX_MCQ';
+  }
+  if (/^(?:benar\s*[\/\-]?\s*salah|b\s*\/\s*s|bs|true\s*[\/\-]?\s*false|true_false|tf)$/.test(s)) {
+    return 'TRUE_FALSE';
+  }
+  if (/^(?:menjodohkan|jodoh(?:kan)?|pencocokan|cocokkan|matching|pasangan)$/.test(s)) {
+    return 'MATCHING';
+  }
+  if (/^(?:esai|uraian|essay|isian(?:\s*panjang|\s*singkat)?)$/.test(s)) {
+    return 'ESSAY';
+  }
+  if (/^(?:pg|pilihan\s*ganda|mcq|multiple[\s_-]*choice)$/.test(s)) {
+    return 'MCQ';
+  }
+  return null;
+}
+
+function parseTrueFalseAnswerText(raw, allowSingleLetter = false) {
+  const s = String(raw || '').trim().toLowerCase();
+  if (/^(?:benar|true|betul|ya)$/.test(s) || (allowSingleLetter && s === 'b')) return true;
+  if (/^(?:salah|false|tidak|keliru)$/.test(s) || (allowSingleLetter && s === 's')) return false;
+  return null;
+}
+
+function parseChoiceKeysFromAnswer(raw) {
+  const cleaned = String(raw || '')
+    .replace(/^(?:opsi|pilihan|huruf)\s+/i, '')
+    .replace(/\bdan\b/gi, ',')
+    .trim();
+  if (!cleaned) return [];
+  // Hanya dianggap kunci opsi bila seluruh string terdiri dari huruf A-E dan pemisah (, ; / & + spasi)
+  if (!/^[A-Ea-e](?:[\s,;/&+]+[A-Ea-e])*$/.test(cleaned)) return [];
+  const letters = cleaned.toUpperCase().match(/[A-E]/g) || [];
+  return Array.from(new Set(letters));
+}
+
+function looksLikeEssayQuestion(text) {
+  const s = String(text || '').trim();
+  if (s.length < 15) return false;
+  if (/\?$/.test(s)) return true;
+  return /^(?:jelaskan|sebutkan|uraikan|hitung(?:lah)?|mengapa|bagaimana|analisis(?:lah)?|bandingkan|tuliskan|buatlah|tentukan|gambarkan|deskripsikan|apa\s+yang\s+dimaksud|berikan\s+contoh|simpulkan)/i.test(s);
 }
 
 function parseQuestionImport(text, options = {}) {
@@ -402,36 +459,41 @@ function parseQuestionImport(text, options = {}) {
     .map((line) => line.replace(/\t/g, ' ').trim())
     .filter(Boolean);
 
-  // Bagian "Kunci Jawaban" terpisah di akhir dokumen (cth. "Kunci Jawaban" lalu baris "A", "D", ... atau "1. A")
+  // Bagian "Kunci Jawaban" terpisah di akhir dokumen (mendukung PG: "1. A", PGK: "2. A, C", B/S: "3. Benar")
   const keyHeaderIdx = allLines.findIndex((line) => /^kunci(?:\s+jawaban)?\s*[:.]?$/i.test(line));
   const answerKeyList = [];
   const answerKeyByNumber = {};
   const lines = keyHeaderIdx >= 0 ? allLines.slice(0, keyHeaderIdx) : allLines;
   if (keyHeaderIdx >= 0) {
     allLines.slice(keyHeaderIdx + 1).forEach((line) => {
-      const multi = Array.from(line.matchAll(/(\d+)\s*[.)\-:=]?\s*([A-E])(?![A-Za-z])/g));
+      // Baris dengan banyak pasangan nomor-kunci: "1. A  2. B  3. C"
+      const multi = Array.from(line.matchAll(/(\d+)\s*[.)\-:=]\s*(benar|salah|true|false|[A-E](?:\s*[,/&+]\s*[A-E])*)(?![A-Za-z])/gi));
       if (multi.length > 1) {
-        multi.forEach((m) => { answerKeyByNumber[Number(m[1])] = m[2].toUpperCase(); });
+        multi.forEach((m) => {
+          answerKeyByNumber[Number(m[1])] = m[2].trim();
+        });
         return;
       }
-      const single = line.match(/^(?:(\d+)\s*[.)\-:=]?\s*)?([A-E])(?![A-Za-z])/i);
+      const single = line.match(/^(?:(\d+)\s*[.)\-:=]?\s*)?(benar|salah|true|false|[A-E](?:\s*(?:[,;/&+]|\bdan\b)\s*[A-E])*)(?![A-Za-z])/i);
       if (!single) return;
-      const key = single[2].toUpperCase();
-      if (single[1]) answerKeyByNumber[Number(single[1])] = key;
-      answerKeyList.push(key);
+      const val = single[2].trim();
+      if (single[1]) answerKeyByNumber[Number(single[1])] = val;
+      answerKeyList.push(val);
     });
   }
 
-  const questions = [];
+  const rawQuestions = [];
   let current = null;
   let currentOption = null;
   // Blok "Soal N" (tanpa titik) biasanya diikuti wacana/stimulus sebelum nomor pertanyaan.
   let collectingStimulus = false;
   let pendingStimulus = [];
   let pendingImage = '';
+  let pendingType = null;
 
   const pushCurrent = () => {
-    if (current?.questionText && current.options.length >= 2) questions.push(current);
+    if (!current || !current.questionText) return;
+    rawQuestions.push(current);
   };
 
   const expandInlineOptions = (line) => {
@@ -467,23 +529,53 @@ function parseQuestionImport(text, options = {}) {
   };
 
   const startQuestion = (line) => {
+    // Jangan salah mengira baris pasangan "1) Indonesia = Jakarta" sebagai nomor soal baru bila sedang di dalam soal Menjodohkan
+    if (
+      current?.explicitType === 'MATCHING' &&
+      /^\d+\s*[.)]\s*.+?(?:->|=>|↔|::|\||=)\s*.+$/.test(line)
+    ) {
+      return false;
+    }
+
     const match = line.match(/^(?:soal\s*|pertanyaan\s*)?(?:nomor\s*)?(\d+)\s*[.)\]:\-]\s*(.+)$/i);
     const labeledMatch = line.match(/^(?:soal|pertanyaan)\s*[:\-]\s*(.+)$/i);
     if (!match && !labeledMatch) return false;
     pushCurrent();
+
+    let qText = (match ? match[2] : labeledMatch[1]).trim();
+    let inlineType = pendingType || null;
+    // Deteksi tag tipe inline di awal soal, misal: "[PGK] ...", "[B/S] ...", "[JODOH] ...", "[ESAI] ..."
+    const inlineTagMatch = qText.match(/^\[([^\]]+)\]\s*(.+)$/) || qText.match(/^\((PG\s*Kompleks|PGK|Benar\s*[\/\-]?\s*Salah|B\/S|Menjodohkan|Jodoh|Esai|Uraian|Essay)\)\s*(.+)$/i);
+    if (inlineTagMatch) {
+      const parsedType = normalizeImportQuestionType(inlineTagMatch[1]);
+      if (parsedType) {
+        inlineType = parsedType;
+        qText = inlineTagMatch[2].trim();
+      }
+    }
+
     current = {
-      questionNumber: match ? Number(match[1]) : questions.length + 1,
-      questionText: (match ? match[2] : labeledMatch[1]).trim(),
+      questionNumber: match ? Number(match[1]) : rawQuestions.length + 1,
+      questionText: qText,
+      explicitType: inlineType,
       options: [],
       correctOption: 'A',
+      correctOptions: [],
+      trueFalseAnswer: null,
+      matchingPairs: [],
+      essayRubric: '',
+      hasEssayHint: false,
+      inRubric: false,
       keyDetected: false,
       points: 10,
+      hasExplicitPoints: false,
       stimulusText: pendingStimulus.join('\n\n'),
       imageUrl: pendingImage,
     };
     collectingStimulus = false;
     pendingStimulus = [];
     pendingImage = '';
+    pendingType = null;
     currentOption = null;
     return true;
   };
@@ -497,7 +589,24 @@ function parseQuestionImport(text, options = {}) {
       collectingStimulus = true;
       pendingStimulus = [];
       pendingImage = '';
+      pendingType = null;
       return;
+    }
+
+    // Tag tipe di sebelum nomor soal (cth. "Tipe: Menjodohkan" sebelum "1. Pasangkan...")
+    const standaloneTypeMatch = line.match(/^(?:tipe|jenis)(?:\s+soal)?\s*[:=.-]\s*(.+)$/i);
+    if (standaloneTypeMatch) {
+      const parsedType = normalizeImportQuestionType(standaloneTypeMatch[1]);
+      if (parsedType) {
+        if (current) {
+          current.explicitType = parsedType;
+          currentOption = null;
+          current.inRubric = false;
+        } else {
+          pendingType = parsedType;
+        }
+        return;
+      }
     }
 
     if (startQuestion(line)) return;
@@ -515,42 +624,131 @@ function parseQuestionImport(text, options = {}) {
     if (stimulusMatch) {
       current.stimulusText = stimulusMatch[1].trim();
       current.inStimulus = true;
+      current.inRubric = false;
       currentOption = null;
       return;
     }
 
-    const answerMatch = line.match(/^(?:kunci(?:\s+(?:jawaban|benar))?|jawaban(?:\s+benar)?|answer)\s*[:=.-]\s*(?:opsi\s*)?([A-E])/i);
-    if (answerMatch) {
-      current.correctOption = answerMatch[1].toUpperCase();
-      current.keyDetected = true;
+    // Rubrik / Pedoman Penskoran untuk soal Esai / Uraian
+    const rubricMatch = line.match(/^(?:rubrik(?:\s+penilaian)?|pedoman(?:\s+penskoran)?|pembahasan|kunci\s+(?:esai|uraian))\s*[:=.-]\s*(.*)$/i);
+    if (rubricMatch) {
+      const txt = rubricMatch[1].trim();
+      current.essayRubric = current.essayRubric ? `${current.essayRubric}\n${txt}` : txt;
+      current.hasEssayHint = true;
+      current.inRubric = true;
       currentOption = null;
       return;
     }
 
+    // Poin / Bobot soal
     const pointsMatch = line.match(/^(?:poin|points|bobot|nilai|skor)\s*[:=.-]\s*(\d+(?:[.,]\d+)?)\s*(?:poin|point|nilai|skor)?$/i);
     if (pointsMatch) {
       current.points = Number(pointsMatch[1].replace(',', '.')) || 10;
+      current.hasExplicitPoints = true;
       currentOption = null;
+      current.inRubric = false;
       return;
+    }
+
+    // Kunci / Jawaban (mendukung PG: "Kunci: B", PGK: "Kunci: A, C", B/S: "Kunci: Benar", Esai: "Kunci: teks uraian...")
+    const answerLineMatch = line.match(/^(?:kunci(?:\s+(?:jawaban|benar))?|jawaban(?:\s+benar)?|answer)\s*[:=.-]\s*(.+)$/i);
+    if (answerLineMatch) {
+      const rawAns = answerLineMatch[1].trim();
+      currentOption = null;
+      current.inRubric = false;
+
+      const allowSingleBS = current.explicitType === 'TRUE_FALSE' || current.options.length === 0;
+      const tfVal = parseTrueFalseAnswerText(rawAns, allowSingleBS);
+      if (tfVal !== null && (current.explicitType === 'TRUE_FALSE' || current.options.length === 0 || /^(?:benar|salah|true|false)$/i.test(rawAns))) {
+        current.trueFalseAnswer = tfVal;
+        current.correctOption = tfVal ? 'TRUE' : 'FALSE';
+        current.keyDetected = true;
+        return;
+      }
+
+      const choiceKeys = parseChoiceKeysFromAnswer(rawAns);
+      if (choiceKeys.length > 0) {
+        current.correctOptions = choiceKeys;
+        current.correctOption = choiceKeys.join(',');
+        current.keyDetected = true;
+        return;
+      }
+
+      // Bila tidak cocok A-E atau Benar/Salah dan soal tidak punya opsi PG -> anggap kunci/rubrik esai
+      if (current.options.length === 0) {
+        current.essayRubric = current.essayRubric ? `${current.essayRubric}\n${rawAns}` : rawAns;
+        current.hasEssayHint = true;
+        current.inRubric = true;
+        current.keyDetected = true;
+        return;
+      }
+      return;
+    }
+
+    // Pasangan Menjodohkan:
+    // 1. Eksplisit "Pasangan: Kiri = Kanan" atau "Pasangan: Kiri -> Kanan"
+    const explicitPairMatch = line.match(/^(?:pasangan|jodoh|cocokkan|pair)\s*\d*\s*[:=.-]\s*(.+?)\s*(?:->|=>|↔|::|\||=)\s*(.+)$/i);
+    if (explicitPairMatch) {
+      current.matchingPairs.push({
+        id: current.matchingPairs.length + 1,
+        left: explicitPairMatch[1].trim(),
+        right: explicitPairMatch[2].trim(),
+      });
+      currentOption = null;
+      current.inRubric = false;
+      return;
+    }
+
+    // 2. Pemisah panah / pipa ("Kiri -> Kanan", "Kiri => Kanan", "Kiri ↔ Kanan", "Kiri :: Kanan", "Kiri | Kanan")
+    if (current.explicitType === 'MATCHING' || current.options.length === 0) {
+      const arrowPairMatch = line.match(/^(?:[-•*]|\d+[.)]|[a-z][.)])?\s*(.+?)\s*(?:->|=>|↔|::|\|)\s*(.+)$/);
+      if (arrowPairMatch && arrowPairMatch[1].trim() && arrowPairMatch[2].trim()) {
+        current.matchingPairs.push({
+          id: current.matchingPairs.length + 1,
+          left: arrowPairMatch[1].trim(),
+          right: arrowPairMatch[2].trim(),
+        });
+        currentOption = null;
+        current.inRubric = false;
+        return;
+      }
+
+      // 3. Pemisah "=" untuk Menjodohkan (wajib diawali bullet/nomor/huruf, atau tipe sudah eksplisit MATCHING)
+      const eqPattern = current.explicitType === 'MATCHING'
+        ? /^(?:[-•*]|\d+[.)]|[a-z][.)])?\s*(.+?)\s*=\s*(.+)$/
+        : /^(?:[-•*]|\d+[.)])\s*(.+?)\s*=\s*(.+)$/;
+      const eqPairMatch = line.match(eqPattern);
+      if (eqPairMatch && eqPairMatch[1].trim() && eqPairMatch[2].trim()) {
+        current.matchingPairs.push({
+          id: current.matchingPairs.length + 1,
+          left: eqPairMatch[1].trim(),
+          right: eqPairMatch[2].trim(),
+        });
+        currentOption = null;
+        current.inRubric = false;
+        return;
+      }
     }
 
     // Opsi berupa gambar atau teks bergambar (cth: "A. GAMBAR: ...", "A. Garis bilangan GAMBAR: ...")
     const optionImagePrefixMatch = line.match(/^([A-E])(?:[\s.)\]:-]+)\s*(.*?)(?:gambar|image)\s*[:=]\s*(.+)$/i);
-    if (optionImagePrefixMatch) {
+    if (optionImagePrefixMatch && current.explicitType !== 'MATCHING' && current.explicitType !== 'ESSAY') {
       const key = optionImagePrefixMatch[1].toUpperCase();
       const txt = (optionImagePrefixMatch[2] || '').trim();
       const img = optionImagePrefixMatch[3].trim();
       current.options.push({ key, text: txt, imageUrl: img });
       currentOption = key;
+      current.inRubric = false;
       return;
     }
 
     // Opsi bertuliskan huruf saja, misal "A." atau "A)" tanpa teks (gambarnya berada di baris berikutnya)
     const bareOptionMatch = line.match(/^([A-E])\s*[.)\]:-]?\s*$/i);
-    if (bareOptionMatch) {
+    if (bareOptionMatch && current.explicitType !== 'MATCHING' && current.explicitType !== 'ESSAY') {
       const key = bareOptionMatch[1].toUpperCase();
       current.options.push({ key, text: '', imageUrl: '' });
       currentOption = key;
+      current.inRubric = false;
       return;
     }
 
@@ -574,26 +772,25 @@ function parseQuestionImport(text, options = {}) {
           return;
         }
       }
-      if (!current.options.length) {
-        current.imageUrl = imgUrl;
-      } else {
-        current.imageUrl = imgUrl;
-      }
+      current.imageUrl = imgUrl;
       return;
     }
 
     const optionMatch = line.match(/^([A-E])(?:[\s.)\]:-]+)\s*(.+)$/i);
-    if (optionMatch) {
+    if (optionMatch && current.explicitType !== 'MATCHING' && current.explicitType !== 'ESSAY') {
       const key = optionMatch[1].toUpperCase();
       current.options.push({ key, text: optionMatch[2].trim() });
       currentOption = key;
+      current.inRubric = false;
       return;
     }
 
-    if (currentOption) {
+    if (current.inRubric) {
+      current.essayRubric = `${current.essayRubric}\n${line}`.trim();
+    } else if (currentOption) {
       const option = current.options.find((item) => item.key === currentOption);
       if (option) option.text = `${option.text} ${line}`.trim();
-    } else if (current.inStimulus && !current.options.length) {
+    } else if (current.inStimulus && !current.options.length && !current.matchingPairs.length) {
       current.stimulusText = `${current.stimulusText}\n${line}`.trim();
     } else {
       current.questionText = `${current.questionText}\n${line}`.trim();
@@ -605,51 +802,142 @@ function parseQuestionImport(text, options = {}) {
   });
 
   pushCurrent();
-  questions.forEach((question, index) => {
-    // 1. Kunci sudah terdeteksi di teks eksplisit (cth: KUNCI: B)
-    if (question.keyDetected) return;
 
-    // 2. Kunci tertera dalam tanda kurung di akhir pertanyaan, misal "(jawaban A)" atau "(kunci: B)"
-    const inlineKeyMatch = question.questionText.match(/\((?:kunci|jawaban)\s*[:=]?\s*([A-E])\)/i);
-    if (inlineKeyMatch) {
-      question.correctOption = inlineKeyMatch[1].toUpperCase();
-      question.keyDetected = true;
-      question.keySource = 'TEKS_SOAL';
-      question.questionText = question.questionText.replace(/\s*\((?:kunci|jawaban)\s*[:=]?\s*([A-E])\)/i, '').trim();
+  const resolvedQuestions = [];
+
+  rawQuestions.forEach((question, index) => {
+    // 1. Cek kunci inline di akhir teks soal, misal "(jawaban A, C)", "(kunci: B)", "(jawaban Benar)"
+    if (!question.keyDetected) {
+      const inlineKeyMatch = question.questionText.match(/\((?:kunci|jawaban)\s*[:=]?\s*(benar|salah|true|false|[A-E](?:\s*(?:[,;/&+]|\bdan\b)\s*[A-E])*)\)/i);
+      if (inlineKeyMatch) {
+        const rawInline = inlineKeyMatch[1].trim();
+        const tfVal = parseTrueFalseAnswerText(rawInline, question.options.length === 0);
+        if (tfVal !== null && (question.explicitType === 'TRUE_FALSE' || question.options.length === 0 || /^(?:benar|salah|true|false)$/i.test(rawInline))) {
+          question.trueFalseAnswer = tfVal;
+          question.correctOption = tfVal ? 'TRUE' : 'FALSE';
+        } else {
+          const keys = parseChoiceKeysFromAnswer(rawInline);
+          if (keys.length > 0) {
+            question.correctOptions = keys;
+            question.correctOption = keys.join(',');
+          }
+        }
+        question.keyDetected = true;
+        question.keySource = 'TEKS_SOAL';
+        question.questionText = question.questionText.replace(/\s*\((?:kunci|jawaban)\s*[:=]?\s*(?:benar|salah|true|false|[A-E](?:\s*(?:[,;/&+]|\bdan\b)\s*[A-E])*)\)/i, '').trim();
+      }
+    }
+
+    // 2. Cek kunci dari teks berwarna merah / stabilo pada dokumen Word (.docx)
+    if (!question.keyDetected && question.options.length >= 2) {
+      const rawColorKey = coloredKeysByNumber[question.questionNumber];
+      const colorList = Array.isArray(rawColorKey)
+        ? rawColorKey
+        : rawColorKey
+          ? [rawColorKey]
+          : coloredKeysInOrder[index]
+            ? [coloredKeysInOrder[index]]
+            : [];
+      if (colorList.length > 0) {
+        question.correctOptions = colorList;
+        question.correctOption = colorList.join(',');
+        question.keyDetected = true;
+        question.keySource = 'WARNA_MERAH';
+      }
+    }
+
+    // 3. Cek kunci dari daftar kunci terpisah di akhir dokumen (header Kunci Jawaban)
+    if (!question.keyDetected) {
+      const rawListKey = answerKeyByNumber[question.questionNumber] || answerKeyList[index];
+      if (rawListKey) {
+        const tfVal = parseTrueFalseAnswerText(rawListKey, question.options.length === 0);
+        if (tfVal !== null && (question.explicitType === 'TRUE_FALSE' || question.options.length === 0 || /^(?:benar|salah|true|false)$/i.test(rawListKey))) {
+          question.trueFalseAnswer = tfVal;
+          question.correctOption = tfVal ? 'TRUE' : 'FALSE';
+          question.keyDetected = true;
+          question.keySource = 'DAFTAR_KUNCI';
+        } else {
+          const keys = parseChoiceKeysFromAnswer(rawListKey);
+          if (keys.length > 0) {
+            question.correctOptions = keys;
+            question.correctOption = keys.join(',');
+            question.keyDetected = true;
+            question.keySource = 'DAFTAR_KUNCI';
+          }
+        }
+      }
+    }
+
+    // Tentukan tipe soal final (MCQ | COMPLEX_MCQ | TRUE_FALSE | MATCHING | ESSAY)
+    const isTwoOptionTrueFalse =
+      question.options.length === 2 &&
+      question.options.every((opt) => parseTrueFalseAnswerText(opt.text, false) !== null);
+
+    let finalType = null;
+    if (question.explicitType === 'MATCHING' || question.matchingPairs.length >= 2) {
+      if (question.matchingPairs.length < 2) return; // Abaikan jika pasangan kurang dari 2
+      finalType = 'MATCHING';
+    } else if (question.explicitType === 'TRUE_FALSE' || question.trueFalseAnswer !== null || isTwoOptionTrueFalse) {
+      finalType = 'TRUE_FALSE';
+      if (question.trueFalseAnswer === null && isTwoOptionTrueFalse) {
+        const matchedOpt = question.options.find((o) => o.key === question.correctOption);
+        const mappedTf = matchedOpt ? parseTrueFalseAnswerText(matchedOpt.text, false) : true;
+        question.trueFalseAnswer = mappedTf !== null ? mappedTf : true;
+      }
+      if (question.trueFalseAnswer === null) question.trueFalseAnswer = true;
+    } else if (question.options.length >= 2) {
+      const multiKeys = question.correctOptions.length > 0
+        ? question.correctOptions
+        : parseChoiceKeysFromAnswer(question.correctOption);
+      if (question.explicitType === 'COMPLEX_MCQ' || multiKeys.length >= 2) {
+        finalType = 'COMPLEX_MCQ';
+        question.correctOptions = multiKeys.length > 0 ? multiKeys : ['A'];
+        question.correctOption = question.correctOptions.join(',');
+      } else {
+        finalType = 'MCQ';
+        question.correctOption = multiKeys[0] || 'A';
+      }
+    } else if (
+      question.explicitType === 'ESSAY' ||
+      question.hasEssayHint ||
+      Boolean(question.essayRubric) ||
+      question.hasExplicitPoints ||
+      looksLikeEssayQuestion(question.questionText)
+    ) {
+      finalType = 'ESSAY';
+    } else {
+      // Bukan soal valid (mis. baris petunjuk bernomor di awal dokumen)
       return;
     }
 
-    // 3. Kunci otomatis terdeteksi dari teks bertinta merah / stabilo pada dokumen Word (.docx)
-    const colorKey = coloredKeysByNumber[question.questionNumber] || coloredKeysInOrder[index];
-    if (colorKey) {
-      question.correctOption = colorKey;
-      question.keyDetected = true;
-      question.keySource = 'WARNA_MERAH';
-      return;
-    }
-
-    // 4. Kunci dari daftar kunci terpisah di akhir dokumen (header Kunci Jawaban)
-    const key = answerKeyByNumber[question.questionNumber] || answerKeyList[index];
-    if (key) {
-      question.correctOption = key;
-      question.keyDetected = true;
-      question.keySource = 'DAFTAR_KUNCI';
-    }
+    const qNum = resolvedQuestions.length + 1;
+    resolvedQuestions.push({
+      id: `q-import-${Date.now()}-${qNum}`,
+      questionNumber: qNum,
+      type: finalType,
+      questionText: question.questionText,
+      options: finalType === 'MCQ' || finalType === 'COMPLEX_MCQ' ? question.options : [],
+      correctOption:
+        finalType === 'MCQ'
+          ? question.correctOption
+          : finalType === 'COMPLEX_MCQ'
+            ? question.correctOptions.join(',')
+            : finalType === 'TRUE_FALSE'
+              ? (question.trueFalseAnswer ? 'TRUE' : 'FALSE')
+              : '',
+      correctOptions: finalType === 'COMPLEX_MCQ' ? question.correctOptions : undefined,
+      trueFalseAnswer: finalType === 'TRUE_FALSE' ? Boolean(question.trueFalseAnswer) : undefined,
+      matchingPairs: finalType === 'MATCHING' ? question.matchingPairs : undefined,
+      essayRubric: finalType === 'ESSAY' ? (question.essayRubric.trim() || undefined) : undefined,
+      keyDetected: question.keyDetected,
+      keySource: question.keySource || undefined,
+      points: question.points || 10,
+      stimulusText: question.stimulusText || undefined,
+      imageUrl: question.imageUrl || undefined,
+    });
   });
 
-  return questions.map((question, index) => ({
-    id: `q-import-${Date.now()}-${index}`,
-    questionNumber: index + 1,
-    type: 'MCQ',
-    questionText: question.questionText,
-    options: question.options,
-    correctOption: question.correctOption,
-    keyDetected: question.keyDetected,
-    keySource: question.keySource || undefined,
-    points: question.points || 10,
-    stimulusText: question.stimulusText || undefined,
-    imageUrl: question.imageUrl || undefined,
-  }));
+  return resolvedQuestions;
 }
 
 // Hapus field bantu parser sebelum dikirim ke server
@@ -3025,9 +3313,9 @@ export default function TeacherExamsManagementPage() {
             <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl border border-neutral-200 overflow-hidden max-h-[92vh] flex flex-col">
               <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200">
                 <div>
-                  <h2 className="font-bold text-neutral-900">Impor Soal Pilihan Ganda</h2>
+                  <h2 className="font-bold text-neutral-900">Impor Soal dari Word / Teks (Semua Tipe)</h2>
                   <p className="text-[11px] text-neutral-500">
-                    Dapat memilih berkas Word (.docx) atau menempelkan teks berformat soal dan kunci.
+                    Mendukung Pilihan Ganda, PG Kompleks, Benar/Salah, Menjodohkan, dan Esai dari berkas Word (.docx) atau tempel teks.
                   </p>
                 </div>
                 <button
@@ -3054,8 +3342,25 @@ export default function TeacherExamsManagementPage() {
                           <span>File Word Terbaca: {docxFileName}</span>
                         </p>
                         <p className="text-xs text-emerald-800">
-                          Berhasil mendeteksi <strong>{docxImported.length} butir soal</strong> dari file Word Anda (lengkap dengan wacana dan opsi jawaban).
+                          Berhasil mendeteksi <strong>{docxImported.length} butir soal</strong> dari file Word Anda.
                         </p>
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          {[
+                            ['MCQ', 'Pilihan Ganda', 'bg-blue-100 text-blue-800 border-blue-200'],
+                            ['COMPLEX_MCQ', 'PG Kompleks', 'bg-indigo-100 text-indigo-800 border-indigo-200'],
+                            ['TRUE_FALSE', 'Benar/Salah', 'bg-teal-100 text-teal-800 border-teal-200'],
+                            ['MATCHING', 'Menjodohkan', 'bg-amber-100 text-amber-800 border-amber-200'],
+                            ['ESSAY', 'Esai', 'bg-purple-100 text-purple-800 border-purple-200'],
+                          ].map(([typeKey, label, cls]) => {
+                            const cnt = docxImported.filter((q) => (q.type || 'MCQ') === typeKey).length;
+                            if (!cnt) return null;
+                            return (
+                              <span key={typeKey} className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${cls}`}>
+                                {cnt} {label}
+                              </span>
+                            );
+                          })}
+                        </div>
                         {docxImported.some((q) => q.keySource === 'WARNA_MERAH') && (
                           <p className="text-xs font-semibold text-emerald-950 bg-white/80 p-2 rounded-lg border border-emerald-300 flex items-center gap-1.5">
                             <span>✨</span>
@@ -3103,20 +3408,29 @@ export default function TeacherExamsManagementPage() {
                     <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-[11px] text-blue-900 space-y-1.5">
                       <p className="font-bold flex items-center gap-1.5 text-blue-950">
                         <span>💡</span>
-                        <span>Mendukung Deteksi Otomatis Kunci Teks Merah:</span>
+                        <span>Panduan Format Otomatis 5 Tipe Soal (Word & Teks):</span>
                       </p>
                       <p className="leading-relaxed">
-                        • <strong>Teks Pilihan Berwarna Merah</strong>: Cukup warnai huruf atau teks jawaban yang benar dengan <strong>tinta merah</strong> di Microsoft Word (seperti <code>B. Jawaban...</code>), sistem akan otomatis mendeteksinya sebagai kunci jawaban!
+                        • <strong>Pilihan Ganda (PG)</strong>: Tulis <code>1. Pertanyaan</code> + opsi <code>A–E</code> + <code>Kunci: B</code> atau warnai opsi benar dengan <strong>tinta merah</strong> di Word.
                       </p>
                       <p className="leading-relaxed">
-                        • <strong>Kunci Tertulis</strong>: Sistem juga tetap mendukung format <code>Kunci: B</code> di bawah soal atau daftar <strong>Kunci Jawaban</strong> di akhir file.
+                        • <strong>PG Kompleks</strong>: Tulis lebih dari satu kunci (<code>Kunci: A, C</code>) atau warnai <strong>2+ opsi merah</strong> di Word (bisa juga tambah <code>[PGK]</code>).
+                      </p>
+                      <p className="leading-relaxed">
+                        • <strong>Benar / Salah</strong>: Tulis <code>2. Pernyataan...</code> lalu <code>Kunci: Benar</code> / <code>Kunci: Salah</code> (atau <code>[B/S]</code>).
+                      </p>
+                      <p className="leading-relaxed">
+                        • <strong>Menjodohkan</strong>: Tulis <code>3. Pasangkan...</code> lalu baris pasangan dengan panah/sama dengan: <code>- Indonesia = Jakarta</code> atau <code>Indonesia -&gt; Jakarta</code>.
+                      </p>
+                      <p className="leading-relaxed">
+                        • <strong>Esai / Uraian</strong>: Tulis <code>4. [ESAI] Jelaskan...</code> (atau pertanyaan uraian tanpa opsi A–E), opsional <code>Rubrik: ...</code> &amp; <code>Poin: 20</code>.
                       </p>
                     </div>
 
                     <label className="flex cursor-pointer flex-col gap-1 rounded-xl border-2 border-dashed border-primary-300 bg-primary-50/50 p-5 text-center hover:bg-primary-50 transition">
                       <span className="text-xs font-bold text-primary-800">Pilih Berkas Word (.docx, .docm, .dotx)</span>
                       <span className="text-[10px] text-primary-600">
-                        Sistem mendeteksi wacana kasus, teks soal, opsi A-E, kunci bertinta merah, dan gambar.
+                        Otomatis mendeteksi PG, PG Kompleks, Benar/Salah, Menjodohkan, Esai, wacana, kunci tinta merah, dan gambar.
                       </span>
                       {docxFileName && <span className="text-[10px] font-semibold text-emerald-700">{docxFileName}</span>}
                       <input
@@ -3133,7 +3447,7 @@ export default function TeacherExamsManagementPage() {
                         value={importText}
                         onChange={(event) => setImportText(event.target.value)}
                         rows={8}
-                        placeholder={'1. Ibu kota Indonesia adalah ...\nA. Bandung\nB. Jakarta\nC. Surabaya\nD. Medan\nKunci: B\nPoin: 10'}
+                        placeholder={'1. Ibu kota Indonesia adalah ...\nA. Bandung\nB. Jakarta\nKunci: B\n\n2. [PGK] Pilih bilangan prima:\nA. 2\nB. 4\nC. 5\nKunci: A, C\n\n3. [B/S] Air mendidih pada suhu 100°C.\nKunci: Benar\n\n4. Pasangkan negara dan ibukotanya:\n- Indonesia = Jakarta\n- Jepang = Tokyo\n\n5. [ESAI] Jelaskan proses fotosintesis!\nRubrik: Menyebut cahaya matahari, air, CO2, dan klorofil.\nPoin: 20'}
                         className="w-full rounded-xl border border-neutral-300 p-3 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
                       />
                     </div>
