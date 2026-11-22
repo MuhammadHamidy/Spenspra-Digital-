@@ -482,7 +482,10 @@ func formatExamForFrontend(e domain.CBTExam) fiber.Map {
 	}
 
 	cleanDesc := e.Description
-	for _, tag := range []string{"[SCORE:0]", "[SCORE:1]", "[ANSWERS:0]", "[ANSWERS:1]"} {
+	for _, tag := range []string{
+		"[SCORE:0]", "[SCORE:1]", "[ANSWERS:0]", "[ANSWERS:1]",
+		"[CAT:SEMESTER_UAS]", "[CAT:SEMESTER_UTS]", "[CAT:TKA]", "[CAT:REGULAR]",
+	} {
 		cleanDesc = strings.ReplaceAll(cleanDesc, tag, "")
 	}
 	cleanDesc = strings.TrimSpace(cleanDesc)
@@ -546,7 +549,8 @@ func (h *ELearningHandler) ListExams(c *fiber.Ctx) error {
 	if isTeacherRole(role) && !canManageAll(role) && !forRapor && (actorID(c) != "" || strings.TrimSpace(c.Get("X-User-Name")) != "") {
 		filtered := list[:0]
 		for _, exam := range list {
-			if exam.IsCoordinatorExam || exam.ExamCategory == "SEMESTER_UAS" || exam.TargetGradeLevel != "" || isOwnedByActor(c, exam.TeacherID, exam.TeacherName) {
+			isParallelExam := exam.IsCoordinatorExam || exam.ExamCategory == "SEMESTER_UAS" || exam.ExamCategory == "SEMESTER_UTS" || exam.ExamCategory == "TKA" || exam.TargetGradeLevel != ""
+			if isParallelExam || isOwnedByActor(c, exam.TeacherID, exam.TeacherName) {
 				filtered = append(filtered, exam)
 			}
 		}
@@ -1557,7 +1561,7 @@ func (h *ELearningHandler) DeleteStudentSession(c *fiber.Ctx) error {
 
 	exam, examErr := h.useCase.GetExamDetail(c.Context(), sess.ExamID)
 	if examErr == nil && exam != nil {
-		isSharedExam := exam.IsCoordinatorExam || exam.ExamCategory == "SEMESTER_UAS" || exam.TargetGradeLevel != ""
+		isSharedExam := exam.IsCoordinatorExam || exam.ExamCategory == "SEMESTER_UAS" || exam.ExamCategory == "SEMESTER_UTS" || exam.ExamCategory == "TKA" || exam.TargetGradeLevel != ""
 		if !isSharedExam {
 			if permErr := h.requireExamOwner(c, exam); permErr != nil {
 				return c.Status(permErr.Code).JSON(responses.Fail("FORBIDDEN", permErr.Message))
@@ -1583,7 +1587,7 @@ func (h *ELearningHandler) GetLiveProctoring(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(http.StatusNotFound).JSON(responses.Fail("NOT_FOUND", "ujian tidak ditemukan"))
 	}
-	isSharedExam := exam.IsCoordinatorExam || exam.ExamCategory == "SEMESTER_UAS" || exam.TargetGradeLevel != "" || c.Query("for_rapor") == "true"
+	isSharedExam := exam.IsCoordinatorExam || exam.ExamCategory == "SEMESTER_UAS" || exam.ExamCategory == "SEMESTER_UTS" || exam.ExamCategory == "TKA" || exam.TargetGradeLevel != "" || c.Query("for_rapor") == "true"
 	if !isSharedExam {
 		if err := h.requireExamOwner(c, exam); err != nil {
 			return c.Status(err.Code).JSON(responses.Fail("FORBIDDEN", err.Message))

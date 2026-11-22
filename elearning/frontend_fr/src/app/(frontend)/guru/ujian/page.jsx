@@ -865,8 +865,14 @@ export default function TeacherExamsManagementPage() {
   const handleOpenEditModal = (ex) => {
     setEditingExamId(ex.id);
     setTitle(ex.title || '');
-    const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
-    setExamCategory(isUas ? 'SEMESTER_UAS' : 'REGULAR');
+    const validCats = ['SEMESTER_UAS', 'SEMESTER_UTS', 'TKA', 'REGULAR'];
+    const isParallel = ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+    const resolvedCat = validCats.includes(ex.examCategory)
+      ? ex.examCategory
+      : isParallel
+        ? 'SEMESTER_UAS'
+        : 'REGULAR';
+    setExamCategory(resolvedCat);
     setTargetGradeLevel(ex.targetGradeLevel || '7');
     setSupervisorPin(ex.supervisorPin || generateRandomPin(6));
     setSubject(ex.subject || subjects[0]?.name || '');
@@ -914,7 +920,7 @@ export default function TeacherExamsManagementPage() {
       const teacherName = user?.fullName || user?.full_name || user?.nama || user?.name || 'Bapak/Ibu Guru';
       const teacherId = String(user?.id || user?.nip || user?.username || '');
 
-      const isUas = examCategory === 'SEMESTER_UAS';
+      const isUas = ['SEMESTER_UAS', 'SEMESTER_UTS', 'TKA'].includes(examCategory);
       const parallelClasses = isUas ? getParallelClassesForLevel(targetGradeLevel).map((c) => c.name) : [];
       const effectiveClassName = isUas
         ? `Tingkat ${targetGradeLevel} (${parallelClasses.length > 0 ? parallelClasses.join(', ') : 'Semua Rombel'})`
@@ -3237,73 +3243,85 @@ export default function TeacherExamsManagementPage() {
         {/* Full Form Card (Tanpa Popup Modal) */}
         <Card className="border border-neutral-200 bg-white shadow-xs p-6 sm:p-8">
           <form onSubmit={handleSaveExam} className="space-y-5">
-            {/* Pilihan Kategori Ujian: UAS/ASAS Koordinator vs Ujian Reguler */}
+            {/* Pilihan Kategori Ujian: UAS/ASAS, UTS/ASTS, TKA, dan Ujian Reguler */}
             <div className="space-y-2 pb-2 border-b border-neutral-100">
               <label className="text-xs font-bold text-neutral-800">Jenis / Kategori Ujian:</label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setExamCategory('SEMESTER_UAS');
-                    if (!supervisorPin) setSupervisorPin(generateRandomPin(6));
-                    if (!editingExamId && !token) {
-                      setToken(`ASAS${Math.random().toString(36).substring(2, 6).toUpperCase()}`);
-                    }
-                  }}
-                  className={`p-4 rounded-2xl border-2 text-left transition-all duration-150 cursor-pointer flex items-start gap-3.5 ${
-                    examCategory === 'SEMESTER_UAS'
-                      ? 'border-primary-500 bg-primary-500/5 ring-2 ring-primary-500/20 shadow-xs text-slate-900'
-                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-600 shadow-2xs'
-                  }`}
-                >
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${
-                    examCategory === 'SEMESTER_UAS' ? 'bg-primary-500 text-white' : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    <AppIcon name="medal" color={examCategory === 'SEMESTER_UAS' ? 'white' : 'blue'} size={18} />
-                  </div>
-                  <div className="space-y-1 min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="font-bold text-xs sm:text-sm text-slate-900">Ujian UAS / ASAS Semester (Koordinator)</p>
-                      <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                        examCategory === 'SEMESTER_UAS' ? 'border-primary-500 bg-primary-500' : 'border-slate-300 bg-white'
+                {[
+                  {
+                    key: 'SEMESTER_UAS',
+                    title: 'Ujian UAS / ASAS Semester (Koordinator)',
+                    desc: '1 Guru PJ membuat soal untuk seluruh rombel paralel tingkat (7, 8, atau 9). Nilai otomatis siap disinkron ke e-Rapor UAS.',
+                    icon: 'medal',
+                    tokenPrefix: 'ASAS',
+                    isCoord: true,
+                  },
+                  {
+                    key: 'SEMESTER_UTS',
+                    title: 'Ujian UTS / ASTS Tengah Semester',
+                    desc: 'Asesmen Sumatif Tengah Semester serentak tingkat (7, 8, atau 9). Nilai siap disinkron ke e-Rapor PTS/STS.',
+                    icon: 'schedule',
+                    tokenPrefix: 'ASTS',
+                    isCoord: true,
+                  },
+                  {
+                    key: 'TKA',
+                    title: 'Ujian TKA (Tes Kemampuan Akademik)',
+                    desc: 'Tryout / Tes Kemampuan Akademik serentak tingkat sekolah (Tingkat 7, 8, atau 9) berbasis CBT.',
+                    icon: 'survey',
+                    tokenPrefix: 'TKA',
+                    isCoord: true,
+                  },
+                  {
+                    key: 'REGULAR',
+                    title: 'Ujian Reguler / Harian',
+                    desc: 'Ulangan harian atau kuis mandiri per rombel kelas yang diajar guru bersangkutan.',
+                    icon: 'course',
+                    tokenPrefix: '',
+                    isCoord: false,
+                  },
+                ].map((cat) => {
+                  const active = examCategory === cat.key;
+                  return (
+                    <button
+                      key={cat.key}
+                      type="button"
+                      onClick={() => {
+                        setExamCategory(cat.key);
+                        if (cat.isCoord) {
+                          if (!supervisorPin) setSupervisorPin(generateRandomPin(6));
+                          if (!editingExamId && (!token || /^(ASAS|ASTS|TKA)[A-Z0-9]{4}$/.test(token))) {
+                            setToken(`${cat.tokenPrefix}${Math.random().toString(36).substring(2, 6).toUpperCase()}`);
+                          }
+                        }
+                      }}
+                      className={`p-4 rounded-2xl border-2 text-left transition-all duration-150 cursor-pointer flex items-start gap-3.5 ${
+                        active
+                          ? 'border-primary-500 bg-primary-500/5 ring-2 ring-primary-500/20 shadow-xs text-slate-900'
+                          : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-600 shadow-2xs'
+                      }`}
+                    >
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${
+                        active ? 'bg-primary-500 text-white' : 'bg-slate-100 text-slate-500'
                       }`}>
-                        {examCategory === 'SEMESTER_UAS' && <span className="w-1.5 h-1.5 rounded-full bg-white"></span>}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 leading-snug">
-                      1 Guru PJ membuat soal untuk seluruh rombel paralel tingkat (7, 8, atau 9). Nilai otomatis siap disinkron ke e-Rapor UAS.
-                    </p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setExamCategory('REGULAR')}
-                  className={`p-4 rounded-2xl border-2 text-left transition-all duration-150 cursor-pointer flex items-start gap-3.5 ${
-                    examCategory === 'REGULAR'
-                      ? 'border-primary-500 bg-primary-500/5 ring-2 ring-primary-500/20 shadow-xs text-slate-900'
-                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-600 shadow-2xs'
-                  }`}
-                >
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${
-                    examCategory === 'REGULAR' ? 'bg-primary-500 text-white' : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    <AppIcon name="course" color={examCategory === 'REGULAR' ? 'white' : 'blue'} size={18} />
-                  </div>
-                  <div className="space-y-1 min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="font-bold text-xs sm:text-sm text-slate-900">Ujian Reguler / Harian</p>
-                      <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                        examCategory === 'REGULAR' ? 'border-primary-500 bg-primary-500' : 'border-slate-300 bg-white'
-                      }`}>
-                        {examCategory === 'REGULAR' && <span className="w-1.5 h-1.5 rounded-full bg-white"></span>}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 leading-snug">
-                      Ulangan harian atau kuis mandiri per rombel kelas yang diajar guru bersangkutan.
-                    </p>
-                  </div>
-                </button>
+                        <AppIcon name={cat.icon} color={active ? 'white' : 'blue'} size={18} />
+                      </div>
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-bold text-xs sm:text-sm text-slate-900">{cat.title}</p>
+                          <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                            active ? 'border-primary-500 bg-primary-500' : 'border-slate-300 bg-white'
+                          }`}>
+                            {active && <span className="w-1.5 h-1.5 rounded-full bg-white"></span>}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-snug">
+                          {cat.desc}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -3311,7 +3329,15 @@ export default function TeacherExamsManagementPage() {
               <label className="text-xs font-bold text-neutral-800">Nama / Judul Ujian</label>
               <Input
                 type="text"
-                placeholder={examCategory === 'SEMESTER_UAS' ? "Contoh: Asesmen Sumatif Akhir Semester (ASAS) Ganjil 2026/2027" : "Contoh: Penilaian Harian Bab 1 Algoritma & Pemrograman"}
+                placeholder={
+                  examCategory === 'SEMESTER_UAS'
+                    ? 'Contoh: Asesmen Sumatif Akhir Semester (ASAS) Ganjil 2026/2027'
+                    : examCategory === 'SEMESTER_UTS'
+                    ? 'Contoh: Asesmen Sumatif Tengah Semester (ASTS) Ganjil 2026/2027'
+                    : examCategory === 'TKA'
+                    ? 'Contoh: TKA Bahasa Indonesia Tingkat 9'
+                    : 'Contoh: Penilaian Harian Bab 1 Algoritma & Pemrograman'
+                }
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
@@ -3355,7 +3381,7 @@ export default function TeacherExamsManagementPage() {
                 )}
               </div>
 
-              {examCategory === 'SEMESTER_UAS' ? (
+              {['SEMESTER_UAS', 'SEMESTER_UTS', 'TKA'].includes(examCategory) ? (
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-neutral-800">Target Jenjang Tingkat (Paralel)</label>
@@ -3440,7 +3466,9 @@ export default function TeacherExamsManagementPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-bold text-neutral-800">
-                  {examCategory === 'SEMESTER_UAS' ? 'Token Masuk Serentak 1 Sekolah' : 'Token Ujian'}
+                  {['SEMESTER_UAS', 'SEMESTER_UTS', 'TKA'].includes(examCategory)
+                    ? 'Token Masuk Serentak 1 Sekolah'
+                    : 'Token Ujian'}
                 </label>
                 <Input
                   type="text"
@@ -3488,7 +3516,7 @@ export default function TeacherExamsManagementPage() {
                   <AppIcon name="lock" color="green" size={16} />
                   <span>PIN Buka Kunci Pengawas (Acak Dinamis Sistem):</span>
                 </p>
-                {examCategory === 'SEMESTER_UAS' && (
+                {['SEMESTER_UAS', 'SEMESTER_UTS', 'TKA'].includes(examCategory) && (
                   <button
                     type="button"
                     onClick={() => setSupervisorPin(generateRandomPin(6))}
@@ -3612,15 +3640,62 @@ export default function TeacherExamsManagementPage() {
     );
   }
 
-  const uasCount = exams.filter((e) => e.examCategory === 'SEMESTER_UAS' || e.isCoordinatorExam || e.targetGradeLevel).length;
-  const regularCount = exams.filter((e) => e.examCategory !== 'SEMESTER_UAS' && !e.isCoordinatorExam && !e.targetGradeLevel).length;
+  const resolveExamCat = (ex) => {
+    if (['SEMESTER_UAS', 'SEMESTER_UTS', 'TKA', 'REGULAR'].includes(ex.examCategory)) {
+      return ex.examCategory;
+    }
+    return ex.isCoordinatorExam || Boolean(ex.targetGradeLevel) ? 'SEMESTER_UAS' : 'REGULAR';
+  };
+
+  const uasCount = exams.filter((e) => resolveExamCat(e) === 'SEMESTER_UAS').length;
+  const utsCount = exams.filter((e) => resolveExamCat(e) === 'SEMESTER_UTS').length;
+  const tkaCount = exams.filter((e) => resolveExamCat(e) === 'TKA').length;
+  const regularCount = exams.filter((e) => resolveExamCat(e) === 'REGULAR').length;
 
   const filteredExams = exams.filter((ex) => {
-    const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
-    if (examFilterTab === 'SEMESTER_UAS') return isUas;
-    if (examFilterTab === 'REGULAR') return !isUas;
-    return true;
+    if (examFilterTab === 'ALL') return true;
+    return resolveExamCat(ex) === examFilterTab;
   });
+
+  const renderCategoryBadge = (ex, compact = false) => {
+    const cat = resolveExamCat(ex);
+    const lvl = ex.targetGradeLevel || '7';
+    const baseCls = compact
+      ? 'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border whitespace-nowrap'
+      : 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border whitespace-nowrap';
+    const iconSize = compact ? 11 : 13;
+
+    if (cat === 'SEMESTER_UAS') {
+      return (
+        <span className={`${baseCls} bg-primary-50 text-primary-700 border-primary-200`}>
+          <AppIcon name="medal" color="blue" size={iconSize} />
+          <span>ASAS TK. {lvl}</span>
+        </span>
+      );
+    }
+    if (cat === 'SEMESTER_UTS') {
+      return (
+        <span className={`${baseCls} bg-sky-50 text-sky-700 border-sky-200`}>
+          <AppIcon name="medal" color="blue" size={iconSize} />
+          <span>ASTS / UTS TK. {lvl}</span>
+        </span>
+      );
+    }
+    if (cat === 'TKA') {
+      return (
+        <span className={`${baseCls} bg-violet-50 text-violet-700 border-violet-200`}>
+          <AppIcon name="medal" color="purple" size={iconSize} />
+          <span>TKA TK. {lvl}</span>
+        </span>
+      );
+    }
+    return (
+      <span className={`${baseCls} bg-neutral-100 text-neutral-700 border-neutral-200`}>
+        <AppIcon name="course" color="grey" size={iconSize} />
+        <span>{compact ? 'Reguler' : 'Ujian Reguler'}</span>
+      </span>
+    );
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
@@ -3631,7 +3706,7 @@ export default function TeacherExamsManagementPage() {
             Bank Soal & Jadwal e-Ujian (CBT)
           </h1>
           <p className="text-xs sm:text-sm text-neutral-500 mt-0.5">
-            Kelola ujian reguler atau paket UAS / ASAS serentak tingkat sekolah terintegrasi SSO & e-Rapor.
+            Kelola ujian reguler, UAS / ASAS, UTS / ASTS, dan TKA serentak tingkat sekolah terintegrasi SSO & e-Rapor.
           </p>
         </div>
 
@@ -3676,11 +3751,47 @@ export default function TeacherExamsManagementPage() {
             }`}
           >
             <AppIcon name="medal" color={examFilterTab === 'SEMESTER_UAS' ? 'white' : 'blue'} size={14} />
-            <span>UAS / ASAS Semester</span>
+            <span>UAS / ASAS</span>
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
               examFilterTab === 'SEMESTER_UAS' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
             }`}>
               {uasCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setExamFilterTab('SEMESTER_UTS')}
+            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
+              examFilterTab === 'SEMESTER_UTS'
+                ? 'bg-sky-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-sky-700 hover:bg-white/60'
+            }`}
+          >
+            <AppIcon name="medal" color={examFilterTab === 'SEMESTER_UTS' ? 'white' : 'blue'} size={14} />
+            <span>UTS / ASTS</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              examFilterTab === 'SEMESTER_UTS' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
+            }`}>
+              {utsCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setExamFilterTab('TKA')}
+            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
+              examFilterTab === 'TKA'
+                ? 'bg-violet-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-violet-700 hover:bg-white/60'
+            }`}
+          >
+            <AppIcon name="medal" color={examFilterTab === 'TKA' ? 'white' : 'purple'} size={14} />
+            <span>TKA</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              examFilterTab === 'TKA' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
+            }`}>
+              {tkaCount}
             </span>
           </button>
 
@@ -3694,7 +3805,7 @@ export default function TeacherExamsManagementPage() {
             }`}
           >
             <AppIcon name="course" color={examFilterTab === 'REGULAR' ? 'purple' : 'grey'} size={14} />
-            <span>Ujian Reguler / Harian</span>
+            <span>Reguler / Harian</span>
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
               examFilterTab === 'REGULAR' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
             }`}>
@@ -3726,7 +3837,7 @@ export default function TeacherExamsManagementPage() {
         ) : (
           filteredExams.map((ex) => {
             const currentStatus = getExamStatus(ex);
-            const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+            const isUas = resolveExamCat(ex) !== 'REGULAR' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
             const examDateStr = ex.scheduledDate || (ex.startDateTime ? ex.startDateTime.split('T')[0] : '');
 
             return (
@@ -3737,17 +3848,7 @@ export default function TeacherExamsManagementPage() {
               >
                 {/* Top bar: Category Badge + Status Pill */}
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  {isUas ? (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-primary-50 text-primary-700 border border-primary-200 whitespace-nowrap">
-                      <AppIcon name="medal" color="blue" size={13} />
-                      <span>ASAS TK. {ex.targetGradeLevel || '7'}</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-neutral-100 text-neutral-700 border border-neutral-200 whitespace-nowrap">
-                      <AppIcon name="course" color="grey" size={13} />
-                      <span>Ujian Reguler</span>
-                    </span>
-                  )}
+                  {renderCategoryBadge(ex, false)}
 
                   {currentStatus === 'ACTIVE' ? (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
@@ -3935,7 +4036,7 @@ export default function TeacherExamsManagementPage() {
               ) : (
                 filteredExams.map((ex) => {
                   const currentStatus = getExamStatus(ex);
-                  const isUas = ex.examCategory === 'SEMESTER_UAS' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
+                  const isUas = resolveExamCat(ex) !== 'REGULAR' || ex.isCoordinatorExam || Boolean(ex.targetGradeLevel);
                   const examDateStr = ex.scheduledDate || (ex.startDateTime ? ex.startDateTime.split('T')[0] : '');
 
                   return (
@@ -3944,17 +4045,7 @@ export default function TeacherExamsManagementPage() {
                       <td className="py-3.5 px-4 max-w-75">
                         <div className="space-y-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            {isUas ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-primary-50 text-primary-700 border border-primary-200 whitespace-nowrap">
-                                <AppIcon name="medal" color="blue" size={11} />
-                                <span>ASAS TK. {ex.targetGradeLevel || '7'}</span>
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-neutral-100 text-neutral-600 border border-neutral-200 whitespace-nowrap">
-                                <AppIcon name="course" color="grey" size={11} />
-                                <span>Reguler</span>
-                              </span>
-                            )}
+                            {renderCategoryBadge(ex, true)}
                             <span className="text-xs font-bold text-primary-700 whitespace-nowrap">{ex.subject}</span>
                             <span className="text-neutral-300">•</span>
                             <span className="text-[11px] text-neutral-600 font-medium whitespace-nowrap">

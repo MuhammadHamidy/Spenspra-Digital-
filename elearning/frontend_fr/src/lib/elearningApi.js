@@ -372,10 +372,14 @@ export function mapExamItem(e) {
   const isAsasByToken = token.startsWith('ASAS');
   const isAsasByClass = /tingkat|semua rombel|semua kelas/i.test(className);
   const isAsasByTitle = /asas|asesmen akhir|sumatif akhir|semester/i.test(title);
+  const catTagMatch = rawDesc.match(/\[CAT:(SEMESTER_UAS|SEMESTER_UTS|TKA|REGULAR)\]/i);
+  const explicitCat = String(
+    catTagMatch?.[1] || e.examCategory || e.exam_category || ''
+  ).toUpperCase();
+
   const isUas = Boolean(
+    ['SEMESTER_UAS', 'SEMESTER_UTS', 'TKA'].includes(explicitCat) ||
     asasTagMatch ||
-    e.examCategory === 'SEMESTER_UAS' ||
-    e.exam_category === 'SEMESTER_UAS' ||
     e.isUAS ||
     e.targetGradeLevel ||
     e.target_grade_level ||
@@ -383,6 +387,19 @@ export function mapExamItem(e) {
     isAsasByClass ||
     (isAsasByTitle && !className.match(/^[789][A-H]$/i))
   );
+
+  // Tentukan kategori spesifik: SEMESTER_UAS | SEMESTER_UTS | TKA | REGULAR
+  let resolvedCategory = 'REGULAR';
+  if (['SEMESTER_UAS', 'SEMESTER_UTS', 'TKA', 'REGULAR'].includes(explicitCat)) {
+    resolvedCategory = explicitCat;
+  } else if (/\btka\b/i.test(title) || /\btka\b/i.test(token)) {
+    resolvedCategory = 'TKA';
+  } else if (/\b(asts|uts|pts|sts)\b/i.test(title) || /\b(asts|uts|pts)\b/i.test(token)) {
+    resolvedCategory = 'SEMESTER_UTS';
+  } else if (isUas) {
+    resolvedCategory = 'SEMESTER_UAS';
+  }
+  const isCoordinator = ['SEMESTER_UAS', 'SEMESTER_UTS', 'TKA'].includes(resolvedCategory) || isUas;
 
   // Determine targetGradeLevel (7, 8, or 9)
   let gradeLevel = '';
@@ -394,7 +411,7 @@ export function mapExamItem(e) {
     const extracted = extractGradeLevelDigit(className) || extractGradeLevelDigit(title);
     if (extracted) {
       gradeLevel = extracted;
-    } else if (isUas) {
+    } else if (isCoordinator) {
       gradeLevel = '7';
     }
   }
@@ -416,6 +433,7 @@ export function mapExamItem(e) {
 
   // Clean description without tags for display
   const cleanDesc = rawDesc
+    .replace(/\[CAT:(?:SEMESTER_UAS|SEMESTER_UTS|TKA|REGULAR)\]/gi, '')
     .replace(/\[ASAS:\d+\]/gi, '')
     .replace(/\[PIN:[A-Z0-9]+\]/gi, '')
     .replace(/\[SCORE:[01]\]/gi, '')
@@ -442,10 +460,10 @@ export function mapExamItem(e) {
     status: e.status || 'UPCOMING',
     description: cleanDesc || rawDesc,
     rawDescription: rawDesc,
-    examCategory: isUas ? 'SEMESTER_UAS' : 'REGULAR',
-    targetGradeLevel: isUas ? (gradeLevel || '7') : '',
+    examCategory: resolvedCategory,
+    targetGradeLevel: isCoordinator ? (gradeLevel || '7') : '',
     targetClasses: Array.isArray(e.targetClasses) ? e.targetClasses : (Array.isArray(e.target_classes) ? e.target_classes : []),
-    isCoordinatorExam: isUas,
+    isCoordinatorExam: isCoordinator,
     supervisorPin: pin,
     showScoreToStudent,
     show_score_to_student: showScoreToStudent,
@@ -679,20 +697,24 @@ export const elearningApi = {
     const currentUser = tokenStorage.getUser();
     const currentTeacherId = payload.teacherId || payload.teacher_id || currentUser?.id || currentUser?.nimNip || currentUser?.nip || currentUser?.username || '';
     const currentTeacherName = payload.teacherName || payload.teacher_name || currentUser?.fullName || currentUser?.full_name || currentUser?.name || 'Bapak/Ibu Guru';
-    const isUas = payload.examCategory === 'SEMESTER_UAS' || Boolean(payload.targetGradeLevel) || Boolean(payload.isCoordinatorExam);
+    const rawCat = String(payload.examCategory || payload.exam_category || '').toUpperCase();
+    const isCoordCat = ['SEMESTER_UAS', 'SEMESTER_UTS', 'TKA'].includes(rawCat);
+    const isUas = isCoordCat || Boolean(payload.targetGradeLevel) || Boolean(payload.isCoordinatorExam);
+    const resolvedCategory = isCoordCat ? rawCat : (isUas ? 'SEMESTER_UAS' : 'REGULAR');
     const generatedPin = payload.supervisorPin || (isUas ? generateRandomPin(6) : '');
     const showScore = payload.showScoreToStudent !== false ? 1 : 0;
     const showAnswers = payload.showAnswersToStudent ? 1 : 0;
 
     let desc = payload.description || '';
     desc = desc
+      .replace(/\[CAT:(?:SEMESTER_UAS|SEMESTER_UTS|TKA|REGULAR)\]/gi, '')
       .replace(/\[ASAS:\d+\]/gi, '')
       .replace(/\[PIN:[A-Z0-9]+\]/gi, '')
       .replace(/\[SCORE:[01]\]/gi, '')
       .replace(/\[ANSWERS:[01]\]/gi, '')
       .trim();
 
-    let tags = `[SCORE:${showScore}][ANSWERS:${showAnswers}]`;
+    let tags = `[CAT:${resolvedCategory}][SCORE:${showScore}][ANSWERS:${showAnswers}]`;
     if (isUas) {
       const lvl = payload.targetGradeLevel || '7';
       tags = `[ASAS:${lvl}]${generatedPin ? `[PIN:${generatedPin}]` : ''}${tags}`;
@@ -711,7 +733,8 @@ export const elearningApi = {
       teacherName: currentTeacherName,
       teacher_name: currentTeacherName,
       token: (payload.token || '').toUpperCase(),
-      exam_category: isUas ? 'SEMESTER_UAS' : 'REGULAR',
+      examCategory: resolvedCategory,
+      exam_category: resolvedCategory,
       target_grade_level: isUas ? (payload.targetGradeLevel || '7') : '',
       target_classes: payload.targetClasses || [],
       is_coordinator_exam: isUas,
@@ -744,19 +767,23 @@ export const elearningApi = {
   },
 
   updateExam: async (id, payload) => {
-    const isUas = payload.examCategory === 'SEMESTER_UAS' || Boolean(payload.targetGradeLevel) || Boolean(payload.isCoordinatorExam);
+    const rawCat = String(payload.examCategory || payload.exam_category || '').toUpperCase();
+    const isCoordCat = ['SEMESTER_UAS', 'SEMESTER_UTS', 'TKA'].includes(rawCat);
+    const isUas = isCoordCat || Boolean(payload.targetGradeLevel) || Boolean(payload.isCoordinatorExam);
+    const resolvedCategory = isCoordCat ? rawCat : (isUas ? 'SEMESTER_UAS' : 'REGULAR');
     const showScore = payload.showScoreToStudent !== undefined ? (payload.showScoreToStudent ? 1 : 0) : 1;
     const showAnswers = payload.showAnswersToStudent !== undefined ? (payload.showAnswersToStudent ? 1 : 0) : 0;
 
     let desc = payload.description || '';
     desc = desc
+      .replace(/\[CAT:(?:SEMESTER_UAS|SEMESTER_UTS|TKA|REGULAR)\]/gi, '')
       .replace(/\[ASAS:\d+\]/gi, '')
       .replace(/\[PIN:[A-Z0-9]+\]/gi, '')
       .replace(/\[SCORE:[01]\]/gi, '')
       .replace(/\[ANSWERS:[01]\]/gi, '')
       .trim();
 
-    let tags = `[SCORE:${showScore}][ANSWERS:${showAnswers}]`;
+    let tags = `[CAT:${resolvedCategory}][SCORE:${showScore}][ANSWERS:${showAnswers}]`;
     if (isUas) {
       const lvl = payload.targetGradeLevel || '7';
       const pin = payload.supervisorPin || '';
@@ -779,7 +806,8 @@ export const elearningApi = {
       ...(payload.teacherName ? { teacher_name: payload.teacherName } : {}),
       ...(payload.teacherId ? { teacher_id: payload.teacherId } : {}),
       ...(payload.token ? { token: payload.token.toUpperCase() } : {}),
-      exam_category: isUas ? 'SEMESTER_UAS' : 'REGULAR',
+      examCategory: resolvedCategory,
+      exam_category: resolvedCategory,
       target_grade_level: isUas ? (payload.targetGradeLevel || '7') : '',
       supervisor_pin: isUas ? String(payload.supervisorPin || '').toUpperCase() : '',
       is_coordinator_exam: isUas,
