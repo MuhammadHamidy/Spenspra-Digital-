@@ -72,10 +72,7 @@ func NewAuthorizationMiddleware(idp idp.IDPProvider, db *pgxpool.Pool, cache red
 		}
 	}
 
-	mw.jwtSecret = os.Getenv("JWT_SECRET")
-	if mw.jwtSecret == "" {
-		mw.jwtSecret = "absensi-fr-secret-key-2026"
-	}
+	mw.jwtSecret = strings.TrimSpace(os.Getenv("JWT_SECRET"))
 
 	return mw
 }
@@ -113,6 +110,9 @@ func (a *AuthorizationMiddleware) Authenticate(scopes ...string) fiber.Handler {
 				return nil, errors.New("kunci publik RSA belum terkonfigurasi")
 			}
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); ok {
+				if a.jwtSecret == "" {
+					return nil, errors.New("verifikasi HS256 dinonaktifkan: JWT_SECRET belum dikonfigurasi")
+				}
 				return []byte(a.jwtSecret), nil
 			}
 			return nil, fmt.Errorf("algoritma signing tidak didukung: %v", t.Header["alg"])

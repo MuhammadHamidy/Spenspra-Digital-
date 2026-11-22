@@ -5,6 +5,8 @@ package fiber
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/goccy/go-json"
@@ -96,10 +98,33 @@ func NewFiber(cfg *Config) *fiber.App {
 	if corsOrigins == "*" {
 		corsOrigins = ""
 	}
+	explicitOrigins := make(map[string]bool)
+	for _, o := range strings.Split(corsOrigins, ",") {
+		if trimmed := strings.TrimSpace(strings.ToLower(o)); trimmed != "" {
+			explicitOrigins[trimmed] = true
+		}
+	}
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: corsOrigins,
 		AllowOriginsFunc: func(origin string) bool {
-			return true
+			if origin == "" {
+				return true
+			}
+			lower := strings.ToLower(strings.TrimSpace(origin))
+			if explicitOrigins[lower] {
+				return true
+			}
+			parsed, err := url.Parse(lower)
+			if err != nil {
+				return false
+			}
+			host := parsed.Hostname()
+			return host == "spenspra.com" ||
+				strings.HasSuffix(host, ".spenspra.com") ||
+				host == "spenspra.sch.id" ||
+				strings.HasSuffix(host, ".spenspra.sch.id") ||
+				host == "localhost" ||
+				host == "127.0.0.1" ||
+				strings.HasSuffix(host, ".localhost")
 		},
 		AllowCredentials: true,
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-User-Id, X-User-Role, X-User-Name, X-Institution-Id, X-Requested-With",

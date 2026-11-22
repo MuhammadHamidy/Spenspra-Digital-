@@ -1570,14 +1570,13 @@ export default function LiveProctoringMonitoringPage() {
           </div>
 
           <div className="flex items-center gap-2.5">
-            <Button
-              variant="outline"
-              size="md"
+            <button
+              type="button"
               onClick={() => setActiveStudentAnswers(null)}
-              className="cursor-pointer text-xs font-bold text-white border-neutral-600 hover:bg-neutral-800"
+              className="px-4 py-2.5 rounded-full cursor-pointer text-xs font-bold text-white bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 transition-colors whitespace-nowrap"
             >
               Kembali
-            </Button>
+            </button>
             <Button
               variant="primary"
               size="md"

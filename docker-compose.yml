@@ -63,8 +63,9 @@ services:
       APP_PORT: 8080
       APP_POSTGRES_URL: postgres://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${SSO_DB_NAME:-presdig_sso}?sslmode=disable
       APP_REDIS_ADDRESS: redis:6379
-      APP_REDIS_PASSWORD: ""
+      APP_REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
       APP_REDIS_DB: 0
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env.docker}
       APP_LOG_LEVEL: info
       APP_LOG_FORMAT: json
       APP_SERVICE_NAME: sso
@@ -122,7 +123,7 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
       APP_PORTAL_URL: ${APP_PORTAL_URL:-https://sso.spenspra.com/login}
     ports:
-      - "${SSO_PORT:-3000}:3000"
+      - "127.0.0.1:${SSO_PORT:-3000}:3000"
     command: ["node", "server.js"]
     depends_on: [sso-api]
     deploy:
@@ -170,8 +171,9 @@ services:
       APP_PORT: 8080
       APP_POSTGRES_URL: postgres://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${RAPOR_DB_NAME:-presdig_rapor}?sslmode=disable
       APP_REDIS_ADDRESS: redis:6379
-      APP_REDIS_PASSWORD: ""
+      APP_REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
       APP_REDIS_DB: 1
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env.docker}
       APP_LOG_LEVEL: info
       APP_LOG_FORMAT: json
       APP_SERVICE_NAME: rapor
@@ -217,7 +219,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env.docker}
       WA_API_KEY: ${WA_API_KEY:-}
     ports:
-      - "${RAPOR_PORT:-3001}:3000"
+      - "127.0.0.1:${RAPOR_PORT:-3001}:3000"
     command: ["node", "server.js"]
     depends_on: [rapor-api]
     deploy:
@@ -265,8 +267,9 @@ services:
       APP_PORT: 8080
       APP_POSTGRES_URL: postgres://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${PERPUS_DB_NAME:-perpusdig}?sslmode=disable
       APP_REDIS_ADDRESS: redis:6379
-      APP_REDIS_PASSWORD: ""
+      APP_REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
       APP_REDIS_DB: 2
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env.docker}
       APP_LOG_LEVEL: info
       APP_LOG_FORMAT: json
       APP_SERVICE_NAME: perpus
@@ -312,7 +315,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env.docker}
       WA_API_KEY: ${WA_API_KEY:-}
     ports:
-      - "${PERPUS_PORT:-3002}:3000"
+      - "127.0.0.1:${PERPUS_PORT:-3002}:3000"
     command: ["node", "server.js"]
     depends_on:
       perpus-api:
@@ -362,15 +365,16 @@ services:
       APP_PORT: 8080
       APP_POSTGRES_URL: postgres://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${ELEARNING_DB_NAME:-presdig_elearning}?sslmode=disable
       APP_REDIS_ADDRESS: redis:6379
-      APP_REDIS_PASSWORD: ""
+      APP_REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
       APP_REDIS_DB: 3
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env.docker}
       APP_LOG_LEVEL: info
       APP_LOG_FORMAT: json
       APP_SERVICE_NAME: elearning
       SSO_API_URL: http://sso-api:8080
       JWT_PUBLIC_KEY_PATH: /keys/jwt_public.pem
     ports:
-      - "${ELEARNING_API_PORT:-8084}:8080"
+      - "127.0.0.1:${ELEARNING_API_PORT:-8084}:8080"
     volumes:
       - ./shared/keys/jwt_public.pem:/keys/jwt_public.pem:ro
     depends_on:
@@ -406,7 +410,7 @@ services:
       DATABASE_URL: postgresql://${DB_USER:-user}:${DB_PASSWORD:-change-me}@postgres:5432/${ELEARNING_DB_NAME:-presdig_elearning}?schema=public
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env.docker}
     ports:
-      - "${ELEARNING_PORT:-3004}:3000"
+      - "127.0.0.1:${ELEARNING_PORT:-3004}:3000"
     command: ["node", "server.js"]
     depends_on:
       elearning-api:
@@ -421,11 +425,16 @@ services:
   redis:
     image: redis:7-alpine
     container_name: spenspra-redis
-    command: redis-server --appendonly yes --maxmemory 96mb --maxmemory-policy allkeys-lru
+    command:
+      - "sh"
+      - "-c"
+      - 'if [ -n "$$REDIS_PASSWORD" ]; then exec redis-server --appendonly yes --maxmemory 96mb --maxmemory-policy allkeys-lru --requirepass "$$REDIS_PASSWORD"; else exec redis-server --appendonly yes --maxmemory 96mb --maxmemory-policy allkeys-lru; fi'
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", 'if [ -n "$$REDIS_PASSWORD" ]; then redis-cli -a "$$REDIS_PASSWORD" ping; else redis-cli ping; fi']
       interval: 5s
       timeout: 3s
       retries: 20

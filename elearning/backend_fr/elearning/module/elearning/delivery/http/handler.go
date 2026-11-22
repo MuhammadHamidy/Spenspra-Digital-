@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/rapor/rapor-be/libraries/middleware"
 	"github.com/rapor/rapor-be/libraries/responses"
 	"github.com/rapor/rapor-be/rapor/module/elearning/domain"
 )
@@ -17,11 +18,24 @@ type ELearningHandler struct {
 }
 
 func actorID(c *fiber.Ctx) string {
+	if v, ok := c.Locals(middleware.XUserIdKey).(string); ok && strings.TrimSpace(v) != "" {
+		return strings.TrimSpace(v)
+	}
 	return strings.TrimSpace(c.Get("X-User-Id"))
 }
 
 func actorRole(c *fiber.Ctx) string {
+	if v, ok := c.Locals("user_role").(string); ok && strings.TrimSpace(v) != "" {
+		return strings.ToUpper(strings.TrimSpace(v))
+	}
 	return strings.ToUpper(strings.TrimSpace(c.Get("X-User-Role")))
+}
+
+func actorName(c *fiber.Ctx) string {
+	if v, ok := c.Locals("full_name").(string); ok && strings.TrimSpace(v) != "" {
+		return strings.TrimSpace(v)
+	}
+	return strings.TrimSpace(c.Get("X-User-Name"))
 }
 
 func isTeacherRole(role string) bool {
@@ -84,8 +98,13 @@ func NewELearningHandler(useCase domain.UseCase) *ELearningHandler {
 	return &ELearningHandler{useCase: useCase}
 }
 
-func (h *ELearningHandler) RegisterRoutes(app *fiber.App) {
-	api := app.Group("/api")
+func (h *ELearningHandler) RegisterRoutes(app *fiber.App, authMiddleware *middleware.AuthorizationMiddleware) {
+	var api fiber.Router
+	if authMiddleware != nil {
+		api = app.Group("/api", authMiddleware.Authenticate())
+	} else {
+		api = app.Group("/api")
+	}
 
 	// 1. Materials
 	api.Get("/materials", h.ListMaterials)
