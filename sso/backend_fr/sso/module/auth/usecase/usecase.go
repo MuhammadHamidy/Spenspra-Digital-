@@ -200,17 +200,29 @@ func (u *useCase) Login(ctx context.Context, req domain.LoginRequest) (*domain.L
 	_, _ = rand.Read(tokenIDBytes)
 	jti := hex.EncodeToString(tokenIDBytes)
 
-	// Audience claim: tentukan aplikasi yang diizinkan untuk akun ini berdasarkan perannya
+	// Audience claim ketat berdasarkan matriks hak akses peran
 	var aud []string
-	switch account.RoleName {
-	case "SUPER_ADMIN", "ADMIN", "KEPALA_SEKOLAH":
-		aud = []string{"sso", "erapor", "perpus", "elearning"}
-	case "ADMIN_RAPOR", "ADMIN_PERPUS", "ADMIN_ABSENSI", "PROKTOR", "ADMIN_PROKTOR", "KOORDINATOR_UAS", "GURU", "WALI_KELAS", "TENAGA_KEPENDIDIKAN":
-		aud = []string{"sso", "erapor", "perpus", "elearning"}
-	case "SISWA":
+	switch strings.ToUpper(strings.TrimSpace(account.RoleName)) {
+	case "SUPER_ADMIN", "ADMIN":
+		// Super Admin hanya mengelola Portal SSO Pusat (tidak masuk ke aplikasi satelit)
+		aud = []string{"sso"}
+	case "ADMIN_RAPOR":
+		aud = []string{"sso", "erapor"}
+	case "ADMIN_PERPUS", "PUSTAKAWAN":
+		aud = []string{"sso", "perpus"}
+	case "PROKTOR", "ADMIN_PROKTOR":
+		aud = []string{"sso", "elearning"}
+	case "GURU_PROKTOR", "KOORDINATOR_UAS":
+		// Akses ganda: Guru pengampu + Proktor/Koordinator CBT di Spenspra Belajar
+		aud = []string{"sso", "elearning", "erapor", "perpus"}
+	case "KEPALA_SEKOLAH":
+		// Kepala Sekolah: mode pantau di e-Rapor & e-Perpus
+		aud = []string{"sso", "erapor", "perpus"}
+	case "GURU", "WALI_KELAS", "TENAGA_KEPENDIDIKAN", "SISWA":
 		aud = []string{"sso", "erapor", "perpus", "elearning"}
 	default:
-		aud = []string{"sso", "erapor", "perpus", "elearning"}
+		// Fail-closed: peran tak dikenal hanya mendapat akses SSO dasar
+		aud = []string{"sso"}
 	}
 
 	expiresAt := time.Now().Add(7 * 24 * time.Hour)

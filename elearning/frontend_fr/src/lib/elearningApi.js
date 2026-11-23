@@ -367,6 +367,8 @@ export function mapExamItem(e) {
   const pinTagMatch = rawDesc.match(/\[PIN:([A-Z0-9]+)\]/i);
   const scoreTagMatch = rawDesc.match(/\[SCORE:([01])\]/i);
   const answersTagMatch = rawDesc.match(/\[ANSWERS:([01])\]/i);
+  const shuffleQTagMatch = rawDesc.match(/\[SHUFFLE_Q:([01])\]/i);
+  const shuffleOptTagMatch = rawDesc.match(/\[SHUFFLE_OPT:([01])\]/i);
 
   // Detect whether it's UAS / ASAS Semester
   const isAsasByToken = token.startsWith('ASAS');
@@ -431,6 +433,14 @@ export function mapExamItem(e) {
     ? answersTagMatch[1] === '1'
     : (e.showAnswersToStudent !== undefined ? Boolean(e.showAnswersToStudent) : false);
 
+  const shuffleQuestions = shuffleQTagMatch
+    ? shuffleQTagMatch[1] === '1'
+    : Boolean(e.shuffleQuestions ?? e.shuffle_questions ?? false);
+
+  const shuffleOptions = shuffleOptTagMatch
+    ? shuffleOptTagMatch[1] === '1'
+    : Boolean(e.shuffleOptions ?? e.shuffle_options ?? false);
+
   // Clean description without tags for display
   const cleanDesc = rawDesc
     .replace(/\[CAT:(?:SEMESTER_UAS|SEMESTER_UTS|TKA|REGULAR)\]/gi, '')
@@ -438,6 +448,8 @@ export function mapExamItem(e) {
     .replace(/\[PIN:[A-Z0-9]+\]/gi, '')
     .replace(/\[SCORE:[01]\]/gi, '')
     .replace(/\[ANSWERS:[01]\]/gi, '')
+    .replace(/\[SHUFFLE_Q:[01]\]/gi, '')
+    .replace(/\[SHUFFLE_OPT:[01]\]/gi, '')
     .trim();
 
   return {
@@ -469,6 +481,10 @@ export function mapExamItem(e) {
     show_score_to_student: showScoreToStudent,
     showAnswersToStudent,
     show_answers_to_student: showAnswersToStudent,
+    shuffleQuestions,
+    shuffle_questions: shuffleQuestions,
+    shuffleOptions,
+    shuffle_options: shuffleOptions,
   };
 }
 
@@ -704,6 +720,8 @@ export const elearningApi = {
     const generatedPin = payload.supervisorPin || (isUas ? generateRandomPin(6) : '');
     const showScore = payload.showScoreToStudent !== false ? 1 : 0;
     const showAnswers = payload.showAnswersToStudent ? 1 : 0;
+    const shuffleQ = payload.shuffleQuestions ? 1 : 0;
+    const shuffleOpt = payload.shuffleOptions ? 1 : 0;
 
     let desc = payload.description || '';
     desc = desc
@@ -712,9 +730,11 @@ export const elearningApi = {
       .replace(/\[PIN:[A-Z0-9]+\]/gi, '')
       .replace(/\[SCORE:[01]\]/gi, '')
       .replace(/\[ANSWERS:[01]\]/gi, '')
+      .replace(/\[SHUFFLE_Q:[01]\]/gi, '')
+      .replace(/\[SHUFFLE_OPT:[01]\]/gi, '')
       .trim();
 
-    let tags = `[CAT:${resolvedCategory}][SCORE:${showScore}][ANSWERS:${showAnswers}]`;
+    let tags = `[CAT:${resolvedCategory}][SCORE:${showScore}][ANSWERS:${showAnswers}][SHUFFLE_Q:${shuffleQ}][SHUFFLE_OPT:${shuffleOpt}]`;
     if (isUas) {
       const lvl = payload.targetGradeLevel || '7';
       tags = `[ASAS:${lvl}]${generatedPin ? `[PIN:${generatedPin}]` : ''}${tags}`;
@@ -773,6 +793,8 @@ export const elearningApi = {
     const resolvedCategory = isCoordCat ? rawCat : (isUas ? 'SEMESTER_UAS' : 'REGULAR');
     const showScore = payload.showScoreToStudent !== undefined ? (payload.showScoreToStudent ? 1 : 0) : 1;
     const showAnswers = payload.showAnswersToStudent !== undefined ? (payload.showAnswersToStudent ? 1 : 0) : 0;
+    const shuffleQ = payload.shuffleQuestions ? 1 : 0;
+    const shuffleOpt = payload.shuffleOptions ? 1 : 0;
 
     let desc = payload.description || '';
     desc = desc
@@ -781,9 +803,11 @@ export const elearningApi = {
       .replace(/\[PIN:[A-Z0-9]+\]/gi, '')
       .replace(/\[SCORE:[01]\]/gi, '')
       .replace(/\[ANSWERS:[01]\]/gi, '')
+      .replace(/\[SHUFFLE_Q:[01]\]/gi, '')
+      .replace(/\[SHUFFLE_OPT:[01]\]/gi, '')
       .trim();
 
-    let tags = `[CAT:${resolvedCategory}][SCORE:${showScore}][ANSWERS:${showAnswers}]`;
+    let tags = `[CAT:${resolvedCategory}][SCORE:${showScore}][ANSWERS:${showAnswers}][SHUFFLE_Q:${shuffleQ}][SHUFFLE_OPT:${shuffleOpt}]`;
     if (isUas) {
       const lvl = payload.targetGradeLevel || '7';
       const pin = payload.supervisorPin || '';

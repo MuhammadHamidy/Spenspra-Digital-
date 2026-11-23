@@ -266,14 +266,14 @@ export default function SuperAdminDashboard() {
                   </p>
                 </div>
                 <div className="mt-4 pt-3 border-t border-neutral-200 flex items-center justify-between gap-2">
-                  <span className="text-[10px] text-neutral-400 font-mono truncate">Port :3004</span>
-                  <a
-                    href={getBelajarLaunchUrl()}
-                    className="shrink-0 whitespace-nowrap text-xs font-bold text-success-500 hover:text-success-800 inline-flex items-center gap-1 cursor-pointer"
+                  <span className="text-[10px] text-neutral-400 font-mono truncate">Khusus Guru / Proktor / Siswa</span>
+                  <Link
+                    href="/admin/app-access"
+                    className="shrink-0 whitespace-nowrap text-xs font-bold text-success-600 hover:text-success-800 inline-flex items-center gap-1 cursor-pointer"
                   >
-                    <span>Buka</span>
-                    <span aria-hidden="true">↗</span>
-                  </a>
+                    <span>Atur Akses</span>
+                    <span aria-hidden="true">→</span>
+                  </Link>
                 </div>
               </div>
 
@@ -293,14 +293,14 @@ export default function SuperAdminDashboard() {
                   </p>
                 </div>
                 <div className="mt-4 pt-3 border-t border-neutral-200 flex items-center justify-between gap-2">
-                  <span className="text-[10px] text-neutral-400 font-mono truncate">Port :3001</span>
-                  <a
-                    href={getRaporLaunchUrl()}
+                  <span className="text-[10px] text-neutral-400 font-mono truncate">Khusus Admin Rapor / Guru / Kepsek</span>
+                  <Link
+                    href="/admin/app-access"
                     className="shrink-0 whitespace-nowrap text-xs font-bold text-primary-500 hover:text-primary-700 inline-flex items-center gap-1 cursor-pointer"
                   >
-                    <span>Buka</span>
-                    <span aria-hidden="true">↗</span>
-                  </a>
+                    <span>Atur Akses</span>
+                    <span aria-hidden="true">→</span>
+                  </Link>
                 </div>
               </div>
 
@@ -320,14 +320,14 @@ export default function SuperAdminDashboard() {
                   </p>
                 </div>
                 <div className="mt-4 pt-3 border-t border-neutral-200 flex items-center justify-between gap-2">
-                  <span className="text-[10px] text-neutral-400 font-mono truncate">Port :3002</span>
-                  <a
-                    href={getPerpusLaunchUrl()}
+                  <span className="text-[10px] text-neutral-400 font-mono truncate">Khusus Pustakawan / Guru / Siswa</span>
+                  <Link
+                    href="/admin/app-access"
                     className="shrink-0 whitespace-nowrap text-xs font-bold text-secondary-500 hover:text-secondary-700 inline-flex items-center gap-1 cursor-pointer"
                   >
-                    <span>Buka</span>
-                    <span aria-hidden="true">↗</span>
-                  </a>
+                    <span>Atur Akses</span>
+                    <span aria-hidden="true">→</span>
+                  </Link>
                 </div>
               </div>
 

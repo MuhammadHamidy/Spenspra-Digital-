@@ -81,6 +81,25 @@ const publicApplications = [
       </svg>
     ),
   },
+  {
+    name: 'e-Rapor Kemdikbud',
+    badge: 'Akses Langsung',
+    description: 'Portal resmi e-Rapor SMPN 1 Prambon (erapor.spenspra.com). Dapat diakses langsung tanpa melalui login SSO.',
+    features: ['Tanpa Login SSO', 'erapor.spenspra.com', 'Rapor Resmi'],
+    key: 'erapor_external',
+    directUrl: 'https://erapor.spenspra.com',
+    theme: {
+      badge: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+      iconBg: 'bg-emerald-50 text-emerald-600 border-emerald-300/60',
+      hoverBorder: 'hover:border-emerald-500/60',
+      btn: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+    },
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+      </svg>
+    ),
+  },
 ];
 
 function PublicApplicationPortal() {
@@ -134,12 +153,13 @@ function PublicApplicationPortal() {
           </p>
         </section>
 
-        {/* 4 System Cards Grid */}
-        <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4" aria-label="Daftar aplikasi">
+        {/* 5 System Cards Grid */}
+        <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5" aria-label="Daftar aplikasi">
           {publicApplications.map((app) => (
             <a
               key={app.key}
-              href={`/login?app=${encodeURIComponent(app.key)}`}
+              href={app.directUrl || `/login?app=${encodeURIComponent(app.key)}`}
+              {...(app.directUrl ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
               className={`group rounded-2xl border border-neutral-300 bg-white p-5 shadow-2xs transition-all duration-200 flex flex-col justify-between ${app.theme.hoverBorder} hover:shadow-md`}
             >
               <div className="space-y-4">
@@ -171,8 +191,8 @@ function PublicApplicationPortal() {
               </div>
 
               <div className="mt-6 pt-3.5 border-t border-neutral-100 flex items-center justify-between text-xs font-bold text-primary-500 group-hover:text-primary-700">
-                <span>Masuk Layanan</span>
-                <span className="transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
+                <span>{app.directUrl ? 'Buka Langsung' : 'Masuk Layanan'}</span>
+                <span className="transition-transform group-hover:translate-x-1" aria-hidden="true">{app.directUrl ? '↗' : '→'}</span>
               </div>
             </a>
           ))}

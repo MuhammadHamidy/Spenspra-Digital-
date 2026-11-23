@@ -110,11 +110,33 @@ function LoginForm() {
       const encodedUser = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(userPayload)))) : '';
       const token = res?.token || '';
 
-      const isProctor = ['PROKTOR', 'ADMIN_PROKTOR', 'KOORDINATOR_UAS'].includes(roleName);
-      const isEducator = isProctor || ['GURU', 'WALI_KELAS', 'PENDIDIK', 'KEPALA_SEKOLAH', 'TENDIK'].includes(roleName);
+      const isProctor = ['PROKTOR', 'ADMIN_PROKTOR', 'KOORDINATOR_UAS', 'GURU_PROKTOR'].includes(roleName);
+      const isDualGuruProctor = ['GURU_PROKTOR', 'KOORDINATOR_UAS'].includes(roleName);
+      const isKepalaSekolah = roleName === 'KEPALA_SEKOLAH';
+      const isEducator = isProctor || ['GURU', 'WALI_KELAS', 'PENDIDIK', 'KEPALA_SEKOLAH', 'TENDIK', 'TENAGA_KEPENDIDIKAN'].includes(roleName);
 
-      // 1. SUPER_ADMIN: Selalu wajib masuk ke Dashboard Super Admin Pusat
+      // Matriks izin akses aplikasi per peran
+      const canAccessApp = (appKey) => {
+        if (roleName === 'SUPER_ADMIN' || roleName === 'SUPER-ADMIN') return false;
+        if (appKey === 'rapor') {
+          return ['ADMIN_RAPOR', 'GURU', 'WALI_KELAS', 'GURU_PROKTOR', 'KOORDINATOR_UAS', 'KEPALA_SEKOLAH', 'SISWA', 'TENAGA_KEPENDIDIKAN'].includes(roleName);
+        }
+        if (appKey === 'elearning') {
+          return ['PROKTOR', 'ADMIN_PROKTOR', 'GURU_PROKTOR', 'KOORDINATOR_UAS', 'GURU', 'WALI_KELAS', 'SISWA', 'TENAGA_KEPENDIDIKAN'].includes(roleName);
+        }
+        if (appKey === 'perpus') {
+          return ['ADMIN_PERPUS', 'PUSTAKAWAN', 'GURU', 'WALI_KELAS', 'GURU_PROKTOR', 'KOORDINATOR_UAS', 'KEPALA_SEKOLAH', 'SISWA', 'TENAGA_KEPENDIDIKAN'].includes(roleName);
+        }
+        return true;
+      };
+
+      // 1. SUPER_ADMIN: Selalu wajib masuk ke Dashboard Super Admin Pusat (tidak bisa masuk ke aplikasi satelit)
       if (roleName === 'SUPER_ADMIN' || roleName === 'SUPER-ADMIN') {
+        if (requestedApp && ['rapor', 'erapor', 'elearning', 'belajar', 'perpus', 'perpusdig'].some((k) => requestedApp.includes(k))) {
+          setError('Akun Super Admin hanya memiliki akses ke Portal SSO Pusat dan tidak dapat masuk ke aplikasi satelit.');
+          setLoading(false);
+          return;
+        }
         window.location.href = '/superadmin';
         return;
       }
@@ -147,8 +169,19 @@ function LoginForm() {
       if (requestedApp) {
         // A. e-Rapor Spenspra
         if (['rapor', 'erapor', 'e-rapor'].some((k) => requestedApp.includes(k))) {
+          if (!canAccessApp('rapor')) {
+            setError(`Akun dengan peran ${roleName} tidak memiliki hak akses ke layanan e-Rapor.`);
+            setLoading(false);
+            return;
+          }
           const raporBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_RAPOR_URL, 'rapor');
-          const raporRole = isEducator ? (roleName === 'WALI_KELAS' ? 'WALI_KELAS' : 'GURU') : 'SISWA';
+          const raporRole = roleName === 'ADMIN_RAPOR'
+            ? 'ADMIN_RAPOR'
+            : isKepalaSekolah
+              ? 'KEPALA_SEKOLAH'
+              : (isEducator || isDualGuruProctor)
+                ? (roleName === 'WALI_KELAS' ? 'WALI_KELAS' : 'GURU')
+                : 'SISWA';
           const rPayload = { ...userPayload, roleName: raporRole, peran: raporRole };
           const rEncoded = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(JSON.stringify(rPayload)))) : '';
           window.location.href = `${raporBaseUrl}/sso/callback?access_token=${encodeURIComponent(token)}&institution_id=smpn1prambon&sub=${encodeURIComponent(user?.id || '')}&user=${rEncoded}`;
@@ -157,6 +190,11 @@ function LoginForm() {
 
         // B. Spenspra Belajar (LMS & CBT e-Ujian)
         if (['elearning', 'belajar', 'lms', 'cbt', 'ujian'].some((k) => requestedApp.includes(k))) {
+          if (!canAccessApp('elearning')) {
+            setError(`Akun dengan peran ${roleName} tidak memiliki hak akses ke layanan Spenspra Belajar.`);
+            setLoading(false);
+            return;
+          }
           const belajarBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_ELEARNING_URL || process.env.NEXT_PUBLIC_BELAJAR_URL, 'belajar');
           const belajarRole = isProctor ? roleName : (isEducator ? 'GURU' : 'SISWA');
           const bPayload = { ...userPayload, roleName: belajarRole, peran: belajarRole };
@@ -167,16 +205,22 @@ function LoginForm() {
 
         // C. e-Perpustakaan
         if (['perpus', 'perpusdig', 'perpustakaan', 'pustaka'].some((k) => requestedApp.includes(k))) {
+          if (!canAccessApp('perpus')) {
+            setError(`Akun dengan peran ${roleName} tidak memiliki hak akses ke layanan e-Perpustakaan.`);
+            setLoading(false);
+            return;
+          }
           const perpusBaseUrl = getDynamicAppUrl(process.env.NEXT_PUBLIC_PERPUS_URL, 'perpus');
           const isLibrarian = ['ADMIN_PERPUS', 'PUSTAKAWAN'].includes(roleName);
           const destination = isLibrarian ? '/pustakawan' : '/';
+          const perpusRole = isLibrarian ? 'ADMIN_PERPUS' : (isKepalaSekolah ? 'KEPALA_SEKOLAH' : (isEducator ? 'GURU' : 'SISWA'));
           const pPayload = {
             id: user?.id || user?.person_id || '',
             username: user?.username || '',
             fullName: user?.fullName || user?.full_name || user?.name || '',
-            roleName: isLibrarian ? 'ADMIN_PERPUS' : (isEducator ? 'GURU' : 'SISWA'),
+            roleName: perpusRole,
             nama: user?.fullName || user?.full_name || user?.name || '',
-            peran: isLibrarian ? 'ADMIN_PERPUS' : (isEducator ? 'GURU' : 'SISWA'),
+            peran: perpusRole,
             nimNip: user?.nimNip || user?.nip || user?.nisn || '',
             kelas_atau_jabatan: user?.className || user?.kelas || (isEducator ? 'Pendidik' : 'Peserta Didik'),
           };

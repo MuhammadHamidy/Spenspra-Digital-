@@ -9,6 +9,36 @@ import Button from '@/components/Button';
 import Modal from '@/components/Modal';
 import AppIcon from '@/components/AppIcon';
 
+// Deterministic seeded shuffle (FNV-1a + Mulberry32) agar tiap siswa mendapat urutan acak unik
+// namun tetap konsisten apabila browser di-refresh di tengah ujian.
+function hashSeed(str) {
+  let h = 2166136261 >>> 0;
+  const s = String(str || '');
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function seededShuffle(list, seedStr) {
+  const arr = Array.isArray(list) ? [...list] : [];
+  if (arr.length <= 1) return arr;
+  let a = hashSeed(seedStr);
+  const nextRand = () => {
+    a |= 0;
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(nextRand() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 export default function CBTExamRunnerPage({ params }) {
   const router = useRouter();
   const unwrappedParams = use(params);
@@ -105,7 +135,23 @@ export default function CBTExamRunnerPage({ params }) {
         }
 
         setExam(examData);
-        setQuestions(questionsData || []);
+        const studentSeed = currentUser?.id || currentUser?.nisn || currentUser?.username || 'student';
+        let preparedQuestions = Array.isArray(questionsData) ? [...questionsData] : [];
+        if (examData.shuffleQuestions && preparedQuestions.length > 1) {
+          preparedQuestions = seededShuffle(preparedQuestions, `${examId}:${studentSeed}:QUESTIONS`);
+        }
+        if (examData.shuffleOptions) {
+          preparedQuestions = preparedQuestions.map((q) => {
+            if ((q.type === 'MCQ' || q.type === 'COMPLEX_MCQ') && Array.isArray(q.options) && q.options.length > 1) {
+              return {
+                ...q,
+                options: seededShuffle(q.options, `${examId}:${studentSeed}:OPTIONS:${q.id}`),
+              };
+            }
+            return q;
+          });
+        }
+        setQuestions(preparedQuestions);
 
         const scheduleEnd = examData.endDateTime
           ? new Date(examData.endDateTime)
@@ -1145,8 +1191,9 @@ export default function CBTExamRunnerPage({ params }) {
               {/* 4A. Pilihan Ganda Tunggal (Radio Style) */}
               {currentQ?.type === 'MCQ' && (
                 <div className="space-y-2.5 pt-1">
-                  {currentQ?.options?.map((opt) => {
+                  {currentQ?.options?.map((opt, optIdx) => {
                     const isSelected = answers[currentQ.id]?.selectedOption === opt.key;
+                    const displayLabel = exam?.shuffleOptions ? String.fromCharCode(65 + optIdx) : opt.key;
 
                     return (
                       <div
@@ -1165,7 +1212,7 @@ export default function CBTExamRunnerPage({ params }) {
                               : 'bg-neutral-100 text-neutral-700'
                           }`}
                         >
-                          {opt.key}
+                          {displayLabel}
                         </div>
                         <div className="flex-1 min-w-0 pt-0.5">
                           {opt.text && (
@@ -1190,7 +1237,7 @@ export default function CBTExamRunnerPage({ params }) {
               {/* 4B. Pilihan Ganda Kompleks (Checkbox Multi-Select) */}
               {currentQ?.type === 'COMPLEX_MCQ' && (
                 <div className="space-y-2.5 pt-1">
-                  {currentQ?.options?.map((opt) => {
+                  {currentQ?.options?.map((opt, optIdx) => {
                     const curAns = answers[currentQ.id] || {};
                     const selectedList = Array.isArray(curAns.selectedOptions)
                       ? curAns.selectedOptions
@@ -1198,6 +1245,7 @@ export default function CBTExamRunnerPage({ params }) {
                           ? curAns.selectedOption.split(',').map((s) => s.trim()).filter(Boolean)
                           : []);
                     const isSelected = selectedList.includes(opt.key);
+                    const displayLabel = exam?.shuffleOptions ? String.fromCharCode(65 + optIdx) : opt.key;
 
                     return (
                       <div
@@ -1219,7 +1267,7 @@ export default function CBTExamRunnerPage({ params }) {
                           ✓
                         </div>
                         <span className="w-6 h-6 rounded-md bg-neutral-100 text-neutral-700 font-bold text-xs flex items-center justify-center shrink-0">
-                          {opt.key}
+                          {displayLabel}
                         </span>
                         <div className="flex-1 min-w-0 pt-0.5">
                           {opt.text && (

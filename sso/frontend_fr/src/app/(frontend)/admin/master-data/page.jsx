@@ -517,25 +517,37 @@ function MasterDataContent() {
   };
 
   // ────────────────────────────────────────────────────────
-  const getStaffUsername = useCallback((p) => {
-    const matchingAcc = accounts.find(
-      (a) => a.person_id === p.id || a.id === p.id || (p.nip && a.nim_nip === p.nip) || (p.nip && a.username === p.nip)
+  const findMatchingAccount = useCallback((p) => {
+    const cleanNisn = String(p.nisn || '').trim();
+    const cleanNip = String(p.nip || '').trim();
+    return accounts.find(
+      (a) =>
+        a.person_id === p.id ||
+        a.id === p.id ||
+        (cleanNip && (a.nim_nip === cleanNip || a.username === cleanNip)) ||
+        (cleanNisn && (a.nisn === cleanNisn || a.nim_nip === cleanNisn || a.username === cleanNisn || a.username === `siswa_${cleanNisn}`))
     );
-    return matchingAcc?.username || p.nip || generateUsernameFromName(p.full_name);
   }, [accounts]);
+
+  const getStaffUsername = useCallback((p) => {
+    const matchingAcc = findMatchingAccount(p);
+    if (matchingAcc?.username) return matchingAcc.username;
+    if (p.person_type === 'SISWA') return p.nisn || generateUsernameFromName(p.full_name);
+    return p.nip || generateUsernameFromName(p.full_name);
+  }, [findMatchingAccount]);
 
   const getStaffPassword = useCallback((p) => {
     const username = getStaffUsername(p);
-    const matchingAcc = accounts.find(
-      (a) => a.person_id === p.id || a.id === p.id || a.username === username || (p.nip && a.nim_nip === p.nip)
-    );
+    const matchingAcc = findMatchingAccount(p) || accounts.find((a) => a.username === username);
     if (matchingAcc?.initial_password) return matchingAcc.initial_password;
     if (matchingAcc?.password) return matchingAcc.password;
     if (p.id && savedPasswords[p.id]) return savedPasswords[p.id];
+    if (p.nisn && savedPasswords[p.nisn]) return savedPasswords[p.nisn];
     if (p.nip && savedPasswords[p.nip]) return savedPasswords[p.nip];
     if (username && savedPasswords[username]) return savedPasswords[username];
+    if (p.person_type === 'SISWA') return p.nisn || 'Spenspra2026';
     return 'Spenspra2026';
-  }, [savedPasswords, accounts, getStaffUsername]);
+  }, [savedPasswords, accounts, findMatchingAccount, getStaffUsername]);
 
   const togglePasswordVisibility = (id) => {
     setVisiblePasswords((prev) => ({
@@ -547,13 +559,16 @@ function MasterDataContent() {
   const handleOpenPasswordModal = (p) => {
     const username = getStaffUsername(p);
     const currentPwd = getStaffPassword(p);
-    const matchingAcc = accounts.find(
-      (a) => a.person_id === p.id || a.id === p.id || a.username === username
-    );
+    const matchingAcc = findMatchingAccount(p) || accounts.find((a) => a.username === username);
 
     setPasswordModal({
       id: p.id,
-      accountId: matchingAcc?.id || p.id,
+      accountId: matchingAcc?.id || '',
+      hasAccount: Boolean(matchingAcc),
+      personType: p.person_type || 'GURU',
+      className: p.class_name || '',
+      nisn: p.nisn || '',
+      nip: p.nip || '',
       fullName: p.full_name,
       username: username,
       password: currentPwd,
@@ -570,19 +585,35 @@ function MasterDataContent() {
 
     try {
       const newPassword = passwordModal.password.trim();
-      try {
-        await accountApiAdapter.resetPassword(passwordModal.accountId || passwordModal.id, {
+      if (passwordModal.hasAccount && passwordModal.accountId) {
+        await accountApiAdapter.resetPassword(passwordModal.accountId, {
           newPassword,
           sendEmail: false,
         });
-      } catch (errApi) {
-        console.warn('API reset password warning:', errApi);
+      } else {
+        const created = await accountApiAdapter.create({
+          person_id: passwordModal.id,
+          username: passwordModal.username,
+          password: newPassword,
+          full_name: passwordModal.fullName,
+          email: passwordModal.email || `${passwordModal.username}@spenspra.sch.id`,
+          phone: passwordModal.phone || '',
+          nim_nip: passwordModal.nip || passwordModal.nisn || passwordModal.username,
+          nisn: passwordModal.nisn || '',
+          class_name: passwordModal.className || '',
+          role_name: passwordModal.personType || 'SISWA',
+          role_id: passwordModal.personType || 'SISWA',
+        });
+        if (created?.id) {
+          setAccounts((prev) => [...prev, { ...created, password: newPassword, initial_password: newPassword }]);
+        }
       }
 
       const updated = {
         ...savedPasswords,
         [passwordModal.id]: newPassword,
         [passwordModal.username]: newPassword,
+        ...(passwordModal.nisn ? { [passwordModal.nisn]: newPassword } : {}),
       };
       setSavedPasswords(updated);
       try {
@@ -1500,6 +1531,7 @@ const generateUsernameFromName = (name) => {
                   <th className="py-3 px-4">Nama Lengkap</th>
                   <th className="py-3 px-4">NISN</th>
                   <th className="py-3 px-4">Rombel</th>
+                  <th className="py-3 px-4">Akun & Password SSO</th>
                   <th className="py-3 px-4">Barcode Token</th>
                   <th className="py-3 px-4 text-center">Aksi</th>
                 </tr>
@@ -1507,12 +1539,16 @@ const generateUsernameFromName = (name) => {
               <tbody className="divide-y divide-slate-100">
                 {paginatedStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-400">
+                    <td colSpan={7} className="py-8 text-center text-slate-400">
                       Tidak ada data siswa yang cocok dengan filter atau pencarian.
                     </td>
                   </tr>
                 ) : (
-                  paginatedStudents.map((s) => (
+                  paginatedStudents.map((s) => {
+                    const studentUsername = getStaffUsername(s);
+                    const studentPassword = getStaffPassword(s);
+                    const isPwdVisible = Boolean(visiblePasswords[s.id]);
+                    return (
                     <tr
                       key={s.id}
                       className={
@@ -1536,6 +1572,34 @@ const generateUsernameFromName = (name) => {
                           {s.class_name || 'Belum ada rombel'}
                         </span>
                       </td>
+                      <td className="py-3 px-4">
+                        <div className="space-y-1">
+                          <div className="text-[11px] font-mono text-slate-600">
+                            User: <span className="font-bold text-slate-900">{studentUsername}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-xs bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-slate-800 select-all">
+                              {isPwdVisible ? studentPassword : '••••••••'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => togglePasswordVisibility(s.id)}
+                              className="p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-800 cursor-pointer"
+                              title={isPwdVisible ? 'Sembunyikan password' : 'Lihat password'}
+                            >
+                              {isPwdVisible ? '🙈' : '👁️'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenPasswordModal(s)}
+                              className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded cursor-pointer"
+                              title="Ganti password akun siswa ini"
+                            >
+                              Ganti
+                            </button>
+                          </div>
+                        </div>
+                      </td>
                       <td className="py-3 px-4 font-mono text-blue-700 font-bold">{s.barcode_token}</td>
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-2">
@@ -1555,7 +1619,8 @@ const generateUsernameFromName = (name) => {
                         </div>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

@@ -157,12 +157,11 @@ func (a *AuthorizationMiddleware) Authenticate(scopes ...string) fiber.Handler {
 					}
 				}
 
-				// 3. Penegakan Klaim Audience (aud) - Langkah 2
-				// Token harus memuat "elearning", "belajar", "erapor", "sso", atau "all"
+				// 3. Penegakan Klaim Audience (aud) - Ketat (tolak token yang hanya punya aud "sso")
 				if audRaw, ok := claims["aud"]; ok {
 					hasAudience := false
 					isAllowedAud := func(s string) bool {
-						return s == "elearning" || s == "belajar" || s == "erapor" || s == "sso" || s == "all"
+						return s == "elearning" || s == "belajar" || s == "erapor" || s == "all"
 					}
 					switch v := audRaw.(type) {
 					case []interface{}:

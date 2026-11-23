@@ -985,6 +985,8 @@ export default function TeacherExamsManagementPage() {
   const [maxViolations, setMaxViolations] = useState(1);
   const [showScoreToStudent, setShowScoreToStudent] = useState(true);
   const [showAnswersToStudent, setShowAnswersToStudent] = useState(false);
+  const [shuffleQuestions, setShuffleQuestions] = useState(true);
+  const [shuffleOptions, setShuffleOptions] = useState(true);
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activatingExamId, setActivatingExamId] = useState(null);
@@ -1146,6 +1148,8 @@ export default function TeacherExamsManagementPage() {
     setMaxViolations(1);
     setShowScoreToStudent(true);
     setShowAnswersToStudent(false);
+    setShuffleQuestions(true);
+    setShuffleOptions(true);
     setDescription('');
     setIsCreateModalOpen(true);
   };
@@ -1171,6 +1175,8 @@ export default function TeacherExamsManagementPage() {
     setMaxViolations(ex.maxViolations || 1);
     setShowScoreToStudent(ex.showScoreToStudent !== false);
     setShowAnswersToStudent(Boolean(ex.showAnswersToStudent));
+    setShuffleQuestions(Boolean(ex.shuffleQuestions));
+    setShuffleOptions(Boolean(ex.shuffleOptions));
     if (ex.startDateTime) {
       const [d, t] = ex.startDateTime.split('T');
       setExamDate(d || new Date().toISOString().split('T')[0]);
@@ -1243,6 +1249,10 @@ export default function TeacherExamsManagementPage() {
         show_score_to_student: showScoreToStudent,
         showAnswersToStudent: showScoreToStudent ? showAnswersToStudent : false,
         show_answers_to_student: showScoreToStudent ? showAnswersToStudent : false,
+        shuffleQuestions,
+        shuffle_questions: shuffleQuestions,
+        shuffleOptions,
+        shuffle_options: shuffleOptions,
         scheduledDate: examDate,
         startTime,
         endTime,
@@ -3853,6 +3863,46 @@ export default function TeacherExamsManagementPage() {
                 <p className="text-[11px] text-emerald-800 leading-snug">
                   PIN ini seragam satu sekolah untuk seluruh ruang ujian pada sesi ini. Pengawas dapat membukanya langsung di HP siswa tanpa perlu kata sandi statis.
                 </p>
+              </div>
+            </div>
+
+            {/* Opsi Pengacakan Soal & Jawaban per Siswa */}
+            <div className="p-4 rounded-xl bg-indigo-50/70 border border-indigo-200 space-y-3">
+              <label className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                <AppIcon name="sync" color="blue" size={16} />
+                <span>Pengacakan Soal &amp; Opsi Jawaban (Anti-Mencontek):</span>
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <label className="flex items-start gap-3 p-2.5 rounded-lg border border-indigo-200/80 bg-white hover:bg-indigo-50/40 cursor-pointer transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={shuffleQuestions}
+                    onChange={(e) => setShuffleQuestions(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded text-primary-600 focus:ring-primary-500 border-neutral-300 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <p className="text-xs font-bold text-neutral-800">Acak Urutan Soal</p>
+                    <p className="text-[11px] text-neutral-500">
+                      Setiap siswa mendapat urutan nomor soal yang berbeda dari temannya (tetap konsisten jika refresh).
+                    </p>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3 p-2.5 rounded-lg border border-indigo-200/80 bg-white hover:bg-indigo-50/40 cursor-pointer transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={shuffleOptions}
+                    onChange={(e) => setShuffleOptions(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded text-primary-600 focus:ring-primary-500 border-neutral-300 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <p className="text-xs font-bold text-neutral-800">Acak Urutan Opsi Jawaban</p>
+                    <p className="text-[11px] text-neutral-500">
+                      Urutan pilihan A–E diacak unik per siswa untuk PG &amp; PG Kompleks tanpa mengubah akurasi kunci.
+                    </p>
+                  </div>
+                </label>
               </div>
             </div>
 

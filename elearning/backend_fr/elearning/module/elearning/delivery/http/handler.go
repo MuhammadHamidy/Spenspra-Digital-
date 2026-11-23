@@ -41,13 +41,13 @@ func actorName(c *fiber.Ctx) string {
 func isTeacherRole(role string) bool {
 	r := strings.ToUpper(strings.TrimSpace(role))
 	return r == "GURU" || r == "TEACHER" || r == "PENDIDIK" || r == "WALI_KELAS" || r == "KOORDINATOR" ||
-		r == "PROKTOR" || r == "ADMIN_PROKTOR" || r == "KOORDINATOR_UAS"
+		r == "PROKTOR" || r == "ADMIN_PROKTOR" || r == "KOORDINATOR_UAS" || r == "GURU_PROKTOR"
 }
 
 func canManageAll(role string) bool {
 	r := strings.ToUpper(strings.TrimSpace(role))
 	return r == "ADMIN" || r == "SUPER_ADMIN" || r == "ADMIN_ELEARNING" ||
-		r == "PROKTOR" || r == "ADMIN_PROKTOR" || r == "KOORDINATOR_UAS"
+		r == "PROKTOR" || r == "ADMIN_PROKTOR" || r == "KOORDINATOR_UAS" || r == "GURU_PROKTOR"
 }
 
 func cleanTeacherName(s string) string {
@@ -504,6 +504,7 @@ func formatExamForFrontend(e domain.CBTExam) fiber.Map {
 	for _, tag := range []string{
 		"[SCORE:0]", "[SCORE:1]", "[ANSWERS:0]", "[ANSWERS:1]",
 		"[CAT:SEMESTER_UAS]", "[CAT:SEMESTER_UTS]", "[CAT:TKA]", "[CAT:REGULAR]",
+		"[SHUFFLE_Q:0]", "[SHUFFLE_Q:1]", "[SHUFFLE_OPT:0]", "[SHUFFLE_OPT:1]",
 	} {
 		cleanDesc = strings.ReplaceAll(cleanDesc, tag, "")
 	}
