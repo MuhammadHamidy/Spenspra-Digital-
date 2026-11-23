@@ -153,8 +153,8 @@ function PublicApplicationPortal() {
           </p>
         </section>
 
-        {/* 5 System Cards Grid */}
-        <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5" aria-label="Daftar aplikasi">
+        {/* 5 System Cards Grid (3 per baris di desktop, sisanya ke bawah) */}
+        <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3" aria-label="Daftar aplikasi">
           {publicApplications.map((app) => (
             <a
               key={app.key}
