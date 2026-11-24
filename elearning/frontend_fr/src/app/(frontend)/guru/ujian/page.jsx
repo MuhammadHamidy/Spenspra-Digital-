@@ -9,6 +9,7 @@ import Modal from '@/components/Modal';
 import StatusBadge from '@/components/StatusBadge';
 import ConfirmModal from '@/components/ConfirmModal';
 import AppIcon from '@/components/AppIcon';
+import MathText from '@/components/MathText';
 import { elearningApi, generateRandomPin } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 import mammoth from 'mammoth';
@@ -230,7 +231,7 @@ function extractOmathText(omathXml) {
       return full;
     });
 
-    // 4. Pecahan (<m:f>)
+    // 4. Pecahan (<m:f>) -> simpan sebagai \frac{pembilang}{penyebut} agar tampil bertingkat vertikal
     xml = xml.replace(/<m:f\b[^>]*>([\s\S]*?)<\/m:f>/g, (full, inner) => {
       if (/<m:f\b/.test(inner)) return full;
       const num = (inner.match(/<m:num\b[^>]*>([\s\S]*?)<\/m:num>/) || [])[1];
@@ -239,9 +240,7 @@ function extractOmathText(omathXml) {
         changed = true;
         const nTxt = extractRawText(num);
         const dTxt = extractRawText(den);
-        const nWrap = /[+\-\s]/.test(nTxt) ? `(${nTxt})` : nTxt;
-        const dWrap = /[+\-\s]/.test(dTxt) ? `(${dTxt})` : dTxt;
-        return `<m:t>${nWrap}/${dWrap}</m:t>`;
+        return `<m:t>\\frac{${nTxt}}{${dTxt}}</m:t>`;
       }
       return full;
     });
@@ -3336,7 +3335,7 @@ export default function TeacherExamsManagementPage() {
 
                           {/* Question Text */}
                           <div className="text-neutral-900 font-medium text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">
-                            {q.questionText}
+                            <MathText text={q.questionText} />
                           </div>
 
                           {/* Choice Options List */}
@@ -3361,7 +3360,7 @@ export default function TeacherExamsManagementPage() {
                                       {opt.key}
                                     </span>
                                     <div className="flex-1 min-w-0 pt-0.5">
-                                      <p className="leading-snug break-words">{opt.text}</p>
+                                      <p className="leading-snug break-words"><MathText text={opt.text} /></p>
                                       {opt.imageUrl && (
                                         <img src={opt.imageUrl} alt={`Opsi ${opt.key}`} className="mt-1 max-h-16 rounded object-contain" />
                                       )}

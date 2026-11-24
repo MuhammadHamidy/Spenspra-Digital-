@@ -2011,11 +2011,9 @@ export const elearningApi = {
       };
     });
 
-    const totalQuestionsCount = questions.length;
+    // Nilai akhir adalah akumulasi langsung poin yang diperoleh siswa (mis. 30 soal × 2 poin = maks 60)
     const score = totalAutoGraded > 0
-      ? (totalExamPoints > 0
-          ? Math.round((earnedAutoPoints / totalExamPoints) * 100)
-          : Math.round((correctCount / Math.max(1, totalQuestionsCount)) * 100))
+      ? Math.round(earnedAutoPoints * 100) / 100
       : null;
 
     if (session) {

@@ -562,7 +562,8 @@ func (r *repository) calculateSessionScoreFromDB(ctx context.Context, sessionID 
 	if totalMax <= 0 {
 		return 0, false
 	}
-	return math.Round((totalEarned / totalMax) * 100), true
+	// Nilai akhir adalah akumulasi langsung poin yang diperoleh siswa (mis. 30 soal × 2 poin = maks 60)
+	return math.Round(totalEarned*100) / 100, true
 }
 
 func (r *repository) SubmitExamSession(ctx context.Context, sessionID string, score float64) error {

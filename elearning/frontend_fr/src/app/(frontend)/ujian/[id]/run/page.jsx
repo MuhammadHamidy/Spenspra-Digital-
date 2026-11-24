@@ -8,6 +8,7 @@ import { useProctoring } from '@/hooks/useProctoring';
 import Button from '@/components/Button';
 import Modal from '@/components/Modal';
 import AppIcon from '@/components/AppIcon';
+import MathText from '@/components/MathText';
 
 // Deterministic seeded shuffle (FNV-1a + Mulberry32) agar tiap siswa mendapat urutan acak unik
 // namun tetap konsisten apabila browser di-refresh di tengah ujian.
@@ -1131,7 +1132,7 @@ export default function CBTExamRunnerPage({ params }) {
                     <span>Wacana / Stimulus Kasus</span>
                   </div>
                   <div className={`${fontClasses.stimulus} font-sans whitespace-pre-wrap text-amber-950`}>
-                    {currentQ.stimulusText}
+                    <MathText text={currentQ.stimulusText} />
                   </div>
                 </div>
               )}
@@ -1152,7 +1153,7 @@ export default function CBTExamRunnerPage({ params }) {
 
               {/* 3. Teks Pertanyaan */}
               <div className={`${fontClasses.question} text-neutral-900 whitespace-pre-wrap font-medium`}>
-                {currentQ?.questionText}
+                <MathText text={currentQ?.questionText} />
               </div>
 
               {/* Petunjuk Pengerjaan Berdasarkan Tipe Soal */}
@@ -1217,7 +1218,7 @@ export default function CBTExamRunnerPage({ params }) {
                         <div className="flex-1 min-w-0 pt-0.5">
                           {opt.text && (
                             <span className={`${fontClasses.option} text-neutral-800 block`}>
-                              {opt.text}
+                              <MathText text={opt.text} />
                             </span>
                           )}
                           {(opt.imageUrl || opt.image_url) && (
@@ -1272,7 +1273,7 @@ export default function CBTExamRunnerPage({ params }) {
                         <div className="flex-1 min-w-0 pt-0.5">
                           {opt.text && (
                             <span className={`${fontClasses.option} text-neutral-800 block`}>
-                              {opt.text}
+                              <MathText text={opt.text} />
                             </span>
                           )}
                           {(opt.imageUrl || opt.image_url) && (

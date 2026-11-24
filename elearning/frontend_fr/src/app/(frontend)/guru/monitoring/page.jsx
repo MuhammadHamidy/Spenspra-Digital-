@@ -493,7 +493,8 @@ export default function LiveProctoringMonitoringPage() {
 
     const totalQuestions = examQuestions.length;
     const unansweredCount = Math.max(0, totalQuestions - answeredCount);
-    const finalScore = totalMax > 0 ? Math.round((totalEarned / totalMax) * 100) : 100;
+    // Nilai akhir adalah akumulasi langsung poin yang diperoleh siswa (mis. 30 soal × 2 poin = maks 60)
+    const finalScore = Math.round(totalEarned * 100) / 100;
     return {
       totalMax,
       totalEarned,
@@ -863,7 +864,7 @@ export default function LiveProctoringMonitoringPage() {
           </div>
           <div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-1 col-span-2 sm:col-span-1">
             <p className="text-[11px] font-semibold text-emerald-800">Skor Akhir Siswa</p>
-            <p className="text-xl font-black text-emerald-700">{finalScore} / 100</p>
+            <p className="text-xl font-black text-emerald-700">{finalScore} / {totalMax}</p>
             <p className="text-[10px] text-emerald-800 font-medium">
               {totalEarned} dari {totalMax} total poin ({totalQuestions} soal)
             </p>
@@ -1560,7 +1561,7 @@ export default function LiveProctoringMonitoringPage() {
                   Total Nilai Akhir:
                 </span>
                 <span className="text-sm font-extrabold text-emerald-400">
-                  {finalScore} / 100
+                  {finalScore} / {totalMax}
                 </span>
               </div>
               <p className="text-[11px] text-neutral-400">
