@@ -118,6 +118,155 @@ async function compressImageBase64(base64Uri, maxWidth = 960, quality = 0.78) {
   });
 }
 
+// Helper konversi entitas XML, pangkat (superscript), indeks (subscript), dan Word Equation (OMML <m:oMath>)
+const SUPERSCRIPT_MAP = {
+  '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+  '+': '⁺', '-': '⁻', '−': '⁻', '=': '⁼', '(': '⁽', ')': '⁾',
+  'a': 'ᵃ', 'b': 'ᵇ', 'c': 'ᶜ', 'd': 'ᵈ', 'e': 'ᵉ', 'f': 'ᶠ', 'g': 'ᵍ', 'h': 'ʰ', 'i': 'ⁱ', 'j': 'ʲ',
+  'k': 'ᵏ', 'l': 'ˡ', 'm': 'ᵐ', 'n': 'ⁿ', 'o': 'ᵒ', 'p': 'ᵖ', 'r': 'ʳ', 's': 'ˢ', 't': 'ᵗ', 'u': 'ᵘ',
+  'v': 'ᵛ', 'w': 'ʷ', 'x': 'ˣ', 'y': 'ʸ', 'z': 'ᶻ',
+  'A': 'ᴬ', 'B': 'ᴮ', 'D': 'ᴰ', 'E': 'ᴱ', 'G': 'ᴳ', 'H': 'ᴴ', 'I': 'ᴵ', 'J': 'ᴶ', 'K': 'ᴷ', 'L': 'ᴸ',
+  'M': 'ᴹ', 'N': 'ᴺ', 'O': 'ᴼ', 'P': 'ᴾ', 'R': 'ᴿ', 'T': 'ᵀ', 'U': 'ᵁ', 'V': 'ⱽ', 'W': 'ᵂ',
+};
+
+const SUBSCRIPT_MAP = {
+  '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+  '+': '₊', '-': '₋', '−': '₋', '=': '₌', '(': '₍', ')': '₎',
+  'a': 'ₐ', 'e': 'ₑ', 'h': 'ₕ', 'i': 'ᵢ', 'j': 'ⱼ', 'k': 'ₖ', 'l': 'ₗ', 'm': 'ₘ', 'n': 'ₙ',
+  'o': 'ₒ', 'p': 'ₚ', 'r': 'ᵣ', 's': 'ₛ', 't': 'ₜ', 'u': 'ᵤ', 'v': 'ᵥ', 'x': 'ₓ',
+};
+
+function decodeXmlEntities(str) {
+  return String(str || '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)));
+}
+
+function toUnicodeSuperscript(str) {
+  const s = String(str || '').trim();
+  if (!s) return '';
+  let allMapped = true;
+  let mapped = '';
+  for (const ch of s) {
+    if (ch === ' ') continue;
+    if (SUPERSCRIPT_MAP[ch]) {
+      mapped += SUPERSCRIPT_MAP[ch];
+    } else {
+      allMapped = false;
+      break;
+    }
+  }
+  return allMapped && mapped ? mapped : `^(${s})`;
+}
+
+function toUnicodeSubscript(str) {
+  const s = String(str || '').trim();
+  if (!s) return '';
+  let allMapped = true;
+  let mapped = '';
+  for (const ch of s) {
+    if (ch === ' ') continue;
+    if (SUBSCRIPT_MAP[ch]) {
+      mapped += SUBSCRIPT_MAP[ch];
+    } else {
+      allMapped = false;
+      break;
+    }
+  }
+  return allMapped && mapped ? mapped : `_${s}`;
+}
+
+function extractOmathText(omathXml) {
+  let xml = String(omathXml || '');
+  const extractRawText = (frag) =>
+    decodeXmlEntities(
+      (String(frag || '').match(/<m:t[^>]*>([\s\S]*?)<\/m:t>/g) || [])
+        .map((x) => x.replace(/<[^>]+>/g, ''))
+        .join('')
+    ).trim();
+
+  // Proses bertahap dari terdalam ke terluar untuk pangkat, indeks, pecahan, dan akar
+  for (let pass = 0; pass < 5; pass += 1) {
+    let changed = false;
+
+    // 1. Subscript + Superscript (<m:sSubSup>)
+    xml = xml.replace(/<m:sSubSup\b[^>]*>([\s\S]*?)<\/m:sSubSup>/g, (full, inner) => {
+      const base = (inner.match(/<m:e\b[^>]*>([\s\S]*?)<\/m:e>/) || [])[1];
+      const sub = (inner.match(/<m:sub\b[^>]*>([\s\S]*?)<\/m:sub>/) || [])[1];
+      const sup = (inner.match(/<m:sup\b[^>]*>([\s\S]*?)<\/m:sup>/) || [])[1];
+      if (base !== undefined) {
+        changed = true;
+        return `<m:t>${extractRawText(base)}${toUnicodeSubscript(extractRawText(sub))}${toUnicodeSuperscript(extractRawText(sup))}</m:t>`;
+      }
+      return full;
+    });
+
+    // 2. Superscript / Pangkat (<m:sSup>)
+    xml = xml.replace(/<m:sSup\b[^>]*>([\s\S]*?)<\/m:sSup>/g, (full, inner) => {
+      if (/<m:sSup\b/.test(inner)) return full;
+      const base = (inner.match(/<m:e\b[^>]*>([\s\S]*?)<\/m:e>/) || [])[1];
+      const sup = (inner.match(/<m:sup\b[^>]*>([\s\S]*?)<\/m:sup>/) || [])[1];
+      if (base !== undefined && sup !== undefined) {
+        changed = true;
+        return `<m:t>${extractRawText(base)}${toUnicodeSuperscript(extractRawText(sup))}</m:t>`;
+      }
+      return full;
+    });
+
+    // 3. Subscript / Indeks (<m:sSub>)
+    xml = xml.replace(/<m:sSub\b[^>]*>([\s\S]*?)<\/m:sSub>/g, (full, inner) => {
+      if (/<m:sSub\b/.test(inner)) return full;
+      const base = (inner.match(/<m:e\b[^>]*>([\s\S]*?)<\/m:e>/) || [])[1];
+      const sub = (inner.match(/<m:sub\b[^>]*>([\s\S]*?)<\/m:sub>/) || [])[1];
+      if (base !== undefined && sub !== undefined) {
+        changed = true;
+        return `<m:t>${extractRawText(base)}${toUnicodeSubscript(extractRawText(sub))}</m:t>`;
+      }
+      return full;
+    });
+
+    // 4. Pecahan (<m:f>)
+    xml = xml.replace(/<m:f\b[^>]*>([\s\S]*?)<\/m:f>/g, (full, inner) => {
+      if (/<m:f\b/.test(inner)) return full;
+      const num = (inner.match(/<m:num\b[^>]*>([\s\S]*?)<\/m:num>/) || [])[1];
+      const den = (inner.match(/<m:den\b[^>]*>([\s\S]*?)<\/m:den>/) || [])[1];
+      if (num !== undefined && den !== undefined) {
+        changed = true;
+        const nTxt = extractRawText(num);
+        const dTxt = extractRawText(den);
+        const nWrap = /[+\-\s]/.test(nTxt) ? `(${nTxt})` : nTxt;
+        const dWrap = /[+\-\s]/.test(dTxt) ? `(${dTxt})` : dTxt;
+        return `<m:t>${nWrap}/${dWrap}</m:t>`;
+      }
+      return full;
+    });
+
+    // 5. Akar (<m:rad>)
+    xml = xml.replace(/<m:rad\b[^>]*>([\s\S]*?)<\/m:rad>/g, (full, inner) => {
+      if (/<m:rad\b/.test(inner)) return full;
+      const deg = (inner.match(/<m:deg\b[^>]*>([\s\S]*?)<\/m:deg>/) || [])[1];
+      const base = (inner.match(/<m:e\b[^>]*>([\s\S]*?)<\/m:e>/) || [])[1];
+      if (base !== undefined) {
+        changed = true;
+        const degTxt = extractRawText(deg);
+        const baseTxt = extractRawText(base);
+        const prefix = degTxt ? `${toUnicodeSuperscript(degTxt)}√` : '√';
+        return `<m:t>${prefix}${baseTxt.length > 1 ? `(${baseTxt})` : baseTxt}</m:t>`;
+      }
+      return full;
+    });
+
+    if (!changed) break;
+  }
+
+  return extractRawText(xml);
+}
+
 // Ekstraksi struktur dokumen Word (.docx) secara langsung dari XML OpenXML:
 // Menangani penomoran otomatis Word (w:numPr), opsi A-D, gambar tersemat (Base64), dan kunci jawaban berwarna merah.
 async function extractDocxStructure(arrayBuffer) {
@@ -243,19 +392,33 @@ async function extractDocxStructure(arrayBuffer) {
       }
     }
 
-    // Teks dan warna teks
-    const runs = p.match(/<w:r\b[\s\S]*?<\/w:r>/g) || [];
+    // Teks, warna teks, pangkat/indeks (vertAlign), dan persamaan Word (<m:oMath>)
+    const tokens = p.match(/<m:oMath\b[\s\S]*?<\/m:oMath>|<w:r\b[\s\S]*?<\/w:r>/g) || [];
     let pText = '';
     let isRed = false;
 
-    runs.forEach((r) => {
-      const c = r.match(/<w:color\s+w:val="([^"]+)"/i);
-      const h = r.match(/<w:highlight\s+w:val="([^"]+)"/i);
-      const t = (r.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [])
+    tokens.forEach((tok) => {
+      if (tok.startsWith('<m:oMath')) {
+        const mathTxt = extractOmathText(tok);
+        if (mathTxt) pText += mathTxt;
+        return;
+      }
+      const c = tok.match(/<w:color\s+w:val="([^"]+)"/i);
+      const h = tok.match(/<w:highlight\s+w:val="([^"]+)"/i);
+      const va = tok.match(/<w:vertAlign\s+w:val="([^"]+)"/i);
+      const rawT = (tok.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [])
         .map((x) => x.replace(/<[^>]+>/g, ''))
         .join('');
+      const t = decodeXmlEntities(rawT);
       if (t) {
-        pText += t;
+        const vertAlign = va ? va[1].toLowerCase() : '';
+        if (vertAlign === 'superscript') {
+          pText += toUnicodeSuperscript(t);
+        } else if (vertAlign === 'subscript') {
+          pText += toUnicodeSubscript(t);
+        } else {
+          pText += t;
+        }
         const colorVal = c ? c[1] : null;
         const highlightVal = h ? h[1] : null;
         if (isAnswerColor(colorVal) || ['red', 'magenta'].includes(String(highlightVal).toLowerCase())) {

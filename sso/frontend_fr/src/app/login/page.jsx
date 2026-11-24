@@ -111,7 +111,7 @@ function LoginForm() {
       const token = res?.token || '';
 
       const isProctor = ['PROKTOR', 'ADMIN_PROKTOR', 'KOORDINATOR_UAS', 'GURU_PROKTOR'].includes(roleName);
-      const isDualGuruProctor = ['GURU_PROKTOR', 'KOORDINATOR_UAS'].includes(roleName);
+      const isDualGuruProctor = ['PROKTOR', 'GURU_PROKTOR', 'KOORDINATOR_UAS'].includes(roleName);
       const isKepalaSekolah = roleName === 'KEPALA_SEKOLAH';
       const isEducator = isProctor || ['GURU', 'WALI_KELAS', 'PENDIDIK', 'KEPALA_SEKOLAH', 'TENDIK', 'TENAGA_KEPENDIDIKAN'].includes(roleName);
 
@@ -119,13 +119,13 @@ function LoginForm() {
       const canAccessApp = (appKey) => {
         if (roleName === 'SUPER_ADMIN' || roleName === 'SUPER-ADMIN') return false;
         if (appKey === 'rapor') {
-          return ['ADMIN_RAPOR', 'GURU', 'WALI_KELAS', 'GURU_PROKTOR', 'KOORDINATOR_UAS', 'KEPALA_SEKOLAH', 'SISWA', 'TENAGA_KEPENDIDIKAN'].includes(roleName);
+          return ['ADMIN_RAPOR', 'GURU', 'WALI_KELAS', 'PROKTOR', 'GURU_PROKTOR', 'KOORDINATOR_UAS', 'KEPALA_SEKOLAH', 'SISWA', 'TENAGA_KEPENDIDIKAN'].includes(roleName);
         }
         if (appKey === 'elearning') {
           return ['PROKTOR', 'ADMIN_PROKTOR', 'GURU_PROKTOR', 'KOORDINATOR_UAS', 'GURU', 'WALI_KELAS', 'SISWA', 'TENAGA_KEPENDIDIKAN'].includes(roleName);
         }
         if (appKey === 'perpus') {
-          return ['ADMIN_PERPUS', 'PUSTAKAWAN', 'GURU', 'WALI_KELAS', 'GURU_PROKTOR', 'KOORDINATOR_UAS', 'KEPALA_SEKOLAH', 'SISWA', 'TENAGA_KEPENDIDIKAN'].includes(roleName);
+          return ['ADMIN_PERPUS', 'PUSTAKAWAN', 'GURU', 'WALI_KELAS', 'PROKTOR', 'GURU_PROKTOR', 'KOORDINATOR_UAS', 'KEPALA_SEKOLAH', 'SISWA', 'TENAGA_KEPENDIDIKAN'].includes(roleName);
         }
         return true;
       };

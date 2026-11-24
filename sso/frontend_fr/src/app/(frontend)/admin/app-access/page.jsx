@@ -201,19 +201,19 @@ export default function AppAccessMatrixPage() {
 
         // Tentukan peran e-Rapor sesuai matriks ketat
         let eraporVal = 'NONE';
-        if (role === 'SUPER_ADMIN' || role === 'ADMIN_PERPUS' || role === 'PUSTAKAWAN' || ['PROKTOR', 'ADMIN_PROKTOR'].includes(role)) eraporVal = 'NONE';
+        if (role === 'SUPER_ADMIN' || role === 'ADMIN_PERPUS' || role === 'PUSTAKAWAN' || role === 'ADMIN_PROKTOR') eraporVal = 'NONE';
         else if (role === 'ADMIN_RAPOR') eraporVal = 'ADMIN';
         else if (role.includes('KEPALA')) eraporVal = 'KEPALA_SEKOLAH';
         else if (role.includes('SISWA')) eraporVal = 'SISWA';
-        else if (isEducator || role === 'GURU_PROKTOR' || role === 'KOORDINATOR_UAS') eraporVal = 'GURU';
+        else if (isEducator || ['PROKTOR', 'GURU_PROKTOR', 'KOORDINATOR_UAS'].includes(role)) eraporVal = 'GURU';
 
         // Tentukan peran e-Perpus sesuai matriks ketat
         let eperpusVal = 'NONE';
-        if (role === 'SUPER_ADMIN' || role === 'ADMIN_RAPOR' || ['PROKTOR', 'ADMIN_PROKTOR'].includes(role)) eperpusVal = 'NONE';
+        if (role === 'SUPER_ADMIN' || role === 'ADMIN_RAPOR' || role === 'ADMIN_PROKTOR') eperpusVal = 'NONE';
         else if (role === 'ADMIN_PERPUS' || role === 'PUSTAKAWAN') eperpusVal = 'ADMIN';
         else if (role.includes('KEPALA')) eperpusVal = 'GURU';
         else if (role.includes('SISWA')) eperpusVal = 'SISWA';
-        else if (isEducator || role === 'GURU_PROKTOR' || role === 'KOORDINATOR_UAS') eperpusVal = 'GURU';
+        else if (isEducator || ['PROKTOR', 'GURU_PROKTOR', 'KOORDINATOR_UAS'].includes(role)) eperpusVal = 'GURU';
 
         // Tentukan peran Presensi
         let presensiVal = 'NONE';
@@ -262,9 +262,9 @@ export default function AppAccessMatrixPage() {
           updated.presensi = 'GURU';
         } else if (newRole === 'PROKTOR') {
           updated.elearning = 'ADMIN';
-          updated.erapor = 'NONE';
-          updated.eperpus = 'NONE';
-          updated.presensi = 'NONE';
+          updated.erapor = 'GURU';
+          updated.eperpus = 'GURU';
+          updated.presensi = 'GURU';
         } else if (newRole === 'ADMIN_RAPOR') {
           updated.erapor = 'ADMIN';
           updated.elearning = 'NONE';

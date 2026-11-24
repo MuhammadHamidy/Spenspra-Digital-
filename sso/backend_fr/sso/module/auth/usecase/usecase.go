@@ -210,10 +210,10 @@ func (u *useCase) Login(ctx context.Context, req domain.LoginRequest) (*domain.L
 		aud = []string{"sso", "erapor"}
 	case "ADMIN_PERPUS", "PUSTAKAWAN":
 		aud = []string{"sso", "perpus"}
-	case "PROKTOR", "ADMIN_PROKTOR":
+	case "ADMIN_PROKTOR":
 		aud = []string{"sso", "elearning"}
-	case "GURU_PROKTOR", "KOORDINATOR_UAS":
-		// Akses ganda: Guru pengampu + Proktor/Koordinator CBT di Spenspra Belajar
+	case "PROKTOR", "GURU_PROKTOR", "KOORDINATOR_UAS":
+		// Akses ganda: Guru pengampu + Proktor/Koordinator CBT di Spenspra Belajar, tetap bisa akses e-Rapor & e-Perpus
 		aud = []string{"sso", "elearning", "erapor", "perpus"}
 	case "KEPALA_SEKOLAH":
 		// Kepala Sekolah: mode pantau di e-Rapor & e-Perpus
