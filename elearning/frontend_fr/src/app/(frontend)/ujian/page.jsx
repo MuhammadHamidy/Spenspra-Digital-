@@ -16,6 +16,7 @@ export default function StudentExamsHubPage() {
   const [user, setUser] = useState(null);
   const [exams, setExams] = useState([]);
   const [examSessions, setExamSessions] = useState({});
+  const [classAssignments, setClassAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Modal Token & Kiosk Prep Lock
@@ -45,8 +46,12 @@ export default function StudentExamsHubPage() {
   const loadExams = async (currentUser) => {
     setLoading(true);
     try {
-      const data = await elearningApi.getExams();
+      const [data, assignmentsData] = await Promise.all([
+        elearningApi.getExams(),
+        elearningApi.getClassAssignments().catch(() => []),
+      ]);
       setExams(data || []);
+      setClassAssignments(Array.isArray(assignmentsData) ? assignmentsData : []);
 
       const u = currentUser || tokenStorage.getUser();
       if (u && data) {
@@ -89,6 +94,32 @@ export default function StudentExamsHubPage() {
     (Array.isArray(user?.classCodes) && user.classCodes.length > 0 ? user.classCodes[0] : '') ||
     '';
   const studentClassNorm = normalizeClass(studentClass);
+
+  // Cari nama guru pengampu sebenarnya untuk rombel kelas siswa & mapel ujian ini
+  const resolveClassTeacherName = (exam) => {
+    if (!exam) return 'Guru Mapel';
+    if (studentClassNorm && Array.isArray(classAssignments) && classAssignments.length > 0) {
+      const examSubjName = String(exam.subject || exam.course_name || '').trim().toLowerCase();
+      const examSubjCode = String(exam.subjectCode || exam.course_id || '').trim().toUpperCase();
+
+      const matched = classAssignments.find((a) => {
+        if (!a) return false;
+        const aClass = normalizeClass(a.class_code || a.className || a.class_name || '');
+        if (!aClass || aClass !== studentClassNorm) return false;
+
+        const aSubjName = String(a.course_name || a.subject_name || a.subject || '').trim().toLowerCase();
+        const aSubjCode = String(a.course_code || a.subject_code || '').trim().toUpperCase();
+
+        if (examSubjCode && examSubjCode !== 'MAPEL' && aSubjCode && aSubjCode === examSubjCode) return true;
+        if (examSubjName && aSubjName && (aSubjName === examSubjName || aSubjName.includes(examSubjName) || examSubjName.includes(aSubjName))) return true;
+        return false;
+      });
+
+      const assignedTeacher = matched?.teacher_name || matched?.dosen_name || matched?.teacherName || '';
+      if (assignedTeacher.trim()) return assignedTeacher.trim();
+    }
+    return exam.teacherName || 'Guru Mapel';
+  };
 
   const filteredExams = useMemo(() => {
     if (!user) return [];
@@ -335,8 +366,7 @@ export default function StudentExamsHubPage() {
                     </h3>
                     <p className="text-xs text-neutral-500 mt-1 line-clamp-2 leading-relaxed">
                       {(exam.description || '')
-                        .replace(/\[SCORE:[01]\]/g, '')
-                        .replace(/\[ANSWERS:[01]\]/g, '')
+                        .replace(/\[(?:ASAS|PIN|CAT|SHUFFLE_Q|SHUFFLE_OPT|SCORE|ANSWERS):[^\]]*\]/gi, '')
                         .trim() || 'Ujian berbasis komputer (CBT) dengan pengawasan anti-cheat.'}
                     </p>
                   </div>
@@ -368,7 +398,9 @@ export default function StudentExamsHubPage() {
                       </div>
                       <div>
                         <p className="text-[10px] text-neutral-400 font-medium">Pengajar</p>
-                        <p className="text-xs font-bold text-neutral-800 truncate">{exam.teacherName || 'Guru Mapel'}</p>
+                        <p className="text-xs font-bold text-neutral-800 truncate" title={resolveClassTeacherName(exam)}>
+                          {resolveClassTeacherName(exam)}
+                        </p>
                       </div>
                     </div>
                   </div>

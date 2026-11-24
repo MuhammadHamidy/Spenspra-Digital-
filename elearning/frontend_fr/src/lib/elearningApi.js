@@ -470,7 +470,7 @@ export function mapExamItem(e) {
     endTime: eTime || '09:30',
     maxViolations: Number(e.maxViolations || e.max_violations || 3),
     status: e.status || 'UPCOMING',
-    description: cleanDesc || rawDesc,
+    description: cleanDesc,
     rawDescription: rawDesc,
     examCategory: resolvedCategory,
     targetGradeLevel: isCoordinator ? (gradeLevel || '7') : '',
