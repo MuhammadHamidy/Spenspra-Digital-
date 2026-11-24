@@ -359,7 +359,7 @@ export function mapExamItem(e) {
   if (!eTime && endDT && endDT.includes('T')) eTime = endDT.split('T')[1].slice(0, 5);
 
   const token = (e.token || '').toUpperCase();
-  const rawDesc = String(e.description || e.rawDescription || '');
+  const rawDesc = String(e.rawDescription || e.description || '');
   const title = String(e.title || '');
 
   // Check description tags [ASAS:x], [PIN:xxxx], [SCORE:0/1], [ANSWERS:0/1]
@@ -1451,17 +1451,40 @@ export const elearningApi = {
       const res = await fetchJson(`/exams/${examId}/session?student_id=${encodeURIComponent(studentId || '')}`);
       if (res?.success && res?.data) {
         const serverSess = res.data;
+        const serverId = serverSess.sessionId || serverSess.id;
+        // Jika server mengembalikan sesi BARU (ID berbeda dari cache lokal), abaikan jawaban/status lama
+        const isDifferentSession = Boolean(localSess?.sessionId && serverId && String(localSess.sessionId) !== String(serverId));
+        const baseLocal = isDifferentSession ? {} : (localSess || {});
         const merged = {
-          ...(localSess || {}),
+          ...baseLocal,
           ...serverSess,
-          id: serverSess.sessionId || serverSess.id || localSess?.id,
-          sessionId: serverSess.sessionId || serverSess.id || localSess?.sessionId,
-          status: serverSess.status || localSess?.status,
-          score: serverSess.score !== undefined && serverSess.score !== null ? serverSess.score : localSess?.score,
-          submittedAt: serverSess.submittedAt || serverSess.submitted_at || localSess?.submittedAt,
+          id: serverId || baseLocal?.id,
+          sessionId: serverId || baseLocal?.sessionId,
+          status: serverSess.status || baseLocal?.status,
+          score: serverSess.score !== undefined && serverSess.score !== null ? serverSess.score : baseLocal?.score,
+          submittedAt: serverSess.submittedAt || serverSess.submitted_at || baseLocal?.submittedAt,
         };
         setLocal(sessionKey, merged);
         return merged;
+      }
+
+      // Jika server merespons dengan jelas bahwa sesi TIDAK ADA (404 / data: null — artinya guru menghapus/mereset sesi),
+      // bersihkan cache lokal agar siswa bisa mengerjakan ujian dari 0 kembali!
+      const isServerAuthoritativeEmpty =
+        (res?.success && !res?.data) ||
+        res?.error?.code === 404 ||
+        res?.error?.code === 'NOT_FOUND';
+      if (isServerAuthoritativeEmpty) {
+        const pending = getLocal('pending_exam_finishes', []);
+        const hasPendingFinish = Array.isArray(pending) && pending.some((item) => String(item.examId || '') === String(examId));
+        if (!hasPendingFinish) {
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.removeItem(`spenspra_elearning_${sessionKey}`);
+            } catch (_) {}
+          }
+          return null;
+        }
       }
     } catch (_) {}
 
@@ -1512,29 +1535,36 @@ export const elearningApi = {
       } catch (_) {}
     }
 
-    // 1. Daftarkan / cek sesi secara resmi di server PostgreSQL
+    // 1. Daftarkan / cek sesi secara resmi di server PostgreSQL (dengan retry 3x agar selalu terdeteksi di Live Proctoring)
     let serverSessionId = null;
     let serverSessionData = null;
-    try {
-      const res = await fetchJson(`/exams/${examId}/start`, {
-        method: 'POST',
-        body: JSON.stringify({
-          token: token.trim().toUpperCase(),
-          student_id: studentId,
-          studentId: studentId,
-          student_name: studentName,
-          studentName: studentName,
-          class_code: className,
-          className: className,
-          nisn: studentNisn,
-        }),
-      });
-      if (res?.success && res?.data) {
-        serverSessionData = res.data;
-        serverSessionId = res.data.id || res.data.sessionId;
+    const startPayload = {
+      token: token.trim().toUpperCase(),
+      student_id: studentId,
+      studentId: studentId,
+      student_name: studentName,
+      studentName: studentName,
+      class_code: className,
+      className: className,
+      nisn: studentNisn,
+    };
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const res = await fetchJson(`/exams/${examId}/start`, {
+          method: 'POST',
+          body: JSON.stringify(startPayload),
+        });
+        if (res?.success && res?.data) {
+          serverSessionData = res.data;
+          serverSessionId = res.data.id || res.data.sessionId;
+          break;
+        }
+      } catch (e) {
+        console.warn(`Sync sesi ujian ke backend (percobaan ${attempt}/3):`, e);
       }
-    } catch (e) {
-      console.warn('Sync sesi ujian ke backend:', e);
+      if (attempt < 3) {
+        await new Promise((r) => setTimeout(r, attempt * 600));
+      }
     }
 
     // Jika server menyatakan siswa SUDAH SELESAI (SUBMITTED), JANGAN buat sesi baru!
@@ -1554,8 +1584,33 @@ export const elearningApi = {
       return submittedSession;
     }
 
-    // Jika cache lokal menyatakan SUBMITTED (misal baru selesai & server baru pulih), pertahankan SUBMITTED & sinkronkan ulang!
-    if (existing && existing.status === 'SUBMITTED') {
+    // DETEKSI RESET SESI OLEH GURU/PROKTOR:
+    // Jika server mengembalikan sessionId BARU yang berbeda dari cache lokal (artinya sesi lama sudah dihapus guru),
+    // bersihkan seluruh cache jawaban lokal agar siswa benar-benar memulai ujian dari 0!
+    const wasResetByTeacher = Boolean(
+      serverSessionId &&
+      existing?.sessionId &&
+      String(existing.sessionId) !== String(serverSessionId) &&
+      String(serverSessionData?.status || 'IN_PROGRESS').toUpperCase() !== 'SUBMITTED'
+    );
+    if (wasResetByTeacher) {
+      existing = null;
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.removeItem(`spenspra_elearning_${sessionKey}`);
+          const pending = getLocal('pending_exam_finishes', []);
+          if (Array.isArray(pending) && pending.length > 0) {
+            setLocal(
+              'pending_exam_finishes',
+              pending.filter((item) => String(item.examId || '') !== String(examId))
+            );
+          }
+        } catch (_) {}
+      }
+    }
+
+    // Jika cache lokal menyatakan SUBMITTED dan sesi di server BUKAN sesi baru hasil reset guru, pertahankan SUBMITTED!
+    if (existing && existing.status === 'SUBMITTED' && (!serverSessionId || String(serverSessionId) === String(existing.sessionId))) {
       const targetSessId = serverSessionId || existing.sessionId;
       if (targetSessId) {
         fetchJson(`/sessions/${targetSessId}/finish`, {

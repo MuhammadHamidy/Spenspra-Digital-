@@ -499,6 +499,8 @@ func formatExamForFrontend(e domain.CBTExam) fiber.Map {
 	if strings.Contains(e.Description, "[ANSWERS:1]") {
 		showAnswers = true
 	}
+	shuffleQuestions := strings.Contains(e.Description, "[SHUFFLE_Q:1]")
+	shuffleOptions := strings.Contains(e.Description, "[SHUFFLE_OPT:1]")
 
 	cleanDesc := e.Description
 	for _, tag := range []string{
@@ -548,6 +550,10 @@ func formatExamForFrontend(e domain.CBTExam) fiber.Map {
 		"show_score_to_student":   showScore,
 		"showAnswersToStudent":    showAnswers,
 		"show_answers_to_student": showAnswers,
+		"shuffleQuestions":        shuffleQuestions,
+		"shuffle_questions":       shuffleQuestions,
+		"shuffleOptions":          shuffleOptions,
+		"shuffle_options":         shuffleOptions,
 		"status":                  status,
 		"created_at":              e.CreatedAt,
 		"updated_at":              e.UpdatedAt,
@@ -1265,9 +1271,15 @@ func (h *ELearningHandler) StartStudentExam(c *fiber.Ctx) error {
 	if sID == "" {
 		sID = strings.TrimSpace(req.StudentIdCamel)
 	}
+	if sID == "" {
+		sID = actorID(c)
+	}
 	sName := strings.TrimSpace(req.StudentName)
 	if sName == "" {
 		sName = strings.TrimSpace(req.StudentNameCamel)
+	}
+	if sName == "" {
+		sName = actorName(c)
 	}
 	cls := strings.TrimSpace(req.ClassCode)
 	if cls == "" {
