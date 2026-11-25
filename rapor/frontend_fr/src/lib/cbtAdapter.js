@@ -85,7 +85,13 @@ function getLocal(key, fallback = null) {
 
 function normalizeExamItem(e) {
   if (!e) return null;
-  const isUas = e.examCategory === 'SEMESTER_UAS' || e.exam_category === 'SEMESTER_UAS' || Boolean(e.isCoordinatorExam) || Boolean(e.is_coordinator_exam) || Boolean(e.targetGradeLevel || e.target_grade_level);
+  const rawDesc = String(e.rawDescription || e.description || '');
+  const catTag = (rawDesc.match(/\[CAT:(SEMESTER_UAS|SEMESTER_UTS|TKA|REGULAR)\]/i) || [])[1];
+  const explicitCat = String(catTag || e.examCategory || e.exam_category || '').toUpperCase();
+  const isParallel = ['SEMESTER_UAS', 'SEMESTER_UTS', 'TKA'].includes(explicitCat) || Boolean(e.isCoordinatorExam) || Boolean(e.is_coordinator_exam) || Boolean(e.targetGradeLevel || e.target_grade_level);
+  const resolvedCat = ['SEMESTER_UAS', 'SEMESTER_UTS', 'TKA', 'REGULAR'].includes(explicitCat)
+    ? explicitCat
+    : (isParallel ? 'SEMESTER_UAS' : 'REGULAR');
   return {
     ...e,
     id: String(e.id || ''),
@@ -96,10 +102,10 @@ function normalizeExamItem(e) {
     course_id: e.course_id || e.subjectCode || 'MAPEL',
     className: e.className || e.class_code || '',
     class_code: e.class_code || e.className || '',
-    examCategory: isUas ? 'SEMESTER_UAS' : (e.examCategory || e.exam_category || 'REGULAR'),
-    exam_category: isUas ? 'SEMESTER_UAS' : (e.exam_category || e.examCategory || 'REGULAR'),
-    isCoordinatorExam: isUas,
-    is_coordinator_exam: isUas,
+    examCategory: resolvedCat,
+    exam_category: resolvedCat,
+    isCoordinatorExam: isParallel,
+    is_coordinator_exam: isParallel,
     targetGradeLevel: e.targetGradeLevel || e.target_grade_level || '',
     target_grade_level: e.target_grade_level || e.targetGradeLevel || '',
     targetClasses: Array.isArray(e.targetClasses) ? e.targetClasses : (Array.isArray(e.target_classes) ? e.target_classes : []),

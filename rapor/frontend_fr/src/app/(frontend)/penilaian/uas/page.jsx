@@ -162,10 +162,16 @@ export default function PenilaianUASPage() {
           }
 
           if (isTeacherRole) {
-            const teacherCourseCodes = [...new Set(teacherClasses.map((c) => c.course_code || c.course_id).filter(Boolean))];
-            const filteredSubjects = availableSubjects.filter((s) =>
-              teacherCourseCodes.some((tc) => tc === s.code || tc === `crs-${s.code.toLowerCase()}`)
-            );
+            const normCode = (v) => String(v || '').toLowerCase().trim().replace(/^crs[-_]/i, '');
+            const teacherCourseCodes = [...new Set(teacherClasses.map((c) => normCode(c.course_code || c.course_id)).filter(Boolean))];
+            const teacherCourseNames = [...new Set(teacherClasses.map((c) => String(c.course_name || c.subject_name || '').toLowerCase().trim()).filter(Boolean))];
+            const filteredSubjects = availableSubjects.filter((s) => {
+              const sCode = normCode(s.code);
+              const sName = String(s.name || '').toLowerCase().trim();
+              if (sCode && teacherCourseCodes.includes(sCode)) return true;
+              if (sName && teacherCourseNames.some((tn) => tn === sName || tn.includes(sName) || sName.includes(tn))) return true;
+              return false;
+            });
             setSubjects(filteredSubjects);
             if (filteredSubjects.length > 0) {
               setSubject((prev) => (filteredSubjects.some((s) => s.code === prev) ? prev : filteredSubjects[0].code));
@@ -324,24 +330,53 @@ export default function PenilaianUASPage() {
         const curSubCodeNorm = normStr(subject);
         const curSubNameNorm = normSubjectName(subjectName);
 
+        const SUBJECT_ALIAS_GROUPS = [
+          ['pai', 'paibp', 'agama', 'agamaislam', 'pendidikanagamaislam', 'pendidikanagamaislamdanbudipekerti', 'paidanbudipekerti'],
+          ['pkn', 'ppkn', 'pancasila', 'pendidikanpancasila', 'pendidikanpancasiladankewarganegaraan'],
+          ['bin', 'bindo', 'bind', 'bahasaindonesia', 'bindonesia'],
+          ['bing', 'binggris', 'bahasainggris', 'english'],
+          ['mtk', 'mat', 'matematika'],
+          ['ipa', 'ilmupengetahuanalam'],
+          ['ips', 'ilmupengetahuansosial'],
+          ['pjok', 'penjas', 'penjasorkes', 'pendidikanjasmani', 'olahraga'],
+          ['sbk', 'sbp', 'seni', 'senibudaya', 'senibudayadanprakarya', 'prakarya'],
+          ['inf', 'tik', 'informatika'],
+          ['bjw', 'bjawa', 'bahasajawa', 'bahasadaerah', 'mulok'],
+          ['bk', 'bp', 'bimbingankonseling'],
+        ];
+
+        const getAliasGroupIdx = (val) => {
+          if (!val) return -1;
+          return SUBJECT_ALIAS_GROUPS.findIndex((grp) =>
+            grp.some((alias) => val === alias || (val.length >= 4 && alias.length >= 4 && (val.includes(alias) || alias.includes(val))))
+          );
+        };
+
         const checkSubMatch = (ex) => {
           const rawExSub = String(ex.subject || ex.course_name || '').trim();
           const exSub = normSubjectName(rawExSub);
-          const exCode = normStr(ex.subjectCode || ex.course_id || '');
+          const exCode = normStr(ex.subjectCode || ex.course_id || '').replace(/^crs/, '');
+          const cleanCurCode = curSubCodeNorm.replace(/^crs/, '');
 
-          // 1. Jika ujian memiliki nama mapel resmi, WAJIB cocok secara ketat berdasarkan nama mapel
-          //    (mencegah kode fallback lama seperti "INF" membocorkan mapel lain ke Informatika)
-          if (exSub && exSub !== 'umum' && exSub !== 'mapel') {
-            if (!curSubNameNorm) return false;
-            if (exSub === curSubNameNorm) return true;
-            if (exSub.length >= 5 && curSubNameNorm.length >= 5) {
-              if (exSub.startsWith(curSubNameNorm) || curSubNameNorm.startsWith(exSub)) return true;
-            }
-            return false;
+          // 1. Cocokkan kode mapel resmi terlebih dahulu (tetap tersambung walau nama mapel diubah di e-Rapor!)
+          //    Cegah kebocoran kode fallback lama "inf" jika nama mapel ujian jelas bukan Informatika
+          const isStaleInfFallback = exCode === 'inf' && exSub && !exSub.includes('informatika') && !exSub.includes('tik');
+          if (!isStaleInfFallback && exCode && exCode !== 'mapel' && exCode !== 'umum' && cleanCurCode && exCode === cleanCurCode) {
+            return true;
           }
 
-          // 2. Fallback hanya jika ujian tidak memiliki nama mapel: cocokkan kode mapel secara persis
-          if (exCode && exCode !== 'mapel' && curSubCodeNorm && exCode === curSubCodeNorm) {
+          // 2. Cocokkan nama mapel (sama persis, prefix, atau substring bermakna)
+          if (exSub && exSub !== 'umum' && exSub !== 'mapel' && curSubNameNorm) {
+            if (exSub === curSubNameNorm) return true;
+            if (exSub.length >= 4 && curSubNameNorm.length >= 4) {
+              if (exSub.includes(curSubNameNorm) || curSubNameNorm.includes(exSub)) return true;
+            }
+          }
+
+          // 3. Cocokkan grup alias mapel SMP (mis. "PAI" <-> "Pendidikan Agama Islam & Budi Pekerti", "PPKn" <-> "Pendidikan Pancasila")
+          const curGroup = getAliasGroupIdx(curSubNameNorm) !== -1 ? getAliasGroupIdx(curSubNameNorm) : getAliasGroupIdx(cleanCurCode);
+          const exGroup = getAliasGroupIdx(exSub) !== -1 ? getAliasGroupIdx(exSub) : (!isStaleInfFallback ? getAliasGroupIdx(exCode) : -1);
+          if (curGroup !== -1 && curGroup === exGroup) {
             return true;
           }
 
