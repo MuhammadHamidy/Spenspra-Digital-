@@ -1182,6 +1182,23 @@ function parseQuestionImport(text, options = {}) {
     // Jika soal sebelumnya sudah punya opsi A-D/pasangan dan muncul instruksi wacana/poster baru
     // (cth: "Cermatilah poster berikut untuk menjawab soal nomor 21 s.d. 23!"), tutup soal lama
     // dan tampung sebagai stimulus + gambar untuk soal berikutnya agar tidak masuk ke Opsi D!
+    // Header bagian baru di tengah naskah (cth: "B. Jawablah pertanyaan dibawah ini dengan benar!", "II. Uraian / Esai")
+    // Jangan pernah masuk sebagai Opsi B soal sebelumnya!
+    if (/^(?:[A-E]|[IVX]+)\.\s*(?:JAWABLAH\s+PERTANYAAN|PILIHAN\s+GANDA|PG\s+KOMPLEKS|MENJODOHKAN|BENAR\s*\/?\s*SALAH|URAIAN|ESAI|ESSAY|ISIAN\s+SINGKAT)/i.test(line)) {
+      pushCurrent();
+      current = null;
+      currentOption = null;
+      collectingStimulus = false;
+      pendingStimulus = [];
+      pendingImage = '';
+      if (/URAIAN|ESAI|ESSAY/i.test(line)) {
+        pendingType = 'ESSAY';
+      } else {
+        pendingType = null;
+      }
+      return;
+    }
+
     if (current && (current.options.length >= 2 || current.matchingPairs.length >= 2) && isStimulusIntroLine) {
       pushCurrent();
       current = null;
@@ -1193,10 +1210,14 @@ function parseQuestionImport(text, options = {}) {
     }
 
     if (!current) {
+      const img = line.match(/^(?:gambar|image)\s*[:=]\s*(.+)$/i);
+      if (img) {
+        pendingImage = img[1].trim();
+        collectingStimulus = true;
+        return;
+      }
       if (collectingStimulus) {
-        const img = line.match(/^(?:gambar|image)\s*[:=]\s*(.+)$/i);
-        if (img) pendingImage = img[1].trim();
-        else pendingStimulus.push(line.replace(/^(?:stimulus|wacana|teks\s*kasus)\s*[:\-]\s*/i, ''));
+        pendingStimulus.push(line.replace(/^(?:stimulus|wacana|teks\s*kasus)\s*[:\-]\s*/i, ''));
       } else if (isStimulusIntroLine) {
         collectingStimulus = true;
         pendingStimulus.push(line);
@@ -1351,8 +1372,22 @@ function parseQuestionImport(text, options = {}) {
       const imgUrl = generalImageMatch[1].trim();
       if (currentOption) {
         const opt = current.options.find((o) => o.key === currentOption);
-        if (opt) {
+        const otherOptsHaveImages = current.options.some((o) => o.key !== currentOption && Boolean(o.imageUrl));
+        const isEmptyTextOption = opt && (!opt.text || !opt.text.trim());
+        // Hanya tempelkan gambar ke opsi jika opsi tersebut memang opsi bergambar (teks kosong atau opsi lain juga bergambar).
+        // Jika soal PG teks sudah punya >= 2 opsi dan opsi terakhir sudah berisi teks (mis. Opsi D selesai),
+        // maka gambar berdiri sendiri setelah Opsi D adalah GAMBAR UNTUK SOAL BERIKUTNYA!
+        if (opt && (isEmptyTextOption || otherOptsHaveImages)) {
           opt.imageUrl = imgUrl;
+          return;
+        }
+        if (current.options.length >= 2) {
+          pushCurrent();
+          current = null;
+          currentOption = null;
+          collectingStimulus = true;
+          pendingStimulus = [];
+          pendingImage = imgUrl;
           return;
         }
       }
