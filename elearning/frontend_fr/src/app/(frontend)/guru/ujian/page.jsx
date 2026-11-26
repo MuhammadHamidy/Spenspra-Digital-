@@ -531,6 +531,7 @@ async function extractDocxStructure(arrayBuffer) {
     let startIdx = -1;
     let m;
     while ((m = tagRegex.exec(xml)) !== null) {
+      if (m[0].endsWith('/>')) continue; // Abaikan tag paragraf kosong self-closing (<w:p/> atau <w:p w14:paraId="..."/>) agar depth tidak pernah meleset!
       const isClose = m[0].startsWith('</w:p');
       if (!isClose) {
         if (depth === 0) startIdx = m.index;
@@ -4415,10 +4416,25 @@ export default function TeacherExamsManagementPage() {
                         <AppIcon name="survey" color="white" size={14} />
                         <span>Preview Tampilan Siswa ({docxImported.length} Soal)</span>
                       </button>
+                      {importRawPreview && (
+                        <button
+                          type="button"
+                          onClick={() => setShowRawImportDebug((v) => !v)}
+                          className="px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition cursor-pointer"
+                        >
+                          {showRawImportDebug ? 'Sembunyikan Teks Mentah' : 'Lihat Teks Mentah Word'}
+                        </button>
+                      )}
                       <span className="text-[11px] text-neutral-500">
                         Klik tombol di atas untuk memastikan butir soal dan kunci sudah sesuai sebelum disimpan ke database.
                       </span>
                     </div>
+
+                    {showRawImportDebug && importRawPreview && importDiagnostics.length === 0 && (
+                      <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-slate-900 text-slate-100 p-2.5 text-[10px] font-mono whitespace-pre-wrap">
+                        {importRawPreview}
+                      </pre>
+                    )}
 
                     {/* Panel Laporan Kesalahan / Peringatan Impor Word */}
                     {importDiagnostics.length > 0 && (
