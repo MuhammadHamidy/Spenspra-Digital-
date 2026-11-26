@@ -276,8 +276,27 @@ async function extractDocxStructure(arrayBuffer) {
   const docXml = await docXmlFile.async('string');
   const numberingXmlFile = zip.file('word/numbering.xml');
   const numberingXml = numberingXmlFile ? await numberingXmlFile.async('string') : '';
+  const stylesXmlFile = zip.file('word/styles.xml');
+  const stylesXml = stylesXmlFile ? await stylesXmlFile.async('string') : '';
   const relsXmlFile = zip.file('word/_rels/document.xml.rels');
   const relsXml = relsXmlFile ? await relsXmlFile.async('string') : '';
+
+  // 0. Peta styleId -> { numId, ilvl } dari word/styles.xml (jika penomoran soal/opsi diwarisi dari Paragraph Style)
+  const styleNumMap = {};
+  if (stylesXml) {
+    const styleMatches = stylesXml.match(/<w:style\b[^>]*>[\s\S]*?<\/w:style>/g) || [];
+    for (const sm of styleMatches) {
+      const styleId = (sm.match(/w:styleId="([^"]+)"/) || [])[1];
+      const sNumPr = sm.match(/<w:numPr\b[\s\S]*?<\/w:numPr>/);
+      if (styleId && sNumPr) {
+        const sNumId = (sNumPr[0].match(/<w:numId\s+w:val="(\d+)"/) || [])[1];
+        const sIlvl = (sNumPr[0].match(/<w:ilvl\s+w:val="(\d+)"/) || [])[1] || '0';
+        if (sNumId && sNumId !== '0') {
+          styleNumMap[styleId] = { numId: sNumId, ilvl: sIlvl };
+        }
+      }
+    }
+  }
 
   // 1. Peta relasi gambar (Relationship Id -> file path dalam ZIP)
   const rels = {};
@@ -290,13 +309,24 @@ async function extractDocxStructure(arrayBuffer) {
     }
   }
 
-  // 2. Peta definisi penomoran (numId -> abstractNumId -> lvl -> format)
+  // 2. Peta definisi penomoran (numId -> abstractNumId -> lvl -> format + startOverride)
   const numToAbs = {};
+  const numStartOverrides = {};
   const numMatches = numberingXml.match(/<w:num\s+[^>]*>[\s\S]*?<\/w:num>/g) || [];
   for (const nm of numMatches) {
     const numId = (nm.match(/w:numId="(\d+)"/) || [])[1];
     const absId = (nm.match(/<w:abstractNumId\s+w:val="(\d+)"/) || [])[1];
-    if (numId && absId) numToAbs[numId] = absId;
+    if (numId && absId) {
+      numToAbs[numId] = absId;
+      const lvlOverrides = nm.match(/<w:lvlOverride\b[^>]*>[\s\S]*?<\/w:lvlOverride>/g) || [];
+      for (const lo of lvlOverrides) {
+        const oIlvl = (lo.match(/w:ilvl="(\d+)"/) || [])[1] || '0';
+        const oStart = (lo.match(/<w:startOverride\s+w:val="(\d+)"/) || [])[1];
+        if (oStart) {
+          numStartOverrides[`${numId}:${oIlvl}`] = Number(oStart);
+        }
+      }
+    }
   }
 
   const absFormats = {};
@@ -338,7 +368,8 @@ async function extractDocxStructure(arrayBuffer) {
 
     const counterKey = `${numId}:${ilvl}`;
     if (numCounters[counterKey] === undefined) {
-      numCounters[counterKey] = (fmtInfo.startVal || 1) - 1;
+      const startOverride = numStartOverrides[counterKey];
+      numCounters[counterKey] = (startOverride !== undefined ? startOverride : (fmtInfo.startVal || 1)) - 1;
     }
     numCounters[counterKey]++;
     const count = numCounters[counterKey];
@@ -389,10 +420,101 @@ async function extractDocxStructure(arrayBuffer) {
     return optLines >= 2;
   };
 
-  // Tandai tabel 1-kolom (sering dipakai guru sebagai kotak teks wacana di Word)
+  // Deteksi & konversi Tabel Menjodohkan Word (cth: | No | Kolom A | Jawaban | Kolom B | atau | Kolom A | Kolom B |)
+  // menjadi blok terstruktur [JODOH] dengan pasangan + kunci merah yang langsung terbaca parser!
+  const extractCellText = (cellXml) => {
+    const ps = cellXml.match(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g) || [];
+    return ps
+      .map((cp) => extractPlainTextQuick(cp))
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  const extractRedLinesFromCell = (cellXml) => {
+    const ps = cellXml.match(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g) || [];
+    const reds = [];
+    ps.forEach((cp) => {
+      const runs = cp.match(/<w:r\b[\s\S]*?<\/w:r>/g) || [];
+      let redTxt = '';
+      runs.forEach((r) => {
+        const cv = (r.match(/<w:color\s+[^>]*w:val="([^"]+)"/i) || [])[1];
+        const tc = (r.match(/<w:color\s+[^>]*w:themeColor="([^"]+)"/i) || [])[1];
+        const hv = (r.match(/<w:highlight\s+[^>]*w:val="([^"]+)"/i) || [])[1];
+        if (isAnswerColor(cv) || isAnswerColor(tc) || ['red', 'magenta', 'yellow', 'green'].includes(String(hv).toLowerCase())) {
+          redTxt += extractPlainTextQuick(r) + ' ';
+        }
+      });
+      if (redTxt.trim()) reds.push(redTxt.trim());
+    });
+    return reds;
+  };
+
+  // Tandai tabel 1-kolom (kotak wacana) DAN ubah tabel Menjodohkan multi-kolom menjadi paragraf [JODOH]
   const markedDocXml = cleanedDocXml.replace(/<w:tbl\b[\s\S]*?<\/w:tbl>/g, (tblXml) => {
     const rows = tblXml.match(/<w:tr\b[\s\S]*?<\/w:tr>/g) || [];
     if (rows.length === 0) return tblXml;
+
+    // 1. Cek apakah ini Tabel Menjodohkan (header mengandung Kolom A & Kolom B / Premis & Jawaban)
+    if (rows.length >= 3) {
+      const headerCells = (rows[0].match(/<w:tc\b[\s\S]*?<\/w:tc>/g) || []).map(extractCellText);
+      const colAIdx = headerCells.findIndex((h) => /kolom\s*a|premis|pernyataan|kasus|masalah/i.test(h));
+      const colBIdx = headerCells.findIndex((h) => /kolom\s*b|penyebab|solusi|pasangan|pilihan\s*jawaban/i.test(h));
+      const ansIdx = headerCells.findIndex((h, idx) => idx !== colAIdx && idx !== colBIdx && /jawaban|kunci|pilihan/i.test(h));
+      const noIdx = headerCells.findIndex((h) => /^no\.?$|nomor/i.test(h.trim()));
+
+      if (colAIdx !== -1 && colBIdx !== -1) {
+        const dataRows = rows.slice(1).map((r) => r.match(/<w:tc\b[\s\S]*?<\/w:tc>/g) || []);
+        // Kumpulkan semua opsi Kolom B (A. ..., B. ..., C. ...)
+        const colBMap = {};
+        const colBList = [];
+        dataRows.forEach((cells, rIdx) => {
+          const bRaw = cells[colBIdx] ? extractCellText(cells[colBIdx]) : '';
+          if (!bRaw) return;
+          const bMatch = bRaw.match(/^([A-Z])\s*[.)\]:\-]\s*(.+)$/);
+          const letter = bMatch ? bMatch[1].toUpperCase() : String.fromCharCode(65 + rIdx);
+          const cleanB = bRaw.trim();
+          colBMap[letter] = cleanB;
+          colBList.push(cleanB);
+        });
+
+        let firstNo = '1';
+        const pairLines = [];
+        dataRows.forEach((cells, rIdx) => {
+          const aText = cells[colAIdx] ? extractCellText(cells[colAIdx]) : '';
+          if (!aText) return;
+          if (rIdx === 0 && noIdx !== -1 && cells[noIdx]) {
+            const noTxt = extractCellText(cells[noIdx]).match(/\d+/);
+            if (noTxt) firstNo = noTxt[0];
+          }
+          let matchedRight = colBList[rIdx] || colBList[0] || '';
+          if (ansIdx !== -1 && cells[ansIdx]) {
+            const redLines = extractRedLinesFromCell(cells[ansIdx]);
+            for (const rl of redLines) {
+              // Cari huruf target di teks merah, mis: "No. 4 dengan C" atau "b. No. 4 dengan C"
+              const withLetter = rl.match(/(?:dengan|->|=>|=|:)\s*([A-Z])\b/i) || rl.match(/\b([A-Z])\s*$/);
+              if (withLetter && colBMap[withLetter[1].toUpperCase()]) {
+                matchedRight = colBMap[withLetter[1].toUpperCase()];
+                break;
+              }
+            }
+          }
+          pairLines.push(`Pasangan: ${aText} -> ${matchedRight}`);
+        });
+
+        if (pairLines.length >= 2) {
+          const escXml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const syntheticPs = [
+            `${firstNo}. [JODOH] Cocokkanlah pernyataan pada Kolom A dengan jawaban yang paling tepat pada Kolom B.`,
+            ...pairLines,
+          ].map((line) => `<w:p><w:r><w:t>${escXml(line)}</w:t></w:r></w:p>`);
+          return syntheticPs.join('');
+        }
+      }
+    }
+
+    // 2. Cek apakah ini tabel 1-kolom (sering dipakai guru sebagai kotak teks wacana di Word)
     const isSingleColumnTable = rows.every((row) => (row.match(/<w:tc\b/g) || []).length === 1);
     if (!isSingleColumnTable) return tblXml;
     if (looksLikeQuestionOrOptionsBox(tblXml)) return tblXml;
@@ -459,10 +581,17 @@ async function extractDocxStructure(arrayBuffer) {
     const p = pObj.xml;
     const isFromBox = Boolean(pObj.isFromBox);
 
-    // Penomoran otomatis Word
-    const numPr = p.match(/<w:numPr>.*?<\/w:numPr>/s);
-    const numId = numPr ? (numPr[0].match(/<w:numId\s+w:val="(\d+)"/) || [])[1] : null;
-    const ilvl = numPr ? (numPr[0].match(/<w:ilvl\s+w:val="(\d+)"/) || [])[1] : '0';
+    // Penomoran otomatis Word (langsung di <w:numPr> maupun diwarisi dari <w:pStyle> di word/styles.xml)
+    const numPr = p.match(/<w:numPr\b[\s\S]*?<\/w:numPr>/);
+    let numId = numPr ? (numPr[0].match(/<w:numId\s+w:val="(\d+)"/) || [])[1] : null;
+    let ilvl = numPr ? (numPr[0].match(/<w:ilvl\s+w:val="(\d+)"/) || [])[1] : '0';
+    if (!numId) {
+      const pStyleId = (p.match(/<w:pStyle\s+w:val="([^"]+)"/) || [])[1];
+      if (pStyleId && styleNumMap[pStyleId]) {
+        numId = styleNumMap[pStyleId].numId;
+        ilvl = styleNumMap[pStyleId].ilvl;
+      }
+    }
 
     let listInfo = null;
     if (numId && numId !== '0') {
