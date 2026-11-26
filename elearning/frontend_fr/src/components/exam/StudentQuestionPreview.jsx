@@ -232,67 +232,89 @@ export function StudentQuestionView({ question: q, number, showKey = false }) {
       )}
 
       {q.type === 'MATCHING' && (
-        <div className="space-y-2.5">
-          {(q.matchingPairs || []).map((pair, idx) => {
-            const expectedList = Array.isArray(pair.rights) && pair.rights.length > 0 ? pair.rights : (pair.right ? [pair.right] : []);
-            const isMulti = Boolean(q.matchingMultiSelect) || expectedList.length > 1;
-            const pickedList = Array.isArray(matching[idx]) ? matching[idx] : (matching[idx] ? [matching[idx]] : []);
-            return (
-              <div key={pair.id || idx} className="p-3 rounded-xl border border-neutral-200 bg-neutral-50/70 space-y-2.5">
-                <div className="flex items-center gap-2.5">
-                  <span className="w-7 h-7 rounded-lg bg-neutral-800 text-white font-bold text-xs flex items-center justify-center shrink-0">{idx + 1}</span>
-                  <p className="text-xs sm:text-sm font-semibold text-neutral-900 flex-1"><MathText text={pair.left} /></p>
-                </div>
-                {showKey ? (
-                  <div className="flex flex-wrap gap-1.5 pl-9">
-                    {expectedList.map((ansTxt, aIdx) => (
-                      <span key={aIdx} className="px-2.5 py-1 rounded-lg border border-emerald-400 bg-emerald-50 text-emerald-900 text-xs font-semibold">
-                        ✓ <MathText text={ansTxt} />
-                      </span>
-                    ))}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+          {/* Kolom A: Daftar Premis / Pernyataan + Pilihan Huruf Pasangan */}
+          <div className="lg:col-span-7 space-y-2.5">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-neutral-700">
+                Kolom A — Pernyataan / Kasus
+              </span>
+              <span className="text-[10px] font-semibold text-violet-700">
+                {Boolean(q.matchingMultiSelect) || (q.matchingPairs || []).some((p) => Array.isArray(p.rights) && p.rights.length > 1)
+                  ? 'Bisa pilih 1 atau lebih huruf Kolom B'
+                  : 'Pilih 1 pasangan huruf Kolom B'}
+              </span>
+            </div>
+            {(q.matchingPairs || []).map((pair, idx) => {
+              const expectedList = Array.isArray(pair.rights) && pair.rights.length > 0 ? pair.rights : (pair.right ? [pair.right] : []);
+              const isMulti = Boolean(q.matchingMultiSelect) || expectedList.length > 1;
+              const pickedList = Array.isArray(matching[idx]) ? matching[idx] : (matching[idx] ? [matching[idx]] : []);
+              return (
+                <div key={pair.id || idx} className="p-3 rounded-xl border border-neutral-200 bg-white space-y-2.5 shadow-2xs">
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-6 h-6 rounded-lg bg-neutral-800 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">{idx + 1}</span>
+                    <p className="text-xs sm:text-sm font-semibold text-neutral-900 flex-1 leading-snug"><MathText text={pair.left} /></p>
                   </div>
-                ) : isMulti ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-0 sm:pl-9">
+                  <div className="flex items-center flex-wrap gap-1.5 pl-8">
+                    <span className="text-[11px] font-semibold text-neutral-500 mr-1">Pasangkan:</span>
                     {rightOptions.map((r, i) => {
-                      const checked = pickedList.includes(r);
+                      const letter = String.fromCharCode(65 + i);
+                      const isKeyOpt = expectedList.includes(r);
+                      const checked = showKey ? isKeyOpt : pickedList.includes(r);
                       return (
                         <button
                           key={i}
                           type="button"
-                          onClick={() =>
+                          onClick={() => {
+                            if (showKey) return;
                             setMatching((m) => {
-                              const cur = Array.isArray(m[idx]) ? m[idx] : [];
-                              const next = cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r];
-                              return { ...m, [idx]: next };
-                            })
-                          }
-                          className={`p-2 rounded-lg border text-left text-xs font-medium cursor-pointer flex items-center gap-2 ${
-                            checked ? 'bg-violet-50 border-violet-500 text-violet-950 font-semibold' : 'bg-white border-neutral-300 text-neutral-700'
+                              if (isMulti) {
+                                const cur = Array.isArray(m[idx]) ? m[idx] : [];
+                                const next = cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r];
+                                return { ...m, [idx]: next };
+                              }
+                              return { ...m, [idx]: m[idx] === r ? '' : r };
+                            });
+                          }}
+                          className={`px-2.5 py-1 rounded-lg border text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 ${
+                            showKey && isKeyOpt
+                              ? 'bg-emerald-600 border-emerald-600 text-white shadow-2xs'
+                              : checked
+                              ? 'bg-violet-600 border-violet-600 text-white shadow-2xs'
+                              : 'bg-neutral-50 border-neutral-300 text-neutral-700 hover:border-violet-400 hover:bg-violet-50'
                           }`}
                         >
-                          <span className="font-bold text-violet-700">{checked ? '✓' : '☐'} {String.fromCharCode(65 + i)}.</span>
-                          <span className="flex-1"><MathText text={r} /></span>
+                          {checked && <span>✓</span>}
+                          <span>{letter}</span>
                         </button>
                       );
                     })}
                   </div>
-                ) : (
-                  <div className="pl-0 sm:pl-9">
-                    <select
-                      value={matching[idx] || ''}
-                      onChange={(e) => setMatching((m) => ({ ...m, [idx]: e.target.value }))}
-                      className="w-full text-xs sm:text-sm p-2.5 rounded-lg border border-neutral-300 bg-white"
-                    >
-                      <option value="">-- Pilih Pasangan Jawaban --</option>
-                      {rightOptions.map((r, i) => (
-                        <option key={i} value={r}>{r}</option>
-                      ))}
-                    </select>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Kolom B: Daftar Opsi Jawaban (Tampil 1 Kali Rapi di Samping Kanan) */}
+          <div className="lg:col-span-5 rounded-2xl border border-violet-200 bg-violet-50/40 p-3.5 space-y-2.5">
+            <div className="text-[11px] font-extrabold uppercase tracking-wider text-violet-900">
+              Kolom B — Pilihan Jawaban ({rightOptions.length} Opsi)
+            </div>
+            <div className="space-y-2">
+              {rightOptions.map((r, i) => {
+                const letter = String.fromCharCode(65 + i);
+                const displayOpt = String(r || '').replace(/^[A-Z]\s*[.)\]:\-]\s+/, '').trim() || r;
+                return (
+                  <div key={i} className="p-2.5 rounded-xl bg-white border border-violet-200/80 flex items-start gap-2.5 text-xs text-neutral-800 shadow-2xs">
+                    <span className="w-6 h-6 rounded-lg bg-violet-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                      {letter}
+                    </span>
+                    <span className="flex-1 leading-snug pt-0.5"><MathText text={displayOpt} /></span>
                   </div>
-                )}
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 

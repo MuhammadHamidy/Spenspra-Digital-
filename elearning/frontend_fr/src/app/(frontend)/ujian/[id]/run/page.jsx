@@ -1348,9 +1348,9 @@ export default function CBTExamRunnerPage({ params }) {
                 </div>
               )}
 
-              {/* 4D. Menjodohkan / Pencocokan (1-ke-1 maupun Multi-Pilih + Pengecoh Kolom B) */}
+              {/* 4D. Menjodohkan / Pencocokan (Tampilan 2 Kolom: Kolom A Premis di Kiri, Kolom B Jawaban di Kanan) */}
               {currentQ?.type === 'MATCHING' && (
-                <div className="space-y-3 pt-2">
+                <div className="pt-2">
                   {(() => {
                     const pairs = Array.isArray(currentQ?.matchingPairs) ? currentQ.matchingPairs : [];
                     const allRightOptions = Array.from(
@@ -1371,128 +1371,118 @@ export default function CBTExamRunnerPage({ params }) {
                       );
                     }
 
-                    return pairs.map((pair, pIdx) => {
-                      const curAns = answers[currentQ.id] || {};
-                      let mMap = curAns.matchingAnswers;
-                      if (!mMap && typeof curAns.selectedOption === 'string' && curAns.selectedOption.startsWith('{')) {
-                        try {
-                          mMap = JSON.parse(curAns.selectedOption);
-                        } catch (_) {}
-                      }
-                      mMap = mMap || {};
-                      const pairKey = pair.id !== undefined && pair.id !== null && pair.id !== '' ? pair.id : pIdx + 1;
-                      const rawSelected =
-                        mMap[pairKey] ??
-                        mMap[String(pairKey)] ??
-                        mMap[`idx_${pIdx}`] ??
-                        mMap[(pair.left || '').trim()] ??
-                        mMap[pIdx + 1] ??
-                        mMap[String(pIdx + 1)] ??
-                        (isMultiMatching ? [] : '');
+                    const curAns = answers[currentQ.id] || {};
+                    let mMap = curAns.matchingAnswers;
+                    if (!mMap && typeof curAns.selectedOption === 'string' && curAns.selectedOption.startsWith('{')) {
+                      try {
+                        mMap = JSON.parse(curAns.selectedOption);
+                      } catch (_) {}
+                    }
+                    mMap = mMap || {};
 
-                      if (isMultiMatching) {
-                        const selectedList = Array.isArray(rawSelected)
-                          ? rawSelected
-                          : (rawSelected ? [rawSelected] : []);
-
-                        return (
-                          <div
-                            key={pair.id || pIdx}
-                            className="p-3.5 sm:p-4 rounded-xl border border-neutral-200 bg-neutral-50/70 space-y-3 shadow-2xs"
-                          >
-                            <div className="flex items-start gap-2.5">
-                              <span className="w-7 h-7 rounded-lg bg-neutral-800 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                                {pIdx + 1}
-                              </span>
-                              <div className="flex-1 min-w-0">
-                                <p className={`${fontClasses.option} font-semibold text-neutral-900 leading-snug`}>
-                                  <MathText text={pair.left} />
-                                </p>
-                                <p className="text-[11px] text-violet-700 font-medium mt-0.5">
-                                  Pilih 1 atau lebih jawaban yang cocok ({selectedList.length} dipilih):
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-0 sm:pl-9">
-                              {allRightOptions.map((optText, oIdx) => {
-                                const letter = String.fromCharCode(65 + oIdx);
-                                const isChecked = selectedList.includes(optText);
-                                return (
-                                  <button
-                                    key={oIdx}
-                                    type="button"
-                                    onClick={() => {
-                                      const nextList = isChecked
-                                        ? selectedList.filter((item) => item !== optText)
-                                        : [...selectedList, optText];
-                                      handleSelectMatchingPair(pairKey, nextList, pair.left, pIdx);
-                                    }}
-                                    className={`p-2.5 rounded-xl border-2 text-left transition-all cursor-pointer flex items-start gap-2.5 ${
-                                      isChecked
-                                        ? 'bg-violet-50 border-violet-500 text-violet-950 shadow-2xs'
-                                        : 'bg-white border-neutral-200 hover:border-violet-300 text-neutral-800'
-                                    }`}
-                                  >
-                                    <span
-                                      className={`w-5 h-5 rounded-md flex items-center justify-center text-[11px] font-black shrink-0 mt-0.5 border ${
-                                        isChecked
-                                          ? 'bg-violet-600 border-violet-600 text-white'
-                                          : 'bg-white border-neutral-300 text-transparent'
-                                      }`}
-                                    >
-                                      ✓
-                                    </span>
-                                    <span className="text-xs font-bold text-violet-700 shrink-0 mt-0.5">{letter}.</span>
-                                    <span className={`${fontClasses.option} flex-1 leading-snug`}>
-                                      <MathText text={optText} />
-                                    </span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      }
-
-                      const selectedRight = Array.isArray(rawSelected) ? (rawSelected[0] || '') : rawSelected;
-
-                      return (
-                        <div
-                          key={pair.id || pIdx}
-                          className="p-3.5 sm:p-4 rounded-xl border border-neutral-200 bg-neutral-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs"
-                        >
-                          <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                            <span className="w-7 h-7 rounded-lg bg-neutral-800 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                              {pIdx + 1}
+                    return (
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+                        {/* Kolom A: Pernyataan / Premis */}
+                        <div className="lg:col-span-7 space-y-3">
+                          <div className="flex items-center justify-between px-1">
+                            <span className="text-xs font-extrabold uppercase tracking-wider text-neutral-700">
+                              Kolom A — Pernyataan / Kasus
                             </span>
-                            <p className="text-xs sm:text-sm font-semibold text-neutral-900 leading-snug">
-                              <MathText text={pair.left} />
-                            </p>
+                            <span className="text-[11px] font-semibold text-violet-700">
+                              {isMultiMatching ? 'Klik 1 atau lebih huruf Kolom B' : 'Klik 1 pasangan huruf Kolom B'}
+                            </span>
                           </div>
+                          {pairs.map((pair, pIdx) => {
+                            const pairKey = pair.id !== undefined && pair.id !== null && pair.id !== '' ? pair.id : pIdx + 1;
+                            const rawSelected =
+                              mMap[pairKey] ??
+                              mMap[String(pairKey)] ??
+                              mMap[`idx_${pIdx}`] ??
+                              mMap[(pair.left || '').trim()] ??
+                              mMap[pIdx + 1] ??
+                              mMap[String(pIdx + 1)] ??
+                              (isMultiMatching ? [] : '');
+                            const selectedList = Array.isArray(rawSelected)
+                              ? rawSelected
+                              : (rawSelected ? [rawSelected] : []);
 
-                          <div className="flex items-center gap-2 sm:w-1/2 shrink-0">
-                            <span className="text-neutral-400 font-bold hidden sm:inline">↔</span>
-                            <select
-                              value={selectedRight}
-                              onChange={(e) => handleSelectMatchingPair(pairKey, e.target.value, pair.left, pIdx)}
-                              className={`w-full text-xs sm:text-sm p-2.5 rounded-lg border font-medium transition-colors cursor-pointer ${
-                                selectedRight
-                                  ? 'bg-violet-50 border-violet-400 text-violet-950 font-semibold ring-1 ring-violet-400/20'
-                                  : 'bg-white border-neutral-300 text-neutral-600'
-                              }`}
-                            >
-                              <option value="">-- Pilih Pasangan Jawaban --</option>
-                              {allRightOptions.map((optText, oIdx) => (
-                                <option key={oIdx} value={optText}>
-                                  {optText}
-                                </option>
-                              ))}
-                            </select>
+                            return (
+                              <div
+                                key={pair.id || pIdx}
+                                className="p-3.5 sm:p-4 rounded-xl border border-neutral-200 bg-white space-y-3 shadow-2xs"
+                              >
+                                <div className="flex items-start gap-2.5">
+                                  <span className="w-7 h-7 rounded-lg bg-neutral-800 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                                    {pIdx + 1}
+                                  </span>
+                                  <p className={`${fontClasses.option} font-semibold text-neutral-900 leading-snug flex-1`}>
+                                    <MathText text={pair.left} />
+                                  </p>
+                                </div>
+
+                                <div className="flex items-center flex-wrap gap-1.5 pl-0 sm:pl-9">
+                                  <span className="text-xs font-semibold text-neutral-500 mr-1">Pasangkan:</span>
+                                  {allRightOptions.map((optText, oIdx) => {
+                                    const letter = String.fromCharCode(65 + oIdx);
+                                    const isChecked = selectedList.includes(optText);
+                                    return (
+                                      <button
+                                        key={oIdx}
+                                        type="button"
+                                        onClick={() => {
+                                          if (isMultiMatching) {
+                                            const nextList = isChecked
+                                              ? selectedList.filter((item) => item !== optText)
+                                              : [...selectedList, optText];
+                                            handleSelectMatchingPair(pairKey, nextList, pair.left, pIdx);
+                                          } else {
+                                            handleSelectMatchingPair(pairKey, isChecked ? '' : optText, pair.left, pIdx);
+                                          }
+                                        }}
+                                        className={`px-3 py-1.5 rounded-lg border-2 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 ${
+                                          isChecked
+                                            ? 'bg-violet-600 border-violet-600 text-white shadow-2xs'
+                                            : 'bg-neutral-50 border-neutral-300 text-neutral-700 hover:border-violet-400 hover:bg-violet-50'
+                                        }`}
+                                      >
+                                        {isChecked && <span>✓</span>}
+                                        <span>{letter}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Kolom B: Daftar Pilihan Jawaban (Tampil 1 Kali Rapi di Samping Kanan) */}
+                        <div className="lg:col-span-5 rounded-2xl border-2 border-violet-200 bg-violet-50/40 p-4 space-y-2.5 lg:sticky lg:top-4">
+                          <div className="text-xs font-extrabold uppercase tracking-wider text-violet-900">
+                            Kolom B — Pilihan Jawaban ({allRightOptions.length} Opsi)
+                          </div>
+                          <div className="space-y-2">
+                            {allRightOptions.map((optText, oIdx) => {
+                              const letter = String.fromCharCode(65 + oIdx);
+                              const displayOpt = String(optText || '').replace(/^[A-Z]\s*[.)\]:\-]\s+/, '').trim() || optText;
+                              return (
+                                <div
+                                  key={oIdx}
+                                  className="p-3 rounded-xl bg-white border border-violet-200/80 flex items-start gap-2.5 shadow-2xs"
+                                >
+                                  <span className="w-6 h-6 rounded-lg bg-violet-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                                    {letter}
+                                  </span>
+                                  <span className={`${fontClasses.option} flex-1 text-neutral-800 leading-snug`}>
+                                    <MathText text={displayOpt} />
+                                  </span>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
-                      );
-                    });
+                      </div>
+                    );
                   })()}
                 </div>
               )}

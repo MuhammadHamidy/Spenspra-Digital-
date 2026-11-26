@@ -483,7 +483,7 @@ async function extractDocxStructure(arrayBuffer) {
           if (!bRaw) return;
           const bMatch = bRaw.match(/^([A-Z])\s*[.)\]:\-]\s*(.+)$/);
           const letter = bMatch ? bMatch[1].toUpperCase() : String.fromCharCode(65 + rIdx);
-          const cleanB = bRaw.trim();
+          const cleanB = bMatch ? bMatch[2].trim() : bRaw.trim();
           colBMap[letter] = cleanB;
           colBList.push(cleanB);
         });
