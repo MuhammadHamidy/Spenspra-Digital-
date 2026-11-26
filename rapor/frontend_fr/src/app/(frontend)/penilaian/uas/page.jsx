@@ -441,8 +441,16 @@ export default function PenilaianUASPage() {
           return false;
         };
 
-        // Filter ujian yang sesuai Mapel & ruang lingkup guru pengampu di e-Rapor
-        const sameSubjectExams = (allExams || []).filter((ex) => checkSubMatch(ex) && isAllowedForTeacherScope(ex));
+        // Pisahkan ujian TKA ke menu Hasil TKA khusus — jangan dicampur dengan UAS/ASAS
+        const isTkaExam = (ex) =>
+          String(ex.examCategory || ex.exam_category || '').toUpperCase() === 'TKA' ||
+          /\btka\b/i.test(String(ex.title || '')) ||
+          /\btka\b/i.test(String(ex.token || ''));
+
+        // Filter ujian yang sesuai Mapel & ruang lingkup guru pengampu di e-Rapor (non-TKA)
+        const sameSubjectExams = (allExams || []).filter(
+          (ex) => !isTkaExam(ex) && checkSubMatch(ex) && isAllowedForTeacherScope(ex)
+        );
 
         // Hanya tampilkan ujian yang benar-benar cocok dengan rombel/tingkat aktif yang sedang dibuka
         const filtered = sameSubjectExams.filter(checkClassMatch);

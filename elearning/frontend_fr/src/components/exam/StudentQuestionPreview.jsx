@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import AppIcon from '@/components/AppIcon';
+import MathText from '@/components/MathText';
 
 export const QUESTION_TYPE_META = {
   MCQ: { label: 'Pilihan Ganda', badge: 'bg-primary-100 text-primary-800 border-primary-200', dot: 'bg-primary-500' },
@@ -86,7 +87,7 @@ export function StudentQuestionView({ question: q, number, showKey = false }) {
             <AppIcon name="file" color="yellow" size={15} />
             <span>Wacana / Stimulus Kasus</span>
           </div>
-          <div className="text-xs sm:text-sm whitespace-pre-wrap leading-relaxed">{q.stimulusText}</div>
+          <div className="text-xs sm:text-sm whitespace-pre-wrap leading-relaxed"><MathText text={q.stimulusText} /></div>
         </div>
       )}
 
@@ -98,7 +99,7 @@ export function StudentQuestionView({ question: q, number, showKey = false }) {
       )}
 
       <div className="text-sm sm:text-base text-neutral-900 leading-relaxed whitespace-pre-wrap font-medium">
-        {q.questionText}
+        <MathText text={q.questionText} />
       </div>
 
       {(q.type === 'MCQ' || !q.type) && (
@@ -126,7 +127,7 @@ export function StudentQuestionView({ question: q, number, showKey = false }) {
                   {opt.key}
                 </div>
                 <div className="flex-1 min-w-0">
-                  {opt.text && <span className="text-xs sm:text-sm text-neutral-800 leading-normal block">{opt.text}</span>}
+                  {opt.text && <span className="text-xs sm:text-sm text-neutral-800 leading-normal block"><MathText text={opt.text} /></span>}
                   {(opt.imageUrl || opt.image_url) && (
                     <img
                       src={opt.imageUrl || opt.image_url}
@@ -179,7 +180,7 @@ export function StudentQuestionView({ question: q, number, showKey = false }) {
                   {opt.key}
                 </span>
                 <div className="flex-1 min-w-0">
-                  {opt.text && <span className="text-xs sm:text-sm text-neutral-800 leading-normal block">{opt.text}</span>}
+                  {opt.text && <span className="text-xs sm:text-sm text-neutral-800 leading-normal block"><MathText text={opt.text} /></span>}
                   {(opt.imageUrl || opt.image_url) && (
                     <img
                       src={opt.imageUrl || opt.image_url}

@@ -7,6 +7,7 @@ import StatusBadge from '@/components/StatusBadge';
 import Modal from '@/components/Modal';
 import ConfirmModal from '@/components/ConfirmModal';
 import AppIcon from '@/components/AppIcon';
+import MathText from '@/components/MathText';
 import { elearningApi, extractGradeLevelDigit, normalizeClassCode } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
@@ -125,6 +126,49 @@ export default function LiveProctoringMonitoringPage() {
   const [user, setUser] = useState(null);
   const [exams, setExams] = useState([]);
   const [selectedExamId, setSelectedExamId] = useState('');
+  const [isExamPickerOpen, setIsExamPickerOpen] = useState(false);
+  const [examPickerCategory, setExamPickerCategory] = useState('ALL');
+  const [examPickerSearch, setExamPickerSearch] = useState('');
+  const examPickerRef = React.useRef(null);
+
+  useEffect(() => {
+    if (!isExamPickerOpen) return;
+    const handleOutside = (e) => {
+      if (examPickerRef.current && !examPickerRef.current.contains(e.target)) {
+        setIsExamPickerOpen(false);
+      }
+    };
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') setIsExamPickerOpen(false);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [isExamPickerOpen]);
+
+  const getExamMeta = (ex) => {
+    if (!ex) return { cat: 'REGULAR', badge: 'Reguler', badgeCls: 'bg-slate-100 text-slate-700 border-slate-200', target: '-' };
+    const rawCat = String(ex.examCategory || ex.exam_category || '').toUpperCase();
+    let cat = 'REGULAR';
+    if (['SEMESTER_UAS', 'SEMESTER_UTS', 'TKA', 'REGULAR'].includes(rawCat)) cat = rawCat;
+    else if (/\btka\b/i.test(ex.title || '') || /\btka\b/i.test(ex.token || '')) cat = 'TKA';
+    else if (/\b(asts|uts|pts|sts)\b/i.test(ex.title || '') || /\b(asts|uts|pts|sts)\b/i.test(ex.token || '')) cat = 'SEMESTER_UTS';
+    else if (ex.isCoordinatorExam || ex.targetGradeLevel) cat = 'SEMESTER_UAS';
+
+    const metaMap = {
+      SEMESTER_UAS: { badge: 'ASAS', badgeCls: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+      SEMESTER_UTS: { badge: 'ASTS', badgeCls: 'bg-sky-50 text-sky-700 border-sky-200' },
+      TKA: { badge: 'TKA', badgeCls: 'bg-violet-50 text-violet-700 border-violet-200' },
+      REGULAR: { badge: 'Reguler', badgeCls: 'bg-slate-100 text-slate-700 border-slate-200' },
+    };
+    const target = ex.targetGradeLevel
+      ? `Tingkat ${ex.targetGradeLevel}`
+      : (ex.className ? String(ex.className).replace(/\s*\([^)]*\)/g, '').trim() : '-');
+    return { cat, ...metaMap[cat], target };
+  };
   const [sessions, setSessions] = useState([]);
   const [classStudents, setClassStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1116,7 +1160,7 @@ export default function LiveProctoringMonitoringPage() {
 
                   {/* Teks Pertanyaan */}
                   <div className="text-sm sm:text-base font-semibold text-neutral-900 leading-relaxed whitespace-pre-wrap">
-                    {q.questionText}
+                    <MathText text={q.questionText} />
                   </div>
 
                   {/* KONTEN TIPE 1: PILIHAN GANDA (MCQ) */}
@@ -1159,7 +1203,7 @@ export default function LiveProctoringMonitoringPage() {
                                   {opt.key}
                                 </span>
                                 <div className="space-y-1 flex-1 min-w-0">
-                                  {opt.text && <span className="leading-snug block">{opt.text}</span>}
+                                  {opt.text && <span className="leading-snug block"><MathText text={opt.text} /></span>}
                                   {(opt.imageUrl || opt.image_url) && (
                                     <img
                                       src={opt.imageUrl || opt.image_url}
@@ -1248,7 +1292,7 @@ export default function LiveProctoringMonitoringPage() {
                                       </div>
                                       <span className="font-bold text-neutral-800 shrink-0">{opt.key}.</span>
                                       <div className="space-y-1 flex-1 min-w-0">
-                                        {opt.text && <span className="leading-snug block">{opt.text}</span>}
+                                        {opt.text && <span className="leading-snug block"><MathText text={opt.text} /></span>}
                                         {(opt.imageUrl || opt.image_url) && (
                                           <img
                                             src={opt.imageUrl || opt.image_url}
@@ -1619,22 +1663,162 @@ export default function LiveProctoringMonitoringPage() {
           </p>
         </div>
 
-        {/* Exam Selector */}
-        <div className="w-full md:w-auto flex items-center gap-2 bg-neutral-50 p-2 rounded-[8px] border border-neutral-200 self-start md:self-center">
-          <span className="text-xs font-bold text-neutral-700 whitespace-nowrap pl-1">
-            Sesi Ujian:
-          </span>
-          <select
-            value={selectedExamId}
-            onChange={(e) => setSelectedExamId(e.target.value)}
-            className="flex-1 md:flex-none text-xs font-semibold px-3 py-1.5 rounded-[6px] border border-neutral-300 bg-white text-neutral-900 shadow-2xs focus:outline-hidden focus:border-primary-500 min-w-0 md:max-w-[280px] truncate"
-          >
-            {exams.map((ex) => (
-              <option key={ex.id} value={ex.id}>
-                {ex.title} (Kelas {ex.className})
-              </option>
-            ))}
-          </select>
+        {/* Modern Searchable & Categorized Exam Session Picker */}
+        <div ref={examPickerRef} className="relative w-full md:w-auto self-start md:self-center">
+          {(() => {
+            const activeMeta = getExamMeta(selectedExam);
+            const filteredPickerExams = (exams || []).filter((ex) => {
+              const m = getExamMeta(ex);
+              if (examPickerCategory !== 'ALL' && m.cat !== examPickerCategory) return false;
+              if (examPickerSearch.trim()) {
+                const q = examPickerSearch.trim().toLowerCase();
+                const hay = `${ex.title || ''} ${ex.subject || ''} ${m.target} ${m.badge} ${ex.token || ''}`.toLowerCase();
+                if (!hay.includes(q)) return false;
+              }
+              return true;
+            });
+
+            return (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setIsExamPickerOpen((prev) => !prev)}
+                  className="w-full md:w-[340px] flex items-center justify-between gap-2.5 bg-slate-50 hover:bg-white px-3.5 py-2.5 rounded-xl border border-slate-200 hover:border-primary-400 shadow-2xs transition-all cursor-pointer text-left"
+                >
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Sesi Ujian
+                      </span>
+                      {selectedExam && (
+                        <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold border ${activeMeta.badgeCls}`}>
+                          {activeMeta.badge}
+                        </span>
+                      )}
+                      {selectedExam && (
+                        <span className="text-[10px] font-semibold text-slate-500">
+                          • {activeMeta.target}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                      {selectedExam?.title || 'Pilih Sesi Ujian...'}
+                    </p>
+                  </div>
+                  <svg
+                    className={`w-4 h-4 text-slate-500 shrink-0 transition-transform ${isExamPickerOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {isExamPickerOpen && (
+                  <div className="absolute right-0 mt-2 w-full sm:w-[440px] z-50 rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
+                    {/* Search & Category Tabs */}
+                    <div className="p-3 bg-slate-50 border-b border-slate-200 space-y-2.5">
+                      <input
+                        type="text"
+                        value={examPickerSearch}
+                        onChange={(e) => setExamPickerSearch(e.target.value)}
+                        placeholder="Cari judul ujian, mapel, tingkat, atau token..."
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                      <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+                        {[
+                          { key: 'ALL', label: 'Semua' },
+                          { key: 'SEMESTER_UAS', label: 'ASAS' },
+                          { key: 'SEMESTER_UTS', label: 'ASTS' },
+                          { key: 'TKA', label: 'TKA' },
+                          { key: 'REGULAR', label: 'Reguler' },
+                        ].map((tab) => {
+                          const cnt = tab.key === 'ALL'
+                            ? exams.length
+                            : exams.filter((e) => getExamMeta(e).cat === tab.key).length;
+                          const active = examPickerCategory === tab.key;
+                          return (
+                            <button
+                              key={tab.key}
+                              type="button"
+                              onClick={() => setExamPickerCategory(tab.key)}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1 ${
+                                active
+                                  ? 'bg-primary-600 text-white shadow-2xs'
+                                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              <span>{tab.label}</span>
+                              <span className={`text-[10px] px-1.5 rounded-full ${active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                                {cnt}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Exam List */}
+                    <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+                      {filteredPickerExams.length === 0 ? (
+                        <div className="p-6 text-center text-xs text-slate-400">
+                          Tidak ada sesi ujian yang cocok.
+                        </div>
+                      ) : (
+                        filteredPickerExams.map((ex) => {
+                          const m = getExamMeta(ex);
+                          const isSelected = ex.id === selectedExamId;
+                          return (
+                            <button
+                              key={ex.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedExamId(ex.id);
+                                setIsExamPickerOpen(false);
+                              }}
+                              className={`w-full px-3.5 py-2.5 text-left transition flex items-start justify-between gap-2 cursor-pointer ${
+                                isSelected ? 'bg-primary-50/80' : 'hover:bg-slate-50'
+                              }`}
+                            >
+                              <div className="min-w-0 flex-1 space-y-0.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold border ${m.badgeCls}`}>
+                                    {m.badge}
+                                  </span>
+                                  <span className="text-[11px] font-semibold text-primary-700 truncate">
+                                    {ex.subject || 'Mapel'}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400">•</span>
+                                  <span className="text-[10px] font-semibold text-slate-600">
+                                    {m.target}
+                                  </span>
+                                </div>
+                                <p className={`text-xs font-bold truncate ${isSelected ? 'text-primary-900' : 'text-slate-900'}`}>
+                                  {ex.title}
+                                </p>
+                              </div>
+                              <div className="flex flex-col items-end gap-1 shrink-0">
+                                {ex.status === 'ACTIVE' && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                    Aktif
+                                  </span>
+                                )}
+                                {isSelected && (
+                                  <span className="text-xs font-black text-primary-600">✓</span>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       </div>
 

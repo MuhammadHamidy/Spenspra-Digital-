@@ -91,6 +91,10 @@ function SidebarContent({ mobileOpen = false, onCloseMobile = () => {} }) {
               label: 'Input Nilai UAS',
               href: '/penilaian/uas',
             },
+            {
+              label: 'Hasil Ujian TKA',
+              href: '/penilaian/tka',
+            },
           ],
         },
         {
