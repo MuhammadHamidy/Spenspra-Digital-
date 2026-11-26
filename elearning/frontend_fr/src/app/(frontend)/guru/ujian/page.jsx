@@ -496,8 +496,12 @@ async function extractDocxStructure(arrayBuffer) {
     // Teks, warna teks, cetak tebal (bold), pangkat/indeks (vertAlign), persamaan Word (<m:oMath>),
     // serta soft line-break Shift+Enter (<w:br/> / <w:cr/>) yang dipecah menjadi baris terpisah
     // agar opsi A/B/C/D yang dipisah Shift+Enter tidak menempel dan warna merahnya akurat per opsi!
+    const pPrMatch = p.match(/<w:pPr\b[\s\S]*?<\/w:pPr>/);
+    const pPrColor = pPrMatch ? (pPrMatch[0].match(/<w:color\s+[^>]*w:val="([^"]+)"/i) || [])[1] : null;
+    const pPrIsRed = isAnswerColor(pPrColor);
+
     const tokens = p.match(/<m:oMath\b[\s\S]*?<\/m:oMath>|<w:r\b[\s\S]*?<\/w:r>/g) || [];
-    const subLines = [{ text: '', isRed: false, boldChars: 0, totalChars: 0 }];
+    const subLines = [{ text: '', isRed: false, redChunks: [], boldChars: 0, totalChars: 0 }];
 
     tokens.forEach((tok) => {
       if (tok.startsWith('<m:oMath')) {
@@ -509,19 +513,22 @@ async function extractDocxStructure(arrayBuffer) {
         }
         return;
       }
-      const c = tok.match(/<w:color\s+w:val="([^"]+)"/i);
-      const h = tok.match(/<w:highlight\s+w:val="([^"]+)"/i);
-      const va = tok.match(/<w:vertAlign\s+w:val="([^"]+)"/i);
+      const c = tok.match(/<w:color\s+[^>]*w:val="([^"]+)"/i);
+      const h = tok.match(/<w:highlight\s+[^>]*w:val="([^"]+)"/i);
+      const va = tok.match(/<w:vertAlign\s+[^>]*w:val="([^"]+)"/i);
       const hasBoldTag = /<w:b(?:\s+w:val="(?:1|true|on)")?\s*\/?>/i.test(tok) && !/<w:b\s+w:val="(?:0|false|off)"/i.test(tok);
       const colorVal = c ? c[1] : null;
       const highlightVal = h ? h[1] : null;
-      const runIsRed = isAnswerColor(colorVal) || ['red', 'magenta'].includes(String(highlightVal).toLowerCase());
+      const runIsRed =
+        isAnswerColor(colorVal) ||
+        ['red', 'magenta'].includes(String(highlightVal).toLowerCase()) ||
+        (!colorVal && pPrIsRed);
       const vertAlign = va ? va[1].toLowerCase() : '';
 
       const parts = tok.match(/<w:t[^>]*>[\s\S]*?<\/w:t>|<w:br\b[^>]*\/?>|<w:cr\b[^>]*\/?>|<w:tab\b[^>]*\/?>/g) || [];
       parts.forEach((part) => {
         if (/^<w:(?:br|cr)\b/i.test(part)) {
-          subLines.push({ text: '', isRed: false, boldChars: 0, totalChars: 0 });
+          subLines.push({ text: '', isRed: false, redChunks: [], boldChars: 0, totalChars: 0 });
           return;
         }
         if (/^<w:tab\b/i.test(part)) {
@@ -546,9 +553,20 @@ async function extractDocxStructure(arrayBuffer) {
         }
         if (runIsRed && trimmedLen > 0) {
           cur.isRed = true;
+          cur.redChunks.push(t);
         }
       });
     });
+
+    const recordColoredKey = (qNum, letter) => {
+      if (!letter) return;
+      const upper = letter.toUpperCase();
+      if (qNum) {
+        if (!coloredKeysByNumber[qNum]) coloredKeysByNumber[qNum] = [];
+        if (!coloredKeysByNumber[qNum].includes(upper)) coloredKeysByNumber[qNum].push(upper);
+      }
+      coloredKeysInOrder.push(upper);
+    };
 
     let emittedImg = false;
     subLines.forEach((sl, slIdx) => {
@@ -579,17 +597,43 @@ async function extractDocxStructure(arrayBuffer) {
         optionCountByNumber[currentQuestionNum] = (optionCountByNumber[currentQuestionNum] || 0) + 1;
       }
 
-      // Kunci jawaban berwarna (mendukung 1 opsi untuk PG maupun >=2 opsi untuk PG Kompleks)
-      if (sl.isRed && optKey) {
-        if (currentQuestionNum) {
-          if (!coloredKeysByNumber[currentQuestionNum]) {
-            coloredKeysByNumber[currentQuestionNum] = [];
+      // Kunci jawaban berwarna (mendukung baris tunggal maupun beberapa opsi menempel dalam 1 baris seperti "26. ...A. ...B. ...")
+      if (sl.isRed) {
+        const redText = sl.redChunks.join('').replace(/\s+/g, ' ').trim();
+        const inlineOptRegex = /(?:^|[\s\u00A0]+|(?<=[a-z0-9.,!?)”"…]))([A-Ea-e])\s*[.)\]:\-]\s+/g;
+        const inlineMarkers = Array.from(full.matchAll(inlineOptRegex));
+
+        if (inlineMarkers.length >= 2 || (!optKey && inlineMarkers.length >= 1)) {
+          // Pecah segmen opsi dalam baris ini dan cocokkan segmen mana yang memuat teks berwarna merah
+          let matchedInline = false;
+          for (let mIdx = 0; mIdx < inlineMarkers.length; mIdx++) {
+            const mk = inlineMarkers[mIdx];
+            const segStart = mk.index;
+            const segEnd = mIdx + 1 < inlineMarkers.length ? inlineMarkers[mIdx + 1].index : full.length;
+            const segFull = full.slice(segStart, segEnd).trim();
+            const segBody = full.slice(mk.index + mk[0].length, segEnd).trim();
+            if (
+              redText &&
+              (segFull.includes(redText) ||
+                redText.includes(segFull) ||
+                (segBody.length >= 3 && redText.includes(segBody)) ||
+                (redText.length >= 3 && segBody.includes(redText)))
+            ) {
+              recordColoredKey(currentQuestionNum, mk[1]);
+              matchedInline = true;
+            }
           }
-          if (!coloredKeysByNumber[currentQuestionNum].includes(optKey)) {
-            coloredKeysByNumber[currentQuestionNum].push(optKey);
+          if (!matchedInline) {
+            const directRedOpt = redText.match(/^([A-E])\s*[.)\]:\-]/i);
+            if (directRedOpt) {
+              recordColoredKey(currentQuestionNum, directRedOpt[1]);
+            } else if (optKey) {
+              recordColoredKey(currentQuestionNum, optKey);
+            }
           }
+        } else if (optKey) {
+          recordColoredKey(currentQuestionNum, optKey);
         }
-        coloredKeysInOrder.push(optKey);
       }
 
       // Kunci jawaban bercetak tebal (Bold)
@@ -922,7 +966,18 @@ function parseQuestionImport(text, options = {}) {
     if (stimulusBoxMatch) {
       const boxText = stimulusBoxMatch[1].trim();
       if (!boxText) return;
+      // Jika soal sebelumnya sudah selesai punya opsi A-D, kotak teks baru ini adalah stimulus untuk soal BERIKUTNYA!
+      if (current && (current.options.length >= 2 || current.matchingPairs.length >= 2)) {
+        pushCurrent();
+        current = null;
+        currentOption = null;
+        collectingStimulus = true;
+        pendingStimulus = [boxText];
+        pendingImage = '';
+        return;
+      }
       if (!current) {
+        collectingStimulus = true;
         pendingStimulus.push(boxText);
       } else {
         current.stimulusText = current.stimulusText
@@ -964,12 +1019,28 @@ function parseQuestionImport(text, options = {}) {
 
     if (startQuestion(line)) return;
 
+    const isStimulusIntroLine =
+      /^(?:bacalah|perhatikan|simaklah|cermatilah|cermati|amatilah|amati)\b.*(?:teks|kutipan|wacana|dialog|puisi|cerita|paragraf|artikel|poster|iklan|gambar|grafik|tabel|diagram|ilustrasi|infografis|soal\s+(?:nomor|no\.?))/i.test(line);
+
+    // Jika soal sebelumnya sudah punya opsi A-D/pasangan dan muncul instruksi wacana/poster baru
+    // (cth: "Cermatilah poster berikut untuk menjawab soal nomor 21 s.d. 23!"), tutup soal lama
+    // dan tampung sebagai stimulus + gambar untuk soal berikutnya agar tidak masuk ke Opsi D!
+    if (current && (current.options.length >= 2 || current.matchingPairs.length >= 2) && isStimulusIntroLine) {
+      pushCurrent();
+      current = null;
+      currentOption = null;
+      collectingStimulus = true;
+      pendingStimulus = [line];
+      pendingImage = '';
+      return;
+    }
+
     if (!current) {
       if (collectingStimulus) {
         const img = line.match(/^(?:gambar|image)\s*[:=]\s*(.+)$/i);
         if (img) pendingImage = img[1].trim();
         else pendingStimulus.push(line.replace(/^(?:stimulus|wacana|teks\s*kasus)\s*[:\-]\s*/i, ''));
-      } else if (/^(?:bacalah|perhatikan|simaklah|cermati)\b.*(?:teks|kutipan|wacana|dialog|puisi|cerita|paragraf|artikel|soal\s+nomor)/i.test(line)) {
+      } else if (isStimulusIntroLine) {
         collectingStimulus = true;
         pendingStimulus.push(line);
       }
@@ -1159,13 +1230,15 @@ function parseQuestionImport(text, options = {}) {
 
   pushCurrent();
 
-  // Propagasi stimulus bersama untuk instruksi seperti "untuk menjawab soal nomor 3 dan 4" / "nomor 3 - 5" / "nomor 3 s.d. 5"
+  // Propagasi stimulus & gambar bersama untuk instruksi seperti "untuk menjawab soal nomor 21 s.d. 23!" / "nomor 24 dan 25"
   rawQuestions.forEach((srcQ) => {
-    if (!srcQ.stimulusText || !srcQ.stimulusText.trim()) return;
+    const hasStim = Boolean(srcQ.stimulusText && srcQ.stimulusText.trim());
+    const hasImg = Boolean(srcQ.imageUrl && srcQ.imageUrl.trim());
+    if (!hasStim && !hasImg) return;
     const combinedPrompt = `${srcQ.questionText || ''}\n${srcQ.stimulusText || ''}`;
     const targetNums = new Set();
 
-    // Pola rentang: "nomor 3 - 5", "nomor 3 s.d. 5", "no. 3 sampai 5"
+    // Pola rentang: "nomor 3 - 5", "nomor 21 s.d. 23", "no. 3 sampai 5"
     const rangeRegex = /(?:soal\s*)?(?:nomor|no\.?)\s*(\d+)\s*(?:-|–|—|s\.?d\.?|sampai(?:\s+dengan)?|hingga)\s*(\d+)/gi;
     let rm;
     while ((rm = rangeRegex.exec(combinedPrompt)) !== null) {
@@ -1187,8 +1260,13 @@ function parseQuestionImport(text, options = {}) {
     if (targetNums.size > 0) {
       rawQuestions.forEach((dstQ) => {
         if (dstQ === srcQ) return;
-        if (targetNums.has(Number(dstQ.questionNumber)) && !(dstQ.stimulusText && dstQ.stimulusText.trim())) {
-          dstQ.stimulusText = srcQ.stimulusText;
+        if (targetNums.has(Number(dstQ.questionNumber))) {
+          if (hasStim && !(dstQ.stimulusText && dstQ.stimulusText.trim())) {
+            dstQ.stimulusText = srcQ.stimulusText;
+          }
+          if (hasImg && !(dstQ.imageUrl && dstQ.imageUrl.trim())) {
+            dstQ.imageUrl = srcQ.imageUrl;
+          }
         }
       });
     }
@@ -1197,7 +1275,7 @@ function parseQuestionImport(text, options = {}) {
   const resolvedQuestions = [];
   const diagnostics = Array.isArray(options?.diagnostics) ? options.diagnostics : [];
   const acceptedSourceNumbers = new Set();
-  let missingKeyCount = 0;
+  const missingKeyNumbers = [];
 
   rawQuestions.forEach((question, index) => {
     // 1. Cek kunci inline di akhir teks soal, misal "(jawaban A, C)", "(kunci: B)", "(jawaban Benar)"
@@ -1320,7 +1398,7 @@ function parseQuestionImport(text, options = {}) {
         });
       }
       if (!question.keyDetected) {
-        missingKeyCount += 1;
+        missingKeyNumbers.push(question.questionNumber);
       }
     } else if (
       question.explicitType === 'ESSAY' ||
@@ -1392,11 +1470,11 @@ function parseQuestionImport(text, options = {}) {
       });
     }
   }
-  if (missingKeyCount > 0) {
+  if (missingKeyNumbers.length > 0) {
     diagnostics.push({
       level: 'warning',
       questionNumber: null,
-      reason: `${missingKeyCount} soal Pilihan Ganda belum terdeteksi kunci jawabannya (tidak bertinta merah, tidak bold, dan tidak ada baris "Kunci:"). Kunci sementara disetel ke A — periksa di Preview.`,
+      reason: `${missingKeyNumbers.length} soal Pilihan Ganda belum terdeteksi kunci jawabannya (No. ${missingKeyNumbers.join(', ')}). Kunci sementara disetel ke A — silakan periksa di Preview.`,
       snippet: '',
     });
   }
