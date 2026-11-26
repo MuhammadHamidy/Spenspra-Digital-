@@ -493,19 +493,19 @@ async function extractDocxStructure(arrayBuffer) {
       }
     }
 
-    // Teks, warna teks, cetak tebal (bold), pangkat/indeks (vertAlign), dan persamaan Word (<m:oMath>)
+    // Teks, warna teks, cetak tebal (bold), pangkat/indeks (vertAlign), persamaan Word (<m:oMath>),
+    // serta soft line-break Shift+Enter (<w:br/> / <w:cr/>) yang dipecah menjadi baris terpisah
+    // agar opsi A/B/C/D yang dipisah Shift+Enter tidak menempel dan warna merahnya akurat per opsi!
     const tokens = p.match(/<m:oMath\b[\s\S]*?<\/m:oMath>|<w:r\b[\s\S]*?<\/w:r>/g) || [];
-    let pText = '';
-    let isRed = false;
-    let boldChars = 0;
-    let totalChars = 0;
+    const subLines = [{ text: '', isRed: false, boldChars: 0, totalChars: 0 }];
 
     tokens.forEach((tok) => {
       if (tok.startsWith('<m:oMath')) {
         const mathTxt = extractOmathText(tok);
         if (mathTxt) {
-          pText += mathTxt;
-          totalChars += mathTxt.trim().length;
+          const cur = subLines[subLines.length - 1];
+          cur.text += mathTxt;
+          cur.totalChars += mathTxt.trim().length;
         }
         return;
       }
@@ -513,95 +513,112 @@ async function extractDocxStructure(arrayBuffer) {
       const h = tok.match(/<w:highlight\s+w:val="([^"]+)"/i);
       const va = tok.match(/<w:vertAlign\s+w:val="([^"]+)"/i);
       const hasBoldTag = /<w:b(?:\s+w:val="(?:1|true|on)")?\s*\/?>/i.test(tok) && !/<w:b\s+w:val="(?:0|false|off)"/i.test(tok);
-      const rawT = (tok.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [])
-        .map((x) => x.replace(/<[^>]+>/g, ''))
-        .join('');
-      const t = decodeXmlEntities(rawT);
-      if (t) {
-        const vertAlign = va ? va[1].toLowerCase() : '';
+      const colorVal = c ? c[1] : null;
+      const highlightVal = h ? h[1] : null;
+      const runIsRed = isAnswerColor(colorVal) || ['red', 'magenta'].includes(String(highlightVal).toLowerCase());
+      const vertAlign = va ? va[1].toLowerCase() : '';
+
+      const parts = tok.match(/<w:t[^>]*>[\s\S]*?<\/w:t>|<w:br\b[^>]*\/?>|<w:cr\b[^>]*\/?>|<w:tab\b[^>]*\/?>/g) || [];
+      parts.forEach((part) => {
+        if (/^<w:(?:br|cr)\b/i.test(part)) {
+          subLines.push({ text: '', isRed: false, boldChars: 0, totalChars: 0 });
+          return;
+        }
+        if (/^<w:tab\b/i.test(part)) {
+          subLines[subLines.length - 1].text += ' ';
+          return;
+        }
+        const rawT = part.replace(/<[^>]+>/g, '');
+        const t = decodeXmlEntities(rawT);
+        if (!t) return;
+        const cur = subLines[subLines.length - 1];
         if (vertAlign === 'superscript') {
-          pText += toUnicodeSuperscript(t);
+          cur.text += toUnicodeSuperscript(t);
         } else if (vertAlign === 'subscript') {
-          pText += toUnicodeSubscript(t);
+          cur.text += toUnicodeSubscript(t);
         } else {
-          pText += t;
+          cur.text += t;
         }
         const trimmedLen = t.trim().length;
-        totalChars += trimmedLen;
+        cur.totalChars += trimmedLen;
         if (hasBoldTag && trimmedLen > 0) {
-          boldChars += trimmedLen;
+          cur.boldChars += trimmedLen;
         }
-        const colorVal = c ? c[1] : null;
-        const highlightVal = h ? h[1] : null;
-        if (isAnswerColor(colorVal) || ['red', 'magenta'].includes(String(highlightVal).toLowerCase())) {
-          isRed = true;
+        if (runIsRed && trimmedLen > 0) {
+          cur.isRed = true;
         }
+      });
+    });
+
+    let emittedImg = false;
+    subLines.forEach((sl, slIdx) => {
+      const isBoldParagraph = sl.totalChars > 0 && sl.boldChars / sl.totalChars >= 0.5;
+      const cleanText = sl.text.replace(/\s+/g, ' ').trim();
+      const activeListInfo = slIdx === 0 ? listInfo : null;
+
+      // Deteksi nomor soal eksplisit di teks (abaikan sub-pernyataan seperti "1).", "2).", "3).")
+      const isSubStatementLine = /^\d+\)\.?(\s|$)/.test(cleanText);
+      const manualQMatch = !isSubStatementLine && (
+        cleanText.match(/^(?:soal\s*|pertanyaan\s*)?(?:nomor\s*)?(\d+)\s*[.\]:\-]/i) ||
+        cleanText.match(/^(?:soal|nomor|no\.?)\s*(?:nomor\s*)?(\d+)\s*$/i)
+      );
+      if (manualQMatch) {
+        const numVal = Number(manualQMatch[1]);
+        if (!currentQuestionNum || numVal > currentQuestionNum || (optionCountByNumber[currentQuestionNum] || 0) >= 2) {
+          currentQuestionNum = numVal;
+          resetOptionCounters();
+        }
+      }
+
+      const prefix = activeListInfo?.prefix || '';
+      const full = (prefix + cleanText).trim();
+      const explicitOpt = full.match(/^([A-E])\s*[.)\]:\-]\s*(.*)$/i);
+      const optKey = activeListInfo?.isOption ? activeListInfo.letter : (explicitOpt ? explicitOpt[1].toUpperCase() : null);
+
+      if (optKey && currentQuestionNum) {
+        optionCountByNumber[currentQuestionNum] = (optionCountByNumber[currentQuestionNum] || 0) + 1;
+      }
+
+      // Kunci jawaban berwarna (mendukung 1 opsi untuk PG maupun >=2 opsi untuk PG Kompleks)
+      if (sl.isRed && optKey) {
+        if (currentQuestionNum) {
+          if (!coloredKeysByNumber[currentQuestionNum]) {
+            coloredKeysByNumber[currentQuestionNum] = [];
+          }
+          if (!coloredKeysByNumber[currentQuestionNum].includes(optKey)) {
+            coloredKeysByNumber[currentQuestionNum].push(optKey);
+          }
+        }
+        coloredKeysInOrder.push(optKey);
+      }
+
+      // Kunci jawaban bercetak tebal (Bold)
+      if (isBoldParagraph && optKey && currentQuestionNum) {
+        if (!boldKeysByNumber[currentQuestionNum]) {
+          boldKeysByNumber[currentQuestionNum] = [];
+        }
+        if (!boldKeysByNumber[currentQuestionNum].includes(optKey)) {
+          boldKeysByNumber[currentQuestionNum].push(optKey);
+        }
+      }
+
+      if (imgUri && !emittedImg) {
+        emittedImg = true;
+        if (activeListInfo?.isOption || explicitOpt) {
+          const optLetter = activeListInfo?.isOption ? activeListInfo.letter : explicitOpt[1].toUpperCase();
+          const remText = explicitOpt ? explicitOpt[2].trim() : cleanText;
+          lines.push(`${optLetter}. ${remText ? remText + ' ' : ''}GAMBAR: ${imgUri}`);
+        } else {
+          lines.push(`GAMBAR: ${imgUri}`);
+          if (full) lines.push(isFromBox && !optKey ? `STIMULUS_BOX: ${full}` : full);
+        }
+      } else if (full) {
+        lines.push(isFromBox && !optKey ? `STIMULUS_BOX: ${full}` : full);
       }
     });
 
-    const isBoldParagraph = totalChars > 0 && boldChars / totalChars >= 0.5;
-    const cleanText = pText.replace(/\s+/g, ' ').trim();
-
-    // Deteksi nomor soal eksplisit di teks (abaikan sub-pernyataan seperti "1).", "2).", "3).")
-    const isSubStatementLine = /^\d+\)\.?(\s|$)/.test(cleanText);
-    const manualQMatch = !isSubStatementLine && (
-      cleanText.match(/^(?:soal\s*|pertanyaan\s*)?(?:nomor\s*)?(\d+)\s*[.\]:\-]/i) ||
-      cleanText.match(/^(?:soal|nomor|no\.?)\s*(?:nomor\s*)?(\d+)\s*$/i)
-    );
-    if (manualQMatch) {
-      const numVal = Number(manualQMatch[1]);
-      if (!currentQuestionNum || numVal > currentQuestionNum || (optionCountByNumber[currentQuestionNum] || 0) >= 2) {
-        currentQuestionNum = numVal;
-        resetOptionCounters();
-      }
-    }
-
-    const prefix = listInfo?.prefix || '';
-    const full = (prefix + cleanText).trim();
-    const explicitOpt = full.match(/^([A-E])\s*[.)\]:\-]\s*(.*)$/i);
-    const optKey = listInfo?.isOption ? listInfo.letter : (explicitOpt ? explicitOpt[1].toUpperCase() : null);
-
-    if (optKey && currentQuestionNum) {
-      optionCountByNumber[currentQuestionNum] = (optionCountByNumber[currentQuestionNum] || 0) + 1;
-    }
-
-    // Kunci jawaban berwarna (mendukung 1 opsi untuk PG maupun >=2 opsi untuk PG Kompleks)
-    if (isRed && optKey) {
-      if (currentQuestionNum) {
-        if (!coloredKeysByNumber[currentQuestionNum]) {
-          coloredKeysByNumber[currentQuestionNum] = [];
-        }
-        if (!coloredKeysByNumber[currentQuestionNum].includes(optKey)) {
-          coloredKeysByNumber[currentQuestionNum].push(optKey);
-        }
-      }
-      coloredKeysInOrder.push(optKey);
-    }
-
-    // Kunci jawaban bercetak tebal (Bold)
-    if (isBoldParagraph && optKey && currentQuestionNum) {
-      if (!boldKeysByNumber[currentQuestionNum]) {
-        boldKeysByNumber[currentQuestionNum] = [];
-      }
-      if (!boldKeysByNumber[currentQuestionNum].includes(optKey)) {
-        boldKeysByNumber[currentQuestionNum].push(optKey);
-      }
-    }
-
-    if (imgUri) {
-      if (listInfo?.isOption || explicitOpt) {
-        // Paragraf opsi jawaban (A, B, C, D) yang memiliki gambar
-        const optLetter = listInfo?.isOption ? listInfo.letter : explicitOpt[1].toUpperCase();
-        const remText = explicitOpt ? explicitOpt[2].trim() : cleanText;
-        lines.push(`${optLetter}. ${remText ? remText + ' ' : ''}GAMBAR: ${imgUri}`);
-      } else {
-        lines.push(`GAMBAR: ${imgUri}`);
-        if (full) lines.push(isFromBox && !optKey ? `STIMULUS_BOX: ${full}` : full);
-      }
-    } else {
-      if (full) {
-        lines.push(isFromBox && !optKey ? `STIMULUS_BOX: ${full}` : full);
-      }
+    if (imgUri && !emittedImg) {
+      lines.push(`GAMBAR: ${imgUri}`);
     }
   }
 
@@ -796,17 +813,22 @@ function parseQuestionImport(text, options = {}) {
   };
 
   const expandInlineOptions = (line) => {
-    const markerRegex = /(?:^|[\s\u00A0]+)([A-E])\s*[.)\]:\-]\s+/g;
+    // Mendukung opsi A-E maupun a-e dalam satu baris, termasuk bila menempel tanpa spasi (cth: "A. SloganB. IklanC. ImperatifD. Persuasif")
+    const markerRegex = /(?:^|[\s\u00A0]+|(?<=[a-z0-9.,!?)”"…]))([A-Ea-e])\s*[.)\]:\-]\s+/g;
     const allMarkers = Array.from(line.matchAll(markerRegex));
     if (allMarkers.length === 0) return [line];
 
-    // Ambil hanya marker yang berurutan A, B, C, ... agar huruf kapital di tengah kalimat tidak terpotong.
-    const startIdx = allMarkers.findIndex((m) => m[1] === 'A');
+    // Ambil hanya marker yang berurutan A, B, C, ... (atau a, b, c, ...) agar huruf di tengah kalimat tidak terpotong.
+    const startIdx = allMarkers.findIndex((m) => m[1].toUpperCase() === 'A');
     if (startIdx === -1) return [line];
+    const startIsUpper = allMarkers[startIdx][1] === 'A';
     const markers = [allMarkers[startIdx]];
     for (let i = startIdx + 1; i < allMarkers.length; i += 1) {
-      const expected = String.fromCharCode(markers[markers.length - 1][1].charCodeAt(0) + 1);
-      if (allMarkers[i][1] === expected) markers.push(allMarkers[i]);
+      const cand = allMarkers[i][1];
+      const expected = String.fromCharCode(markers[markers.length - 1][1].toUpperCase().charCodeAt(0) + 1);
+      if (cand.toUpperCase() === expected && (cand === cand.toUpperCase()) === startIsUpper) {
+        markers.push(allMarkers[i]);
+      }
     }
 
     const prefix = line.slice(0, markers[0].index).trim();
@@ -822,7 +844,7 @@ function parseQuestionImport(text, options = {}) {
       const contentStart = marker.index + marker[0].length;
       const contentEnd = i + 1 < markers.length ? markers[i + 1].index : line.length;
       const content = line.slice(contentStart, contentEnd).trim();
-      segments.push(`${marker[1]}. ${content}`);
+      segments.push(`${marker[1].toUpperCase()}. ${content}`);
     }
     return segments;
   };
