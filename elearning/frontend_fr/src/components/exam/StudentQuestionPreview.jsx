@@ -73,8 +73,13 @@ export function StudentQuestionView({ question: q, number, showKey = false }) {
   const correctKeys = getCorrectKeys(q);
   const rightOptions = useMemo(() => {
     if (q?.type !== 'MATCHING' || !Array.isArray(q.matchingPairs)) return [];
-    const items = q.matchingPairs.map((p) => p.right).filter(Boolean);
-    return [...items].sort((a, b) => a.localeCompare(b));
+    const items = Array.from(
+      new Set([
+        ...(Array.isArray(q.matchingRightOptions) ? q.matchingRightOptions : []),
+        ...q.matchingPairs.flatMap((p) => (Array.isArray(p.rights) && p.rights.length > 0 ? p.rights : [p.right])),
+      ].map((s) => String(s || '').trim()).filter(Boolean))
+    );
+    return items;
   }, [q]);
 
   if (!q) return null;
@@ -228,32 +233,66 @@ export function StudentQuestionView({ question: q, number, showKey = false }) {
 
       {q.type === 'MATCHING' && (
         <div className="space-y-2.5">
-          {(q.matchingPairs || []).map((pair, idx) => (
-            <div key={pair.id || idx} className="p-3 rounded-xl border border-neutral-200 bg-neutral-50/70 flex flex-col sm:flex-row sm:items-center gap-3">
-              <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                <span className="w-7 h-7 rounded-lg bg-neutral-800 text-white font-bold text-xs flex items-center justify-center shrink-0">{idx + 1}</span>
-                <p className="text-xs sm:text-sm font-semibold text-neutral-900">{pair.left}</p>
-              </div>
-              <div className="sm:w-1/2 shrink-0">
+          {(q.matchingPairs || []).map((pair, idx) => {
+            const expectedList = Array.isArray(pair.rights) && pair.rights.length > 0 ? pair.rights : (pair.right ? [pair.right] : []);
+            const isMulti = Boolean(q.matchingMultiSelect) || expectedList.length > 1;
+            const pickedList = Array.isArray(matching[idx]) ? matching[idx] : (matching[idx] ? [matching[idx]] : []);
+            return (
+              <div key={pair.id || idx} className="p-3 rounded-xl border border-neutral-200 bg-neutral-50/70 space-y-2.5">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-7 h-7 rounded-lg bg-neutral-800 text-white font-bold text-xs flex items-center justify-center shrink-0">{idx + 1}</span>
+                  <p className="text-xs sm:text-sm font-semibold text-neutral-900 flex-1"><MathText text={pair.left} /></p>
+                </div>
                 {showKey ? (
-                  <div className="w-full text-xs sm:text-sm p-2.5 rounded-lg border border-emerald-400 bg-emerald-50 text-emerald-900 font-semibold">
-                    {pair.right}
+                  <div className="flex flex-wrap gap-1.5 pl-9">
+                    {expectedList.map((ansTxt, aIdx) => (
+                      <span key={aIdx} className="px-2.5 py-1 rounded-lg border border-emerald-400 bg-emerald-50 text-emerald-900 text-xs font-semibold">
+                        ✓ <MathText text={ansTxt} />
+                      </span>
+                    ))}
+                  </div>
+                ) : isMulti ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-0 sm:pl-9">
+                    {rightOptions.map((r, i) => {
+                      const checked = pickedList.includes(r);
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() =>
+                            setMatching((m) => {
+                              const cur = Array.isArray(m[idx]) ? m[idx] : [];
+                              const next = cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r];
+                              return { ...m, [idx]: next };
+                            })
+                          }
+                          className={`p-2 rounded-lg border text-left text-xs font-medium cursor-pointer flex items-center gap-2 ${
+                            checked ? 'bg-violet-50 border-violet-500 text-violet-950 font-semibold' : 'bg-white border-neutral-300 text-neutral-700'
+                          }`}
+                        >
+                          <span className="font-bold text-violet-700">{checked ? '✓' : '☐'} {String.fromCharCode(65 + i)}.</span>
+                          <span className="flex-1"><MathText text={r} /></span>
+                        </button>
+                      );
+                    })}
                   </div>
                 ) : (
-                  <select
-                    value={matching[idx] || ''}
-                    onChange={(e) => setMatching((m) => ({ ...m, [idx]: e.target.value }))}
-                    className="w-full text-xs sm:text-sm p-2.5 rounded-lg border border-neutral-300 bg-white"
-                  >
-                    <option value="">-- Pilih Pasangan Jawaban --</option>
-                    {rightOptions.map((r, i) => (
-                      <option key={i} value={r}>{r}</option>
-                    ))}
-                  </select>
+                  <div className="pl-0 sm:pl-9">
+                    <select
+                      value={matching[idx] || ''}
+                      onChange={(e) => setMatching((m) => ({ ...m, [idx]: e.target.value }))}
+                      className="w-full text-xs sm:text-sm p-2.5 rounded-lg border border-neutral-300 bg-white"
+                    >
+                      <option value="">-- Pilih Pasangan Jawaban --</option>
+                      {rightOptions.map((r, i) => (
+                        <option key={i} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
                 )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

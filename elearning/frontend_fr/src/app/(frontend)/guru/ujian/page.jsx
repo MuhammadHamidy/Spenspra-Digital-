@@ -349,10 +349,54 @@ async function extractDocxStructure(arrayBuffer) {
     return { prefix: `${count}. `, isQuestion: true, isOption: false, count };
   }
 
-  const paragraphs = docXml.match(/<w:p(?:\s|>).*?<\/w:p>/gs) || [];
+  // Hapus <mc:Fallback> agar isi TextBox Word tidak terduplikasi dua kali (DrawingML + VML)
+  const cleanedDocXml = docXml.replace(/<mc:Fallback\b[\s\S]*?<\/mc:Fallback>/g, '');
+
+  // Ekstraktor paragraf <w:p> yang mendukung TextBox (<w:txbxContent>) bersarang
+  // sehingga teks soal maupun opsi di dalam TextBox tetap terbaca utuh sesuai urutan dokumen.
+  const extractWordParagraphs = (xml) => {
+    const result = [];
+    const tagRegex = /<w:p(?:\s[^>]*)?>|<\/w:p>/g;
+    let depth = 0;
+    let startIdx = -1;
+    let m;
+    while ((m = tagRegex.exec(xml)) !== null) {
+      const isClose = m[0].startsWith('</w:p');
+      if (!isClose) {
+        if (depth === 0) startIdx = m.index;
+        depth += 1;
+      } else {
+        depth -= 1;
+        if (depth === 0 && startIdx !== -1) {
+          const outerP = xml.slice(startIdx, tagRegex.lastIndex);
+          const txbxMatches = outerP.match(/<w:txbxContent\b[\s\S]*?<\/w:txbxContent>/g);
+          if (txbxMatches && txbxMatches.length > 0) {
+            // 1. Ambil bagian luar paragraf (tanpa isi textbox agar tidak dobel)
+            const outerOnly = outerP.replace(/<w:txbxContent\b[\s\S]*?<\/w:txbxContent>/g, '');
+            if (/<w:t\b|<m:oMath\b|<a:blip\b|<v:imagedata\b/.test(outerOnly)) {
+              result.push(outerOnly);
+            }
+            // 2. Ekstrak seluruh paragraf di dalam setiap TextBox
+            txbxMatches.forEach((box) => {
+              const innerPs = box.match(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g) || [];
+              innerPs.forEach((ip) => result.push(ip));
+            });
+          } else {
+            result.push(outerP);
+          }
+          startIdx = -1;
+        }
+      }
+    }
+    return result;
+  };
+
+  const paragraphs = extractWordParagraphs(cleanedDocXml);
   const lines = [];
   const coloredKeysByNumber = {};
   const coloredKeysInOrder = [];
+  const boldKeysByNumber = {};
+  const optionCountByNumber = {};
 
   for (let i = 0; i < paragraphs.length; i++) {
     const p = paragraphs[i];
@@ -391,20 +435,26 @@ async function extractDocxStructure(arrayBuffer) {
       }
     }
 
-    // Teks, warna teks, pangkat/indeks (vertAlign), dan persamaan Word (<m:oMath>)
+    // Teks, warna teks, cetak tebal (bold), pangkat/indeks (vertAlign), dan persamaan Word (<m:oMath>)
     const tokens = p.match(/<m:oMath\b[\s\S]*?<\/m:oMath>|<w:r\b[\s\S]*?<\/w:r>/g) || [];
     let pText = '';
     let isRed = false;
+    let boldChars = 0;
+    let totalChars = 0;
 
     tokens.forEach((tok) => {
       if (tok.startsWith('<m:oMath')) {
         const mathTxt = extractOmathText(tok);
-        if (mathTxt) pText += mathTxt;
+        if (mathTxt) {
+          pText += mathTxt;
+          totalChars += mathTxt.trim().length;
+        }
         return;
       }
       const c = tok.match(/<w:color\s+w:val="([^"]+)"/i);
       const h = tok.match(/<w:highlight\s+w:val="([^"]+)"/i);
       const va = tok.match(/<w:vertAlign\s+w:val="([^"]+)"/i);
+      const hasBoldTag = /<w:b(?:\s+w:val="(?:1|true|on)")?\s*\/?>/i.test(tok) && !/<w:b\s+w:val="(?:0|false|off)"/i.test(tok);
       const rawT = (tok.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [])
         .map((x) => x.replace(/<[^>]+>/g, ''))
         .join('');
@@ -418,6 +468,11 @@ async function extractDocxStructure(arrayBuffer) {
         } else {
           pText += t;
         }
+        const trimmedLen = t.trim().length;
+        totalChars += trimmedLen;
+        if (hasBoldTag && trimmedLen > 0) {
+          boldChars += trimmedLen;
+        }
         const colorVal = c ? c[1] : null;
         const highlightVal = h ? h[1] : null;
         if (isAnswerColor(colorVal) || ['red', 'magenta'].includes(String(highlightVal).toLowerCase())) {
@@ -426,39 +481,54 @@ async function extractDocxStructure(arrayBuffer) {
       }
     });
 
+    const isBoldParagraph = totalChars > 0 && boldChars / totalChars >= 0.5;
     const cleanText = pText.replace(/\s+/g, ' ').trim();
 
-    // Deteksi nomor soal eksplisit di teks
-    const manualQMatch = cleanText.match(/^(?:soal\s*|pertanyaan\s*)?(?:nomor\s*)?(\d+)\s*[.)\]:\-]/i) ||
-                         cleanText.match(/^(?:soal|nomor|no\.?)\s*(?:nomor\s*)?(\d+)\s*$/i);
+    // Deteksi nomor soal eksplisit di teks (abaikan sub-pernyataan seperti "1).", "2).", "3).")
+    const isSubStatementLine = /^\d+\)\.?(\s|$)/.test(cleanText);
+    const manualQMatch = !isSubStatementLine && (
+      cleanText.match(/^(?:soal\s*|pertanyaan\s*)?(?:nomor\s*)?(\d+)\s*[.\]:\-]/i) ||
+      cleanText.match(/^(?:soal|nomor|no\.?)\s*(?:nomor\s*)?(\d+)\s*$/i)
+    );
     if (manualQMatch) {
-      currentQuestionNum = Number(manualQMatch[1]);
-      resetOptionCounters();
-    }
-
-    // Kunci jawaban berwarna (mendukung 1 opsi untuk PG maupun >=2 opsi untuk PG Kompleks)
-    if (isRed) {
-      let optKey = listInfo?.isOption ? listInfo.letter : null;
-      if (!optKey) {
-        const explicitOpt = cleanText.match(/^([A-E])\s*[.)\]:\-]/i);
-        if (explicitOpt) optKey = explicitOpt[1].toUpperCase();
-      }
-      if (optKey) {
-        if (currentQuestionNum) {
-          if (!coloredKeysByNumber[currentQuestionNum]) {
-            coloredKeysByNumber[currentQuestionNum] = [];
-          }
-          if (!coloredKeysByNumber[currentQuestionNum].includes(optKey)) {
-            coloredKeysByNumber[currentQuestionNum].push(optKey);
-          }
-        }
-        coloredKeysInOrder.push(optKey);
+      const numVal = Number(manualQMatch[1]);
+      if (!currentQuestionNum || numVal > currentQuestionNum || (optionCountByNumber[currentQuestionNum] || 0) >= 2) {
+        currentQuestionNum = numVal;
+        resetOptionCounters();
       }
     }
 
     const prefix = listInfo?.prefix || '';
     const full = (prefix + cleanText).trim();
     const explicitOpt = full.match(/^([A-E])\s*[.)\]:\-]\s*(.*)$/i);
+    const optKey = listInfo?.isOption ? listInfo.letter : (explicitOpt ? explicitOpt[1].toUpperCase() : null);
+
+    if (optKey && currentQuestionNum) {
+      optionCountByNumber[currentQuestionNum] = (optionCountByNumber[currentQuestionNum] || 0) + 1;
+    }
+
+    // Kunci jawaban berwarna (mendukung 1 opsi untuk PG maupun >=2 opsi untuk PG Kompleks)
+    if (isRed && optKey) {
+      if (currentQuestionNum) {
+        if (!coloredKeysByNumber[currentQuestionNum]) {
+          coloredKeysByNumber[currentQuestionNum] = [];
+        }
+        if (!coloredKeysByNumber[currentQuestionNum].includes(optKey)) {
+          coloredKeysByNumber[currentQuestionNum].push(optKey);
+        }
+      }
+      coloredKeysInOrder.push(optKey);
+    }
+
+    // Kunci jawaban bercetak tebal (Bold)
+    if (isBoldParagraph && optKey && currentQuestionNum) {
+      if (!boldKeysByNumber[currentQuestionNum]) {
+        boldKeysByNumber[currentQuestionNum] = [];
+      }
+      if (!boldKeysByNumber[currentQuestionNum].includes(optKey)) {
+        boldKeysByNumber[currentQuestionNum].push(optKey);
+      }
+    }
 
     if (imgUri) {
       if (listInfo?.isOption || explicitOpt) {
@@ -477,7 +547,16 @@ async function extractDocxStructure(arrayBuffer) {
     }
   }
 
-  return { lines, coloredKeysByNumber, coloredKeysInOrder };
+  // Saring kunci bold: jika SEMUA opsi dalam satu soal dicetak tebal, berarti hanya gaya font biasa (bukan kunci)
+  const filteredBoldKeysByNumber = {};
+  Object.entries(boldKeysByNumber).forEach(([qNum, keys]) => {
+    const totalOpts = optionCountByNumber[qNum] || 4;
+    if (keys.length > 0 && keys.length < totalOpts) {
+      filteredBoldKeysByNumber[qNum] = keys;
+    }
+  });
+
+  return { lines, coloredKeysByNumber, coloredKeysInOrder, boldKeysByNumber: filteredBoldKeysByNumber };
 }
 
 // Mengekstrak opsi jawaban yang diberi tinta merah/stabilo langsung dari XML Word (.docx)
@@ -615,7 +694,7 @@ function looksLikeEssayQuestion(text) {
 }
 
 function parseQuestionImport(text, options = {}) {
-  const { coloredKeysByNumber = {}, coloredKeysInOrder = [] } = options;
+  const { coloredKeysByNumber = {}, coloredKeysInOrder = [], boldKeysByNumber = {} } = options;
   const allLines = String(text || '')
     .split(/\r?\n/)
     .map((line) => line.replace(/\t/g, ' ').trim())
@@ -699,12 +778,27 @@ function parseQuestionImport(text, options = {}) {
       return false;
     }
 
-    const match = line.match(/^(?:soal\s*|pertanyaan\s*)?(?:nomor\s*)?(\d+)\s*[.)\]:\-]\s*(.+)$/i);
+    const match = line.match(/^(?:soal\s*|pertanyaan\s*)?(?:nomor\s*)?(\d+)\s*([.)\]:\-])(\.?)\s*(.+)$/i);
     const labeledMatch = line.match(/^(?:soal|pertanyaan)\s*[:\-]\s*(.+)$/i);
     if (!match && !labeledMatch) return false;
+
+    // Jika sedang di dalam soal aktif yang BELUM menerima opsi A-E atau pasangan,
+    // jangan pecah sub-pernyataan bernomor seperti "1). Apabila...", "2). Apabila...", "3). Apabila..."
+    // menjadi soal baru!
+    if (match && current && current.options.length === 0 && current.matchingPairs.length === 0 && !current.keyDetected) {
+      const candidateNum = Number(match[1]);
+      const sep = match[2];
+      const hasParenSubStyle = sep === ')' || /^\d+\)\.?/.test(line.trim());
+      const currentHasSubList = /(?:^|\n)\s*\d+\)\.?/.test(current.questionText);
+      const isSubSequence = candidateNum <= current.questionNumber || hasParenSubStyle || currentHasSubList;
+      if (isSubSequence && !/^(?:soal|pertanyaan|nomor)/i.test(line.trim())) {
+        return false;
+      }
+    }
+
     pushCurrent();
 
-    let qText = (match ? match[2] : labeledMatch[1]).trim();
+    let qText = (match ? match[4] : labeledMatch[1]).trim();
     let inlineType = pendingType || null;
     // Deteksi tag tipe inline di awal soal, misal: "[PGK] ...", "[B/S] ...", "[JODOH] ...", "[ESAI] ..."
     const inlineTagMatch = qText.match(/^\[([^\]]+)\]\s*(.+)$/) || qText.match(/^\((PG\s*Kompleks|PGK|Benar\s*[\/\-]?\s*Salah|B\/S|Menjodohkan|Jodoh|Esai|Uraian|Essay)\)\s*(.+)$/i);
@@ -1008,6 +1102,18 @@ function parseQuestionImport(text, options = {}) {
       }
     }
 
+    // 2B. Cek kunci dari opsi bercetak tebal (Bold) pada dokumen Word (.docx)
+    if (!question.keyDetected && question.options.length >= 2) {
+      const rawBoldKey = boldKeysByNumber[question.questionNumber];
+      const boldList = Array.isArray(rawBoldKey) ? rawBoldKey : (rawBoldKey ? [rawBoldKey] : []);
+      if (boldList.length > 0) {
+        question.correctOptions = boldList;
+        question.correctOption = boldList.join(',');
+        question.keyDetected = true;
+        question.keySource = 'TEKS_TEBAL';
+      }
+    }
+
     // 3. Cek kunci dari daftar kunci terpisah di akhir dokumen (header Kunci Jawaban)
     if (!question.keyDetected) {
       const rawListKey = answerKeyByNumber[question.questionNumber] || answerKeyList[index];
@@ -1134,7 +1240,8 @@ export default function TeacherExamsManagementPage() {
   const [examCategory, setExamCategory] = useState('SEMESTER_UAS'); // 'REGULAR' | 'SEMESTER_UAS'
   const [targetGradeLevel, setTargetGradeLevel] = useState('7'); // '7' | '8' | '9'
   const [supervisorPin, setSupervisorPin] = useState(() => generateRandomPin(6));
-  const [examFilterTab, setExamFilterTab] = useState('ALL'); // 'ALL' | 'SEMESTER_UAS' | 'REGULAR'
+  const [examFilterTab, setExamFilterTab] = useState('ALL'); // 'ALL' | 'SEMESTER_UAS' | 'SEMESTER_UTS' | 'TKA' | 'REGULAR'
+  const [examGradeFilter, setExamGradeFilter] = useState('ALL'); // 'ALL' | '7' | '8' | '9'
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('');
   const [subjectCode, setSubjectCode] = useState('');
@@ -1176,10 +1283,12 @@ export default function TeacherExamsManagementPage() {
   const [correctOptions, setCorrectOptions] = useState(['A']); // Untuk Pilihan Ganda Kompleks (Multi-Select)
   const [trueFalseAnswer, setTrueFalseAnswer] = useState(true); // Untuk Benar / Salah
   const [matchingPairs, setMatchingPairs] = useState([
-    { id: 1, left: '', right: '' },
-    { id: 2, left: '', right: '' },
-    { id: 3, left: '', right: '' },
+    { id: 1, left: '', right: '', rights: [] },
+    { id: 2, left: '', right: '', rights: [] },
+    { id: 3, left: '', right: '', rights: [] },
   ]); // Untuk Menjodohkan / Pencocokan
+  const [matchingRightOptions, setMatchingRightOptions] = useState(['', '', '', '']); // Pilihan Kolom B (termasuk pengecoh)
+  const [matchingMultiSelect, setMatchingMultiSelect] = useState(true); // Multi-pilih & pengecoh per baris
   const [mcqPoints, setMcqPoints] = useState(10);
   const [essayPoints, setEssayPoints] = useState(10);
   const [essayRubric, setEssayRubric] = useState('');
@@ -1626,10 +1735,12 @@ export default function TeacherExamsManagementPage() {
     setCorrectOptions(['A']);
     setTrueFalseAnswer(true);
     setMatchingPairs([
-      { id: 1, left: '', right: '' },
-      { id: 2, left: '', right: '' },
-      { id: 3, left: '', right: '' },
+      { id: 1, left: '', right: '', rights: [] },
+      { id: 2, left: '', right: '', rights: [] },
+      { id: 3, left: '', right: '', rights: [] },
     ]);
+    setMatchingRightOptions(['', '', '', '']);
+    setMatchingMultiSelect(true);
     if (customPoints !== null && Number(customPoints) > 0) {
       setMcqPoints(Number(customPoints));
       setEssayPoints(Number(customPoints));
@@ -1737,13 +1848,33 @@ export default function TeacherExamsManagementPage() {
       setTrueFalseAnswer(q.trueFalseAnswer !== undefined ? q.trueFalseAnswer : (q.correctOption === 'TRUE' || q.correctOption === 'BENAR'));
     } else if (type === 'MATCHING') {
       if (Array.isArray(q.matchingPairs) && q.matchingPairs.length > 0) {
-        setMatchingPairs(q.matchingPairs);
+        const normalizedPairs = q.matchingPairs.map((p, idx) => {
+          const rList = Array.isArray(p.rights) && p.rights.length > 0
+            ? p.rights
+            : (p.right ? [p.right] : []);
+          return {
+            id: p.id || idx + 1,
+            left: p.left || '',
+            right: p.right || rList[0] || '',
+            rights: rList,
+          };
+        });
+        setMatchingPairs(normalizedPairs);
+        const derivedPool = Array.from(new Set([
+          ...(Array.isArray(q.matchingRightOptions) ? q.matchingRightOptions : []),
+          ...normalizedPairs.flatMap((p) => (p.rights?.length ? p.rights : [p.right])),
+        ].map((s) => String(s || '').trim()).filter(Boolean)));
+        setMatchingRightOptions(derivedPool.length >= 2 ? derivedPool : ['', '', '', '']);
+        const hasMulti = Boolean(q.matchingMultiSelect) || normalizedPairs.some((p) => (p.rights?.length || 0) > 1) || (Array.isArray(q.matchingRightOptions) && q.matchingRightOptions.length > normalizedPairs.length);
+        setMatchingMultiSelect(hasMulti);
       } else {
         setMatchingPairs([
-          { id: 1, left: '', right: '' },
-          { id: 2, left: '', right: '' },
-          { id: 3, left: '', right: '' },
+          { id: 1, left: '', right: '', rights: [] },
+          { id: 2, left: '', right: '', rights: [] },
+          { id: 3, left: '', right: '', rights: [] },
         ]);
+        setMatchingRightOptions(['', '', '', '']);
+        setMatchingMultiSelect(true);
       }
     } else {
       setEssayRubric(q.essayRubric || '');
@@ -1804,9 +1935,19 @@ export default function TeacherExamsManagementPage() {
     }
 
     if (newQuestionType === 'MATCHING') {
-      const validPairs = matchingPairs.filter((p) => p.left.trim() && p.right.trim());
-      if (validPairs.length < 2) {
-        alert('Untuk soal menjodohkan / pencocokan, mohon isi minimal 2 pasang premis dan jawaban!');
+      const validPairs = matchingPairs.filter((p) => {
+        const hasLeft = Boolean(p.left && p.left.trim());
+        const rList = matchingMultiSelect
+          ? (Array.isArray(p.rights) ? p.rights.filter((r) => String(r || '').trim()) : [])
+          : (p.right && p.right.trim() ? [p.right.trim()] : []);
+        return hasLeft && rList.length > 0;
+      });
+      if (validPairs.length < 1) {
+        alert('Untuk soal menjodohkan, isi minimal 1 premis Kolom A dan pilih minimal 1 kunci jawaban benar dari Kolom B!');
+        return;
+      }
+      if (!matchingMultiSelect && validPairs.length < 2) {
+        alert('Untuk soal menjodohkan 1-ke-1, mohon isi minimal 2 pasang premis dan jawaban!');
         return;
       }
     }
@@ -1825,9 +1966,31 @@ export default function TeacherExamsManagementPage() {
         });
       }
 
+      const cleanRightPool = Array.from(
+        new Set(matchingRightOptions.map((s) => String(s || '').trim()).filter(Boolean))
+      );
+
       const validPairs = matchingPairs
-        .filter((p) => p.left.trim() && p.right.trim())
-        .map((p, idx) => ({ id: p.id || idx + 1, left: p.left.trim(), right: p.right.trim() }));
+        .map((p, idx) => {
+          const left = String(p.left || '').trim();
+          const rights = matchingMultiSelect
+            ? Array.from(new Set((Array.isArray(p.rights) ? p.rights : []).map((r) => String(r || '').trim()).filter(Boolean)))
+            : (String(p.right || '').trim() ? [String(p.right || '').trim()] : []);
+          return {
+            id: p.id || idx + 1,
+            left,
+            right: rights[0] || '',
+            ...(matchingMultiSelect ? { rights } : {}),
+          };
+        })
+        .filter((p) => p.left && p.right);
+
+      const finalRightOptions = Array.from(
+        new Set([
+          ...cleanRightPool,
+          ...validPairs.flatMap((p) => (Array.isArray(p.rights) && p.rights.length > 0 ? p.rights : [p.right])),
+        ].filter(Boolean))
+      );
 
       const targetPoints = Number(newQuestionType === 'ESSAY' ? essayPoints : mcqPoints) || 10;
 
@@ -1849,6 +2012,8 @@ export default function TeacherExamsManagementPage() {
         correctOptions: newQuestionType === 'COMPLEX_MCQ' ? correctOptions : undefined,
         trueFalseAnswer: newQuestionType === 'TRUE_FALSE' ? trueFalseAnswer : undefined,
         matchingPairs: newQuestionType === 'MATCHING' ? validPairs : undefined,
+        matchingRightOptions: newQuestionType === 'MATCHING' ? finalRightOptions : undefined,
+        matchingMultiSelect: newQuestionType === 'MATCHING' ? matchingMultiSelect : undefined,
         points: targetPoints,
         essayRubric: newQuestionType === 'ESSAY' ? essayRubric.trim() || undefined : undefined,
       };
@@ -1911,14 +2076,32 @@ export default function TeacherExamsManagementPage() {
     });
   };
 
-  const handleApplyPointsToAll = () => {
+  const handleApplyPointsToAll = async () => {
     const points = Number(bulkPoints);
     if (!Number.isFinite(points) || points < 1) {
       alert('Poin harus berupa angka minimal 1.');
       return;
     }
-    setExamQuestions((current) => current.map((question) => ({ ...question, points })));
-    setSaveSuccessMsg(`Poin ${points} diterapkan ke ${examQuestions.length} soal. Klik Simpan ke Server.`);
+    const updated = examQuestions.map((question) => ({
+      ...question,
+      points,
+      score_weight: points,
+    }));
+    setExamQuestions(updated);
+    if (activeQuestionEditorExam?.id) {
+      setIsSavingQuestion(true);
+      try {
+        await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, updated);
+        setSaveSuccessMsg(`Poin ${points} berhasil diterapkan dan disimpan ke server untuk seluruh ${updated.length} soal.`);
+        setTimeout(() => setSaveSuccessMsg(''), 4000);
+      } catch (err) {
+        alert(`Poin diubah di layar, namun gagal menyimpan ke server: ${err.message}`);
+      } finally {
+        setIsSavingQuestion(false);
+      }
+    } else {
+      setSaveSuccessMsg(`Poin ${points} diterapkan ke ${updated.length} soal.`);
+    }
   };
 
   const handleDeleteAllQuestions = () => {
@@ -2002,6 +2185,7 @@ export default function TeacherExamsManagementPage() {
           const parsed = parseQuestionImport(extracted.lines.join('\n'), {
             coloredKeysByNumber: extracted.coloredKeysByNumber,
             coloredKeysInOrder: extracted.coloredKeysInOrder,
+            boldKeysByNumber: extracted.boldKeysByNumber,
           });
           if (parsed && parsed.length > 0) {
             imported = parsed;
@@ -2708,92 +2892,291 @@ export default function TeacherExamsManagementPage() {
                   </div>
                 )}
 
-                {/* 4D. Form Khusus Menjodohkan / Pencocokan (Matching Pairs) */}
+                {/* 4D. Form Khusus Menjodohkan / Pencocokan (Mendukung 1-ke-1 maupun Multi-Pilih + Pengecoh Kolom B) */}
                 {newQuestionType === 'MATCHING' && (
-                  <div className="p-4 rounded-xl bg-violet-50/50 border border-violet-200 space-y-3.5">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <div className="p-4 rounded-xl bg-violet-50/50 border border-violet-200 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-violet-200/80">
                       <label className="text-xs font-bold text-violet-950 flex items-center gap-1.5">
                         <AppIcon name="link" color="blue" size={14} />
-                        <span>Daftar Pasangan Menjodohkan (Premis Kiri ↔ Pasangan Kanan):</span>
+                        <span>Konfigurasi Soal Menjodohkan (Kolom A ↔ Kolom B):</span>
                       </label>
-                      <span className="text-[11px] text-violet-800 font-medium">
-                        Minimal 2 pasangan pencocokan
-                      </span>
+                      <label className="inline-flex items-center gap-2 text-[11px] font-bold text-violet-900 bg-white px-2.5 py-1.5 rounded-lg border border-violet-200 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={matchingMultiSelect}
+                          onChange={(e) => setMatchingMultiSelect(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded text-violet-600 focus:ring-violet-500 cursor-pointer"
+                        />
+                        <span>Multi-Pilih per Baris &amp; Pengecoh Kolom B</span>
+                      </label>
                     </div>
 
-                    <div className="space-y-2.5">
-                      {matchingPairs.map((pair, idx) => (
-                        <div
-                          key={pair.id || idx}
-                          className="p-2.5 rounded-xl bg-white border border-violet-200 flex flex-col sm:flex-row sm:items-center gap-2"
-                        >
-                          <span className="w-6 h-6 rounded-md bg-violet-100 text-violet-700 font-bold text-xs flex items-center justify-center shrink-0">
-                            {idx + 1}
-                          </span>
-
-                          <div className="flex-1">
-                            <input
-                              type="text"
-                              placeholder={`Premis / Soal Kiri ${idx + 1}...`}
-                              value={pair.left}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setMatchingPairs((prev) =>
-                                  prev.map((p, i) => (i === idx ? { ...p, left: val } : p))
-                                );
-                              }}
-                              className="w-full text-xs p-2 rounded-lg border border-neutral-300 focus:outline-hidden focus:border-violet-500 font-medium"
-                              required
-                            />
+                    {matchingMultiSelect ? (
+                      <div className="space-y-4">
+                        {/* Bagian 1: Daftar Pilihan Kolom B (Jawaban & Pengecoh) */}
+                        <div className="p-3.5 rounded-xl bg-white border border-violet-200 space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-xs font-bold text-violet-950">
+                                1. Daftar Pilihan Kolom B (Jawaban Benar &amp; Pengecoh)
+                              </p>
+                              <p className="text-[11px] text-neutral-500">
+                                Isi semua pilihan yang akan muncul di Kolom B (boleh lebih banyak dari Kolom A sebagai pengecoh).
+                              </p>
+                            </div>
                           </div>
-
-                          <span className="text-violet-500 font-black text-sm text-center shrink-0 hidden sm:inline">↔</span>
-
-                          <div className="flex-1">
-                            <input
-                              type="text"
-                              placeholder={`Jawaban Cocok Kanan ${idx + 1}...`}
-                              value={pair.right}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setMatchingPairs((prev) =>
-                                  prev.map((p, i) => (i === idx ? { ...p, right: val } : p))
-                                );
-                              }}
-                              className="w-full text-xs p-2 rounded-lg border border-neutral-300 focus:outline-hidden focus:border-violet-500 font-medium"
-                              required
-                            />
+                          <div className="space-y-2">
+                            {matchingRightOptions.map((optText, oIdx) => {
+                              const letter = String.fromCharCode(65 + oIdx);
+                              return (
+                                <div key={oIdx} className="flex items-center gap-2">
+                                  <span className="w-6 h-6 rounded-md bg-violet-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                                    {letter}
+                                  </span>
+                                  <input
+                                    type="text"
+                                    placeholder={`Pilihan Kolom B (${letter})...`}
+                                    value={optText}
+                                    onChange={(e) => {
+                                      const oldVal = matchingRightOptions[oIdx];
+                                      const newVal = e.target.value;
+                                      setMatchingRightOptions((prev) =>
+                                        prev.map((item, i) => (i === oIdx ? newVal : item))
+                                      );
+                                      if (oldVal && oldVal.trim()) {
+                                        setMatchingPairs((prev) =>
+                                          prev.map((p) => ({
+                                            ...p,
+                                            rights: (p.rights || []).map((r) => (r === oldVal ? newVal : r)),
+                                            right: p.right === oldVal ? newVal : p.right,
+                                          }))
+                                        );
+                                      }
+                                    }}
+                                    className="flex-1 text-xs p-2 rounded-lg border border-neutral-300 focus:outline-hidden focus:border-violet-500 font-medium"
+                                  />
+                                  {matchingRightOptions.length > 2 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const removed = matchingRightOptions[oIdx];
+                                        setMatchingRightOptions((prev) => prev.filter((_, i) => i !== oIdx));
+                                        if (removed) {
+                                          setMatchingPairs((prev) =>
+                                            prev.map((p) => {
+                                              const nextR = (p.rights || []).filter((r) => r !== removed);
+                                              return { ...p, rights: nextR, right: nextR[0] || '' };
+                                            })
+                                          );
+                                        }
+                                      }}
+                                      className="text-danger-600 hover:bg-danger-50 p-1.5 rounded cursor-pointer"
+                                      title="Hapus pilihan ini"
+                                    >
+                                      <AppIcon name="close-cancel" color="red" size={12} />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
-
-                          {matchingPairs.length > 2 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setMatchingPairs((prev) => prev.filter((_, i) => i !== idx));
-                              }}
-                              className="text-danger-600 hover:text-danger-800 p-1.5 rounded hover:bg-danger-50 font-bold text-xs shrink-0 cursor-pointer flex items-center justify-center"
-                              title="Hapus Pasangan Ini"
-                            >
-                              <AppIcon name="close-cancel" color="red" size={12} />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => setMatchingRightOptions((prev) => [...prev, ''])}
+                            className="text-xs font-bold text-violet-700 hover:text-violet-900 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                          >
+                            <AppIcon name="circle-add" color="blue" size={13} />
+                            <span>Tambah Pilihan Kolom B</span>
+                          </button>
                         </div>
-                      ))}
-                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMatchingPairs((prev) => [
-                          ...prev,
-                          { id: Date.now(), left: '', right: '' },
-                        ]);
-                      }}
-                      className="text-xs font-bold text-violet-700 hover:text-violet-900 bg-white hover:bg-violet-100 border border-violet-300 px-3 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-                    >
-                      <AppIcon name="circle-add" color="blue" size={14} />
-                      <span>Tambah Pasangan Menjodohkan</span>
-                    </button>
+                        {/* Bagian 2: Daftar Premis Kolom A & Centang Kunci Jawaban Benar */}
+                        <div className="space-y-2.5">
+                          <div>
+                            <p className="text-xs font-bold text-violet-950">
+                              2. Daftar Premis Kolom A &amp; Tentukan Kunci Jawaban Benar (Bisa &gt; 1 Opsi)
+                            </p>
+                            <p className="text-[11px] text-neutral-500">
+                              Untuk setiap baris Kolom A, centang 1 atau lebih pilihan Kolom B yang merupakan jawaban benarnya.
+                            </p>
+                          </div>
+                          {(() => {
+                            const filledRightOpts = matchingRightOptions
+                              .map((txt, idx) => ({ letter: String.fromCharCode(65 + idx), text: String(txt || '').trim() }))
+                              .filter((o) => o.text);
+                            return matchingPairs.map((pair, idx) => {
+                              const selectedRights = Array.isArray(pair.rights) ? pair.rights : (pair.right ? [pair.right] : []);
+                              return (
+                                <div key={pair.id || idx} className="p-3 rounded-xl bg-white border border-violet-200 space-y-2.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-6 h-6 rounded-md bg-violet-100 text-violet-700 font-bold text-xs flex items-center justify-center shrink-0">
+                                      {idx + 1}
+                                    </span>
+                                    <input
+                                      type="text"
+                                      placeholder={`Premis / Kasus Kolom A No. ${idx + 1}...`}
+                                      value={pair.left}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setMatchingPairs((prev) =>
+                                          prev.map((p, i) => (i === idx ? { ...p, left: val } : p))
+                                        );
+                                      }}
+                                      className="flex-1 text-xs p-2 rounded-lg border border-neutral-300 focus:outline-hidden focus:border-violet-500 font-medium"
+                                    />
+                                    {matchingPairs.length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setMatchingPairs((prev) => prev.filter((_, i) => i !== idx))}
+                                        className="text-danger-600 hover:bg-danger-50 p-1.5 rounded cursor-pointer shrink-0"
+                                        title="Hapus baris premis ini"
+                                      >
+                                        <AppIcon name="close-cancel" color="red" size={12} />
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  <div className="pl-8 space-y-1.5">
+                                    <p className="text-[11px] font-bold text-violet-800">
+                                      Kunci Jawaban Benar ({selectedRights.length} dipilih):
+                                    </p>
+                                    {filledRightOpts.length === 0 ? (
+                                      <p className="text-[11px] text-amber-700 italic">
+                                        Isi pilihan Kolom B di bagian atas terlebih dahulu agar bisa dicentang sebagai kunci.
+                                      </p>
+                                    ) : (
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {filledRightOpts.map((opt) => {
+                                          const checked = selectedRights.includes(opt.text);
+                                          return (
+                                            <button
+                                              key={opt.letter + opt.text}
+                                              type="button"
+                                              onClick={() => {
+                                                setMatchingPairs((prev) =>
+                                                  prev.map((p, i) => {
+                                                    if (i !== idx) return p;
+                                                    const cur = Array.isArray(p.rights) ? p.rights : (p.right ? [p.right] : []);
+                                                    const next = cur.includes(opt.text)
+                                                      ? cur.filter((r) => r !== opt.text)
+                                                      : [...cur, opt.text];
+                                                    return { ...p, rights: next, right: next[0] || '' };
+                                                  })
+                                                );
+                                              }}
+                                              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer flex items-center gap-1.5 text-left ${
+                                                checked
+                                                  ? 'bg-violet-600 text-white border-violet-700 shadow-2xs'
+                                                  : 'bg-neutral-50 text-neutral-700 border-neutral-300 hover:border-violet-400'
+                                              }`}
+                                            >
+                                              <span className={`font-black ${checked ? 'text-white' : 'text-violet-700'}`}>
+                                                {checked ? '✓' : '+'} {opt.letter}.
+                                              </span>
+                                              <span className="max-w-[260px] truncate">{opt.text}</span>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMatchingPairs((prev) => [
+                                ...prev,
+                                { id: Date.now(), left: '', right: '', rights: [] },
+                              ]);
+                            }}
+                            className="text-xs font-bold text-violet-700 hover:text-violet-900 bg-white hover:bg-violet-100 border border-violet-300 px-3 py-1.5 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                          >
+                            <AppIcon name="circle-add" color="blue" size={14} />
+                            <span>Tambah Baris Premis Kolom A</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-2.5">
+                          {matchingPairs.map((pair, idx) => (
+                            <div
+                              key={pair.id || idx}
+                              className="p-2.5 rounded-xl bg-white border border-violet-200 flex flex-col sm:flex-row sm:items-center gap-2"
+                            >
+                              <span className="w-6 h-6 rounded-md bg-violet-100 text-violet-700 font-bold text-xs flex items-center justify-center shrink-0">
+                                {idx + 1}
+                              </span>
+
+                              <div className="flex-1">
+                                <input
+                                  type="text"
+                                  placeholder={`Premis / Soal Kiri ${idx + 1}...`}
+                                  value={pair.left}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setMatchingPairs((prev) =>
+                                      prev.map((p, i) => (i === idx ? { ...p, left: val } : p))
+                                    );
+                                  }}
+                                  className="w-full text-xs p-2 rounded-lg border border-neutral-300 focus:outline-hidden focus:border-violet-500 font-medium"
+                                  required
+                                />
+                              </div>
+
+                              <span className="text-violet-500 font-black text-sm text-center shrink-0 hidden sm:inline">↔</span>
+
+                              <div className="flex-1">
+                                <input
+                                  type="text"
+                                  placeholder={`Jawaban Cocok Kanan ${idx + 1}...`}
+                                  value={pair.right}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setMatchingPairs((prev) =>
+                                      prev.map((p, i) => (i === idx ? { ...p, right: val, rights: val ? [val] : [] } : p))
+                                    );
+                                  }}
+                                  className="w-full text-xs p-2 rounded-lg border border-neutral-300 focus:outline-hidden focus:border-violet-500 font-medium"
+                                  required
+                                />
+                              </div>
+
+                              {matchingPairs.length > 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMatchingPairs((prev) => prev.filter((_, i) => i !== idx));
+                                  }}
+                                  className="text-danger-600 hover:text-danger-800 p-1.5 rounded hover:bg-danger-50 font-bold text-xs shrink-0 cursor-pointer flex items-center justify-center"
+                                  title="Hapus Pasangan Ini"
+                                >
+                                  <AppIcon name="close-cancel" color="red" size={12} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMatchingPairs((prev) => [
+                              ...prev,
+                              { id: Date.now(), left: '', right: '', rights: [] },
+                            ]);
+                          }}
+                          className="text-xs font-bold text-violet-700 hover:text-violet-900 bg-white hover:bg-violet-100 border border-violet-300 px-3 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                        >
+                          <AppIcon name="circle-add" color="blue" size={14} />
+                          <span>Tambah Pasangan Menjodohkan</span>
+                        </button>
+                      </>
+                    )}
 
                     {/* Bobot Skor */}
                     <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-violet-200">
@@ -4178,9 +4561,22 @@ export default function TeacherExamsManagementPage() {
   const tkaCount = exams.filter((e) => resolveExamCat(e) === 'TKA').length;
   const regularCount = exams.filter((e) => resolveExamCat(e) === 'REGULAR').length;
 
+  const resolveExamGrade = (ex) => {
+    if (!ex) return '';
+    if (['7', '8', '9'].includes(String(ex.targetGradeLevel || '').trim())) {
+      return String(ex.targetGradeLevel).trim();
+    }
+    const hay = `${ex.className || ''} ${ex.title || ''} ${ex.rawDescription || ''}`.toUpperCase();
+    if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VIII|8)\b|\bVIII[-_\sA-Z0-9]|\b8[A-Z]\b|\[ASAS:8\]/.test(hay)) return '8';
+    if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:VII|7)\b|\bVII[-_\sA-Z0-9]|\b7[A-Z]\b|\[ASAS:7\]/.test(hay)) return '7';
+    if (/(?:TINGKAT|TK\.?|KELAS)\s*(?:IX|9)\b|\bIX[-_\sA-Z0-9]|\b9[A-Z]\b|\[ASAS:9\]/.test(hay)) return '9';
+    return '';
+  };
+
   const filteredExams = exams.filter((ex) => {
-    if (examFilterTab === 'ALL') return true;
-    return resolveExamCat(ex) === examFilterTab;
+    if (examFilterTab !== 'ALL' && resolveExamCat(ex) !== examFilterTab) return false;
+    if (examGradeFilter !== 'ALL' && resolveExamGrade(ex) !== examGradeFilter) return false;
+    return true;
   });
 
   const renderCategoryBadge = (ex, compact = false) => {
@@ -4338,6 +4734,41 @@ export default function TeacherExamsManagementPage() {
               {regularCount}
             </span>
           </button>
+        </div>
+
+        {/* Filter Tingkat Kelas (Kelas 7, 8, 9) */}
+        <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
+          <span className="text-[11px] font-bold text-slate-500 mr-1">Filter Kelas:</span>
+          {[
+            { key: 'ALL', label: 'Semua Kelas' },
+            { key: '7', label: 'Kelas 7' },
+            { key: '8', label: 'Kelas 8' },
+            { key: '9', label: 'Kelas 9' },
+          ].map((g) => {
+            const active = examGradeFilter === g.key;
+            const cnt = g.key === 'ALL'
+              ? exams.filter((ex) => examFilterTab === 'ALL' || resolveExamCat(ex) === examFilterTab).length
+              : exams.filter((ex) => (examFilterTab === 'ALL' || resolveExamCat(ex) === examFilterTab) && resolveExamGrade(ex) === g.key).length;
+            return (
+              <button
+                key={g.key}
+                type="button"
+                onClick={() => setExamGradeFilter(g.key)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                  active
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <span>{g.label}</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                  active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {cnt}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 

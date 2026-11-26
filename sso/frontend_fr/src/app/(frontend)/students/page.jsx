@@ -56,6 +56,7 @@ export default function BarcodeMultifungsiPage() {
   const [selectedPrintClass, setSelectedPrintClass] = useState('ALL');
   const [separatePagePerClass, setSeparatePagePerClass] = useState(true);
   const [isPreparingPrint, setIsPreparingPrint] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -280,6 +281,78 @@ export default function BarcodeMultifungsiPage() {
     }, 150);
   };
 
+  // Eksekusi Download Excel (.xlsx) dengan QR Code tertanam di dalam sel
+  const handleDownloadExcel = async (overrideScope = null) => {
+    const activeScope = overrideScope || printScope;
+    setIsExportingExcel(true);
+    try {
+      const opts = {
+        personType: '',
+        className: '',
+        search: '',
+        separateSheets: separatePagePerClass,
+      };
+      if (activeScope === 'ALL_STUDENTS') {
+        opts.personType = 'SISWA';
+      } else if (activeScope === 'BY_CLASS') {
+        opts.personType = 'SISWA';
+        opts.className = selectedPrintClass || studentClasses[0] || '';
+        opts.separateSheets = false;
+      } else if (activeScope === 'FILTERED') {
+        opts.personType = roleFilter !== 'ALL' ? roleFilter : '';
+        opts.className = classFilter !== 'ALL' ? classFilter : '';
+        opts.search = search || '';
+      } else {
+        opts.personType = 'SISWA';
+      }
+
+      const downloadUrl = schoolPeopleApi.getExportBarcodesExcelUrl(opts);
+      const token =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('spenspra_access_token') ||
+            localStorage.getItem('sso_token') ||
+            localStorage.getItem('token') ||
+            ''
+          : '';
+      const headers = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const res = await fetch(downloadUrl, {
+        method: 'GET',
+        headers,
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        let errMsg = `Gagal mengunduh file Excel (HTTP ${res.status})`;
+        try {
+          const j = await res.json();
+          if (j?.message) errMsg = j.message;
+        } catch (_) {}
+        throw new Error(errMsg);
+      }
+
+      const blob = await res.blob();
+      const cd = res.headers.get('content-disposition') || '';
+      const match = cd.match(/filename="?([^";]+)"?/i);
+      const filename =
+        match?.[1] ||
+        `Barcode_${opts.className ? `Kelas_${opts.className}` : 'Siswa_Spenspra'}.xlsx`;
+
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      alert(err?.message || 'Gagal mengunduh file Excel barcode.');
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
   // Handle Verify / Resolve Barcode Real-time via API
   const handleResolveBarcode = async (e) => {
     e?.preventDefault();
@@ -381,13 +454,25 @@ export default function BarcodeMultifungsiPage() {
                       setPrintScope('ALL_STUDENTS');
                       setIsPrintModalOpen(true);
                     }}
-                    title="Cetak barcode siswa semua rombel atau rombel pilihan ke dalam 1 file PDF"
+                    title="Cetak barcode siswa semua rombel atau rombel pilihan ke dalam 1 file PDF / Excel"
                     className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                     </svg>
-                    <span>Cetak / Ekspor Barcode (PDF)</span>
+                    <span>Cetak / Ekspor Barcode</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isExportingExcel}
+                    onClick={() => handleDownloadExcel('ALL_STUDENTS')}
+                    title="Download seluruh barcode siswa dalam format Excel (.xlsx) lengkap dengan gambar QR Code"
+                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span>{isExportingExcel ? 'Menyusun Excel...' : 'Download Excel (.xlsx)'}</span>
                   </button>
                   <button
                     type="button"
@@ -1010,13 +1095,24 @@ export default function BarcodeMultifungsiPage() {
             </div>
 
             {/* Footer Modal */}
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+            <div className="flex items-center justify-end flex-wrap gap-2.5 pt-3 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setIsPrintModalOpen(false)}
                 className="px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
               >
                 Batal
+              </button>
+              <button
+                type="button"
+                disabled={isExportingExcel}
+                onClick={() => handleDownloadExcel()}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>{isExportingExcel ? 'Menyusun Excel...' : 'Download Excel (.xlsx)'}</span>
               </button>
               <button
                 type="button"

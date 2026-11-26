@@ -488,6 +488,11 @@ export default function LiveProctoringMonitoringPage() {
         }
         matchingAns = matchingAns || {};
         const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
+        const normalizeMatchVals = (val) => {
+          if (Array.isArray(val)) return val.map((v) => String(v || '').trim().toLowerCase()).filter(Boolean);
+          const s = String(val || '').trim().toLowerCase();
+          return s ? [s] : [];
+        };
         const hasAnyMatched = pairs.length > 0
           ? pairs.some((p, pIdx) => {
               const val =
@@ -497,7 +502,7 @@ export default function LiveProctoringMonitoringPage() {
                 matchingAns[(p.left || '').trim()] ??
                 matchingAns[pIdx + 1] ??
                 matchingAns[String(pIdx + 1)];
-              return Boolean(val);
+              return normalizeMatchVals(val).length > 0;
             })
           : Object.keys(matchingAns).length > 0;
         if (hasAnyMatched) {
@@ -514,7 +519,10 @@ export default function LiveProctoringMonitoringPage() {
               matchingAns[pIdx + 1] ??
               matchingAns[String(pIdx + 1)] ??
               '';
-            if (studentVal && studentVal.trim().toLowerCase() === (p.right || '').trim().toLowerCase()) {
+            const studentSet = Array.from(new Set(normalizeMatchVals(studentVal))).sort();
+            const expectedRaw = (Array.isArray(p.rights) && p.rights.length > 0) ? p.rights : (p.right ? [p.right] : []);
+            const expectedSet = Array.from(new Set(normalizeMatchVals(expectedRaw))).sort();
+            if (studentSet.length > 0 && studentSet.length === expectedSet.length && studentSet.every((v, idx) => v === expectedSet[idx])) {
               matched++;
             }
           });
@@ -1065,6 +1073,11 @@ export default function LiveProctoringMonitoringPage() {
                 }
                 matchingAns = matchingAns || {};
                 const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
+                const normVals = (val) => {
+                  if (Array.isArray(val)) return val.map((v) => String(v || '').trim().toLowerCase()).filter(Boolean);
+                  const s = String(val || '').trim().toLowerCase();
+                  return s ? [s] : [];
+                };
                 let matchedCorrect = 0;
                 let hasAnsweredAny = false;
                 pairs.forEach((p, pIdx) => {
@@ -1076,8 +1089,11 @@ export default function LiveProctoringMonitoringPage() {
                     matchingAns[pIdx + 1] ??
                     matchingAns[String(pIdx + 1)] ??
                     '';
-                  if (studentVal) hasAnsweredAny = true;
-                  if (studentVal && studentVal.trim().toLowerCase() === (p.right || '').trim().toLowerCase()) {
+                  const studentSet = Array.from(new Set(normVals(studentVal))).sort();
+                  const expectedRaw = (Array.isArray(p.rights) && p.rights.length > 0) ? p.rights : (p.right ? [p.right] : []);
+                  const expectedSet = Array.from(new Set(normVals(expectedRaw))).sort();
+                  if (studentSet.length > 0) hasAnsweredAny = true;
+                  if (studentSet.length > 0 && studentSet.length === expectedSet.length && studentSet.every((v, idx) => v === expectedSet[idx])) {
                     matchedCorrect++;
                   }
                 });
@@ -1463,7 +1479,7 @@ export default function LiveProctoringMonitoringPage() {
                                 </thead>
                                 <tbody className="divide-y divide-neutral-200 bg-white">
                                   {pairs.map((p, pIdx) => {
-                                    const studentVal =
+                                    const rawStudentVal =
                                       matchingAns[p.id] ??
                                       matchingAns[String(p.id)] ??
                                       matchingAns[`idx_${pIdx}`] ??
@@ -1471,29 +1487,75 @@ export default function LiveProctoringMonitoringPage() {
                                       matchingAns[pIdx + 1] ??
                                       matchingAns[String(pIdx + 1)] ??
                                       '';
-                                    const matchOk = Boolean(studentVal && studentVal.trim().toLowerCase() === (p.right || '').trim().toLowerCase());
+                                    const studentList = Array.isArray(rawStudentVal)
+                                      ? rawStudentVal.map((v) => String(v || '').trim()).filter(Boolean)
+                                      : (String(rawStudentVal || '').trim() ? [String(rawStudentVal).trim()] : []);
+                                    const expectedList = (Array.isArray(p.rights) && p.rights.length > 0)
+                                      ? p.rights.map((v) => String(v || '').trim()).filter(Boolean)
+                                      : (p.right ? [String(p.right).trim()] : []);
+                                    const sSet = Array.from(new Set(studentList.map((v) => v.toLowerCase()))).sort();
+                                    const eSet = Array.from(new Set(expectedList.map((v) => v.toLowerCase()))).sort();
+                                    const hasStudent = studentList.length > 0;
+                                    const matchOk = Boolean(hasStudent && sSet.length === eSet.length && sSet.every((v, idx) => v === eSet[idx]));
 
                                     return (
-                                      <tr key={p.id || pIdx} className={matchOk ? 'bg-emerald-50/40' : (studentVal ? 'bg-danger-50/30' : 'bg-neutral-50/40')}>
+                                      <tr key={p.id || pIdx} className={matchOk ? 'bg-emerald-50/40' : (hasStudent ? 'bg-danger-50/30' : 'bg-neutral-50/40')}>
                                         <td className="py-2.5 px-3 text-center font-bold text-neutral-500">{pIdx + 1}</td>
-                                        <td className="py-2.5 px-3 font-semibold text-neutral-900">{p.left}</td>
+                                        <td className="py-2.5 px-3 font-semibold text-neutral-900">
+                                          <MathText text={p.left} />
+                                        </td>
                                         <td className="py-2.5 px-3">
-                                          {studentVal ? (
-                                            <span className={`font-semibold ${matchOk ? 'text-emerald-900' : 'text-danger-900'}`}>
-                                              {studentVal}
-                                            </span>
+                                          {hasStudent ? (
+                                            studentList.length > 1 ? (
+                                              <div className="flex flex-wrap gap-1">
+                                                {studentList.map((val, vIdx) => {
+                                                  const itemOk = eSet.includes(val.toLowerCase());
+                                                  return (
+                                                    <span
+                                                      key={vIdx}
+                                                      className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
+                                                        itemOk
+                                                          ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                                                          : 'bg-danger-50 text-danger-900 border-danger-200'
+                                                      }`}
+                                                    >
+                                                      <MathText text={val} />
+                                                    </span>
+                                                  );
+                                                })}
+                                              </div>
+                                            ) : (
+                                              <span className={`font-semibold ${matchOk ? 'text-emerald-900' : 'text-danger-900'}`}>
+                                                <MathText text={studentList[0]} />
+                                              </span>
+                                            )
                                           ) : (
                                             <span className="text-neutral-400 italic">(Tidak Dijawab)</span>
                                           )}
                                         </td>
-                                        <td className="py-2.5 px-3 font-semibold text-emerald-800">{p.right}</td>
+                                        <td className="py-2.5 px-3 font-semibold text-emerald-800">
+                                          {expectedList.length > 1 ? (
+                                            <div className="flex flex-wrap gap-1">
+                                              {expectedList.map((val, vIdx) => (
+                                                <span
+                                                  key={vIdx}
+                                                  className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                                >
+                                                  <MathText text={val} />
+                                                </span>
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            <MathText text={expectedList[0] || p.right || ''} />
+                                          )}
+                                        </td>
                                         <td className="py-2.5 px-3 text-center">
                                           {matchOk ? (
                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                                               <AppIcon name="tick" color="green" size={10} />
                                               <span>Cocok</span>
                                             </span>
-                                          ) : studentVal ? (
+                                          ) : hasStudent ? (
                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-danger-100 text-danger-800 border border-danger-300">
                                               <AppIcon name="close-cancel" color="red" size={10} />
                                               <span>Tidak Cocok</span>

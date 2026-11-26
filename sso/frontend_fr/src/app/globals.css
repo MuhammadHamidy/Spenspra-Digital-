@@ -430,13 +430,18 @@ body {
     overflow: visible !important;
   }
 
-  /* Reset only the layout wrappers that can clip a print sheet. Do not
-     override card overflow: that can create an on-page scrollbar in print. */
+  /* Reset layout wrappers: Chromium ignores page-break-after/break-after inside flex/overflow ancestors */
   #__next,
+  .app-print-shell,
+  .app-print-col,
   main,
   .students-print-page,
   .barcode-print-document,
   .barcode-print-sheet {
+    display: block !important;
+    position: static !important;
+    min-height: 0 !important;
+    height: auto !important;
     overflow: visible !important;
   }
 
@@ -454,6 +459,8 @@ body {
     visibility: hidden !important;
   }
 
+  .app-print-shell,
+  .app-print-col,
   main,
   .students-print-page {
     display: block !important;
@@ -464,13 +471,13 @@ body {
     padding: 0 !important;
     border: none !important;
     box-shadow: none !important;
+    background: #ffffff !important;
   }
 
   html,
   body,
   .barcode-print-document {
-    overflow-x: hidden !important;
-    overflow-y: visible !important;
+    overflow: visible !important;
     scrollbar-width: none !important;
     -ms-overflow-style: none !important;
   }
@@ -504,6 +511,11 @@ body {
     box-sizing: border-box !important;
   }
 
+  .barcode-print-sheet + .barcode-print-sheet {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
   .barcode-print-sheet:last-child {
     page-break-after: auto !important;
     break-after: auto !important;
@@ -512,26 +524,27 @@ body {
   /* Grid 3 Kolom Presisi Tinggi untuk A4 */
   .barcode-print-grid {
     display: grid !important;
-    grid-template-columns: repeat(3, 1fr) !important;
-    column-gap: 3.5mm !important;
-    row-gap: 3.5mm !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    align-content: start !important;
+    column-gap: 3mm !important;
+    row-gap: 3mm !important;
     width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
     box-sizing: border-box !important;
   }
 
-  /* Kartu Cetak: Tinggi 56mm x 4 baris = 224mm (+ gaps = 234.5mm), pas sekali dalam 1 halaman A4 */
+  /* Kartu Cetak: Tinggi 54mm x 4 baris = 216mm (+ 3 gaps 9mm = 225mm), aman di A4 maupun Letter */
   .barcode-print-card {
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
     justify-content: flex-start !important;
     width: 100% !important;
-    height: 56mm !important;
-    max-height: 56mm !important;
+    height: 54mm !important;
+    max-height: 54mm !important;
     margin: 0 !important;
-    padding: 2.5mm 2mm 2mm 2mm !important;
+    padding: 2.2mm 2mm 1.8mm 2mm !important;
     box-sizing: border-box !important;
     break-inside: avoid !important;
     page-break-inside: avoid !important;
@@ -573,8 +586,8 @@ body {
     text-transform: uppercase !important;
     color: #334155 !important;
     line-height: 1.1 !important;
-    margin-top: 1mm !important;
-    margin-bottom: 1.5mm !important;
+    margin-top: 0.8mm !important;
+    margin-bottom: 1.2mm !important;
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
@@ -587,17 +600,17 @@ body {
     display: flex !important;
     justify-content: center !important;
     align-items: center !important;
-    height: 36mm !important;
+    height: 34mm !important;
     width: 100% !important;
     overflow: hidden !important;
   }
 
   .barcode-print-card .print-card-qr svg,
   .barcode-print-card .print-card-qr img {
-    width: 36mm !important;
-    height: 36mm !important;
-    max-width: 36mm !important;
-    max-height: 36mm !important;
+    width: 34mm !important;
+    height: 34mm !important;
+    max-width: 34mm !important;
+    max-height: 34mm !important;
     object-fit: contain !important;
   }
 

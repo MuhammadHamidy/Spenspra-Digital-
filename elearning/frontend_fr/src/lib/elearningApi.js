@@ -1965,9 +1965,13 @@ export const elearningApi = {
         }
         matchingAns = matchingAns || {};
         const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
+        const toNormArr = (val) => {
+          const arr = Array.isArray(val) ? val : (val ? [val] : []);
+          return Array.from(new Set(arr.map((s) => String(s || '').trim().toLowerCase()).filter(Boolean))).sort();
+        };
         let matchedCorrect = 0;
         const pairDetails = pairs.map((p, pIdx) => {
-          const studentVal =
+          const rawVal =
             matchingAns[p.id] ??
             matchingAns[String(p.id)] ??
             matchingAns[`idx_${pIdx}`] ??
@@ -1975,9 +1979,13 @@ export const elearningApi = {
             matchingAns[pIdx + 1] ??
             matchingAns[String(pIdx + 1)] ??
             '';
-          const matchOk = Boolean(studentVal && studentVal.trim().toLowerCase() === (p.right || '').trim().toLowerCase());
+          const studentArr = toNormArr(rawVal);
+          const expectedRaw = Array.isArray(p.rights) && p.rights.length > 0 ? p.rights : (p.right ? [p.right] : []);
+          const expectedArr = toNormArr(expectedRaw);
+          const matchOk = Boolean(studentArr.length > 0 && expectedArr.length > 0 && studentArr.join('||') === expectedArr.join('||'));
           if (matchOk) matchedCorrect++;
-          return `${p.left} ➔ ${studentVal || '(Kosong)'}${matchOk ? ' (✓)' : ' (✗)'}`;
+          const dispVal = Array.isArray(rawVal) ? rawVal.join(', ') : rawVal;
+          return `${p.left} ➔ ${dispVal || '(Kosong)'}${matchOk ? ' (✓)' : ' (✗)'}`;
         });
         const ratio = pairs.length > 0 ? matchedCorrect / pairs.length : 0;
         earnedAutoPoints += Math.round(ratio * qPoints);
@@ -1988,7 +1996,9 @@ export const elearningApi = {
           isCorrect = false;
         }
         studentAnswerDisplay = pairDetails.length > 0 ? pairDetails.join('\n') : 'Tidak dijawab';
-        correctAnswerDisplay = pairs.map((p) => `${p.left} ➔ ${p.right}`).join('\n');
+        correctAnswerDisplay = pairs
+          .map((p) => `${p.left} ➔ ${Array.isArray(p.rights) && p.rights.length > 0 ? p.rights.join(', ') : p.right}`)
+          .join('\n');
       } else if (q.type === 'ESSAY') {
         totalEssay += 1;
         studentAnswerDisplay = ans.essayAnswer || 'Tidak dijawab';

@@ -39,7 +39,7 @@ export default function AppLayoutWrapper({ children }) {
       : 'Pendidik';
 
     return (
-      <div className="min-h-screen bg-neutral-100 text-neutral-1000 font-sans flex flex-col">
+      <div className="app-print-shell min-h-screen bg-neutral-100 text-neutral-1000 font-sans flex flex-col print:block print:min-h-0 print:h-auto print:bg-white">
         {/* Header Bersih & Minimalis Khusus Civitas Sesuai Design System */}
         <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-neutral-300 px-4 sm:px-6 lg:px-8 py-3.5 shadow-2xs">
           <div className="w-full max-w-7xl mx-auto flex items-center justify-between">
@@ -117,16 +117,16 @@ export default function AppLayoutWrapper({ children }) {
 
   // Tampilan Super Admin tetap menggunakan Sidebar dan Navbar lengkap
   return (
-    <div className="min-h-screen flex bg-slate-50 text-slate-800 font-sans relative">
-      <Suspense fallback={<aside className="hidden md:block w-64 bg-white border-r border-slate-200 min-h-screen shrink-0" />}>
+    <div className="app-print-shell min-h-screen flex bg-slate-50 text-slate-800 font-sans relative print:block print:min-h-0 print:h-auto print:bg-white">
+      <Suspense fallback={<aside className="hidden md:block w-64 bg-white border-r border-slate-200 min-h-screen shrink-0 print:hidden" />}>
         <Sidebar
           mobileOpen={mobileSidebarOpen}
           onCloseMobile={() => setMobileSidebarOpen(false)}
         />
       </Suspense>
-      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+      <div className="app-print-col flex-1 flex flex-col min-w-0 min-h-screen print:block print:min-h-0 print:h-auto print:overflow-visible">
         <Navbar onToggleMobileSidebar={() => setMobileSidebarOpen((prev) => !prev)} />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto min-w-0">{children}</main>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto min-w-0 print:block print:p-0 print:m-0 print:overflow-visible">{children}</main>
       </div>
     </div>
   );

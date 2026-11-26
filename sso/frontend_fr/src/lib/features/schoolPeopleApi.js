@@ -32,4 +32,18 @@ export const schoolPeopleApi = {
     const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
     return `${base}/master/people/${personId}/barcode`;
   },
+  getExportBarcodesExcelUrl: ({
+    personType = '',
+    className = '',
+    search = '',
+    separateSheets = true,
+  } = {}) => {
+    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+    const params = new URLSearchParams();
+    if (personType && personType !== 'ALL') params.set('person_type', personType);
+    if (className && className !== 'ALL') params.set('class_name', className);
+    if (search && search.trim()) params.set('search', search.trim());
+    params.set('separate_sheets', separateSheets ? 'true' : 'false');
+    return `${base}/master/people/barcodes/export-excel?${params.toString()}`;
+  },
 };

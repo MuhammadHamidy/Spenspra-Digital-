@@ -399,9 +399,10 @@ func (r *repository) DeleteSession(ctx context.Context, sessionID string) error 
 }
 
 type repoMatchingPair struct {
-	ID    interface{} `json:"id"`
-	Left  string      `json:"left"`
-	Right string      `json:"right"`
+	ID     interface{} `json:"id"`
+	Left   string      `json:"left"`
+	Right  string      `json:"right"`
+	Rights []string    `json:"rights,omitempty"`
 }
 
 type repoQuestionMeta struct {
@@ -519,9 +520,36 @@ func (r *repository) calculateSessionScoreFromDB(ctx context.Context, sessionID 
 			if sel == "" || !strings.HasPrefix(sel, "{") || len(meta.MatchingPairs) == 0 {
 				continue
 			}
-			var mAns map[string]string
+			var mAns map[string]interface{}
 			if err := json.Unmarshal([]byte(sel), &mAns); err != nil {
 				continue
+			}
+			toNormSet := func(raw interface{}) []string {
+				seen := map[string]bool{}
+				var out []string
+				addVal := func(s string) {
+					t := strings.ToLower(strings.TrimSpace(s))
+					if t != "" && !seen[t] {
+						seen[t] = true
+						out = append(out, t)
+					}
+				}
+				switch v := raw.(type) {
+				case string:
+					addVal(v)
+				case []interface{}:
+					for _, item := range v {
+						if s, ok := item.(string); ok {
+							addVal(s)
+						}
+					}
+				case []string:
+					for _, s := range v {
+						addVal(s)
+					}
+				}
+				sort.Strings(out)
+				return out
 			}
 			matched := 0
 			for pIdx, pair := range meta.MatchingPairs {
@@ -534,19 +562,23 @@ func (r *repository) calculateSessionScoreFromDB(ctx context.Context, sessionID 
 				case string:
 					idKey = v
 				}
-				studentVal := mAns[idKey]
-				if studentVal == "" {
-					studentVal = mAns[strings.TrimSpace(pair.Left)]
+				var rawStudentVal interface{}
+				for _, k := range []string{idKey, strings.TrimSpace(pair.Left), "idx_" + string(rune('0'+pIdx)), string(rune('1' + pIdx))} {
+					if k != "" {
+						if val, ok := mAns[k]; ok && val != nil {
+							rawStudentVal = val
+							break
+						}
+					}
 				}
-				if studentVal == "" {
-					idxKey := "idx_" + string(rune('0'+pIdx))
-					studentVal = mAns[idxKey]
+				studentSet := toNormSet(rawStudentVal)
+				var expectedSet []string
+				if len(pair.Rights) > 0 {
+					expectedSet = toNormSet(pair.Rights)
+				} else {
+					expectedSet = toNormSet(pair.Right)
 				}
-				if studentVal == "" {
-					numKey := string(rune('1' + pIdx))
-					studentVal = mAns[numKey]
-				}
-				if strings.TrimSpace(studentVal) != "" && strings.EqualFold(strings.TrimSpace(studentVal), strings.TrimSpace(pair.Right)) {
+				if len(studentSet) > 0 && len(expectedSet) > 0 && strings.Join(studentSet, "||") == strings.Join(expectedSet, "||") {
 					matched++
 				}
 			}

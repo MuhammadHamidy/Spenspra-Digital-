@@ -824,47 +824,52 @@ type CBTQuestionOptionInput struct {
 }
 
 type CBTMatchingPairInput struct {
-	ID    interface{} `json:"id"`
-	Left  string      `json:"left"`
-	Right string      `json:"right"`
+	ID     interface{} `json:"id"`
+	Left   string      `json:"left"`
+	Right  string      `json:"right"`
+	Rights []string    `json:"rights,omitempty"`
 }
 
 type CBTQuestionInput struct {
-	ID                  string                   `json:"id"`
-	QuestionNumber      int                      `json:"questionNumber"`
-	QuestionNumberSnake int                      `json:"question_number"`
-	Type                string                   `json:"type"`
-	QuestionType        string                   `json:"question_type"`
-	QuestionText        string                   `json:"questionText"`
-	QuestionTextSnake   string                   `json:"question_text"`
-	StimulusText        string                   `json:"stimulusText"`
-	ImageURL            string                   `json:"imageUrl"`
-	ImageURLSnake       string                   `json:"image_url"`
-	Options             []CBTQuestionOptionInput `json:"options"`
-	OptionA             string                   `json:"option_a"`
-	OptionB             string                   `json:"option_b"`
-	OptionC             string                   `json:"option_c"`
-	OptionD             string                   `json:"option_d"`
-	OptionE             string                   `json:"option_e"`
-	CorrectOption       string                   `json:"correctOption"`
-	CorrectAnswer       string                   `json:"correct_answer"`
-	CorrectOptions      []string                 `json:"correctOptions"`
-	TrueFalseAnswer     *bool                    `json:"trueFalseAnswer"`
-	MatchingPairs       []CBTMatchingPairInput   `json:"matchingPairs"`
-	EssayRubric         string                   `json:"essayRubric"`
-	Points              float64                  `json:"points"`
-	ScoreWeight         float64                  `json:"score_weight"`
+	ID                   string                   `json:"id"`
+	QuestionNumber       int                      `json:"questionNumber"`
+	QuestionNumberSnake  int                      `json:"question_number"`
+	Type                 string                   `json:"type"`
+	QuestionType         string                   `json:"question_type"`
+	QuestionText         string                   `json:"questionText"`
+	QuestionTextSnake    string                   `json:"question_text"`
+	StimulusText         string                   `json:"stimulusText"`
+	ImageURL             string                   `json:"imageUrl"`
+	ImageURLSnake        string                   `json:"image_url"`
+	Options              []CBTQuestionOptionInput `json:"options"`
+	OptionA              string                   `json:"option_a"`
+	OptionB              string                   `json:"option_b"`
+	OptionC              string                   `json:"option_c"`
+	OptionD              string                   `json:"option_d"`
+	OptionE              string                   `json:"option_e"`
+	CorrectOption        string                   `json:"correctOption"`
+	CorrectAnswer        string                   `json:"correct_answer"`
+	CorrectOptions       []string                 `json:"correctOptions"`
+	TrueFalseAnswer      *bool                    `json:"trueFalseAnswer"`
+	MatchingPairs        []CBTMatchingPairInput   `json:"matchingPairs"`
+	MatchingRightOptions []string                 `json:"matchingRightOptions,omitempty"`
+	MatchingMultiSelect  bool                     `json:"matchingMultiSelect,omitempty"`
+	EssayRubric          string                   `json:"essayRubric"`
+	Points               float64                  `json:"points"`
+	ScoreWeight          float64                  `json:"score_weight"`
 }
 
 type CBTQuestionMeta struct {
-	Type            string                   `json:"type,omitempty"`
-	StimulusText    string                   `json:"stimulusText,omitempty"`
-	Options         []CBTQuestionOptionInput `json:"options,omitempty"`
-	CorrectOptions  []string                 `json:"correctOptions,omitempty"`
-	TrueFalseAnswer *bool                    `json:"trueFalseAnswer,omitempty"`
-	MatchingPairs   []CBTMatchingPairInput   `json:"matchingPairs,omitempty"`
-	EssayRubric     string                   `json:"essayRubric,omitempty"`
-	Points          float64                  `json:"points,omitempty"`
+	Type                 string                   `json:"type,omitempty"`
+	StimulusText         string                   `json:"stimulusText,omitempty"`
+	Options              []CBTQuestionOptionInput `json:"options,omitempty"`
+	CorrectOptions       []string                 `json:"correctOptions,omitempty"`
+	TrueFalseAnswer      *bool                    `json:"trueFalseAnswer,omitempty"`
+	MatchingPairs        []CBTMatchingPairInput   `json:"matchingPairs,omitempty"`
+	MatchingRightOptions []string                 `json:"matchingRightOptions,omitempty"`
+	MatchingMultiSelect  bool                     `json:"matchingMultiSelect,omitempty"`
+	EssayRubric          string                   `json:"essayRubric,omitempty"`
+	Points               float64                  `json:"points,omitempty"`
 }
 
 func (in *CBTQuestionInput) ToDomain(examID string, index int) domain.CBTQuestion {
@@ -994,14 +999,16 @@ func (in *CBTQuestionInput) ToDomain(examID string, index int) domain.CBTQuestio
 
 	// Persist rich metadata into question_text comment
 	meta := CBTQuestionMeta{
-		Type:            qType,
-		StimulusText:    strings.TrimSpace(in.StimulusText),
-		Options:         in.Options,
-		CorrectOptions:  in.CorrectOptions,
-		TrueFalseAnswer: in.TrueFalseAnswer,
-		MatchingPairs:   in.MatchingPairs,
-		EssayRubric:     strings.TrimSpace(in.EssayRubric),
-		Points:          pts,
+		Type:                 qType,
+		StimulusText:         strings.TrimSpace(in.StimulusText),
+		Options:              in.Options,
+		CorrectOptions:       in.CorrectOptions,
+		TrueFalseAnswer:      in.TrueFalseAnswer,
+		MatchingPairs:        in.MatchingPairs,
+		MatchingRightOptions: in.MatchingRightOptions,
+		MatchingMultiSelect:  in.MatchingMultiSelect,
+		EssayRubric:          strings.TrimSpace(in.EssayRubric),
+		Points:               pts,
 	}
 	metaBytes, err := json.Marshal(meta)
 	fullText := qText
@@ -1136,9 +1143,11 @@ func formatQuestionForFrontend(q domain.CBTQuestion) fiber.Map {
 		"correctOption":   q.CorrectAnswer,
 		"correct_answer":  q.CorrectAnswer,
 		"correctOptions":  correctOptions,
-		"trueFalseAnswer": tfAns,
-		"matchingPairs":   matchingPairs,
-		"essayRubric":     meta.EssayRubric,
+		"trueFalseAnswer":      tfAns,
+		"matchingPairs":        matchingPairs,
+		"matchingRightOptions": meta.MatchingRightOptions,
+		"matchingMultiSelect":  meta.MatchingMultiSelect,
+		"essayRubric":          meta.EssayRubric,
 		"points":          pts,
 		"score_weight":    pts,
 		"created_at":      q.CreatedAt,

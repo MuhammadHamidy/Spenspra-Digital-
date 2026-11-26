@@ -815,14 +815,17 @@ export default function CBTExamRunnerPage({ params }) {
       }
       mAns = mAns || {};
       const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs : [];
-      return pairs.length > 0 && pairs.some((p, pIdx) => Boolean(
-        mAns[p.id] ||
-        mAns[String(p.id)] ||
-        mAns[`idx_${pIdx}`] ||
-        mAns[(p.left || '').trim()] ||
-        mAns[pIdx + 1] ||
-        mAns[String(pIdx + 1)]
-      ));
+      return pairs.length > 0 && pairs.some((p, pIdx) => {
+        const val =
+          mAns[p.id] ??
+          mAns[String(p.id)] ??
+          mAns[`idx_${pIdx}`] ??
+          mAns[(p.left || '').trim()] ??
+          mAns[pIdx + 1] ??
+          mAns[String(pIdx + 1)];
+        if (Array.isArray(val)) return val.filter((v) => String(v || '').trim() !== '').length > 0;
+        return Boolean(val && String(val).trim() !== '');
+      });
     }
     if (q.type === 'ESSAY') {
       return Boolean(ans.essayAnswer && String(ans.essayAnswer).trim() !== '');
@@ -1345,12 +1348,20 @@ export default function CBTExamRunnerPage({ params }) {
                 </div>
               )}
 
-              {/* 4D. Menjodohkan / Pencocokan (Matching Pairs) */}
+              {/* 4D. Menjodohkan / Pencocokan (1-ke-1 maupun Multi-Pilih + Pengecoh Kolom B) */}
               {currentQ?.type === 'MATCHING' && (
                 <div className="space-y-3 pt-2">
                   {(() => {
                     const pairs = Array.isArray(currentQ?.matchingPairs) ? currentQ.matchingPairs : [];
-                    const allRightOptions = Array.from(new Set(pairs.map((p) => p.right))).filter(Boolean);
+                    const allRightOptions = Array.from(
+                      new Set([
+                        ...(Array.isArray(currentQ?.matchingRightOptions) ? currentQ.matchingRightOptions : []),
+                        ...pairs.flatMap((p) => (Array.isArray(p.rights) && p.rights.length > 0 ? p.rights : [p.right])),
+                      ].map((s) => String(s || '').trim()).filter(Boolean))
+                    );
+                    const isMultiMatching =
+                      Boolean(currentQ?.matchingMultiSelect) ||
+                      pairs.some((p) => Array.isArray(p.rights) && p.rights.length > 1);
 
                     if (pairs.length === 0) {
                       return (
@@ -1370,14 +1381,81 @@ export default function CBTExamRunnerPage({ params }) {
                       }
                       mMap = mMap || {};
                       const pairKey = pair.id !== undefined && pair.id !== null && pair.id !== '' ? pair.id : pIdx + 1;
-                      const selectedRight =
+                      const rawSelected =
                         mMap[pairKey] ??
                         mMap[String(pairKey)] ??
                         mMap[`idx_${pIdx}`] ??
                         mMap[(pair.left || '').trim()] ??
                         mMap[pIdx + 1] ??
                         mMap[String(pIdx + 1)] ??
-                        '';
+                        (isMultiMatching ? [] : '');
+
+                      if (isMultiMatching) {
+                        const selectedList = Array.isArray(rawSelected)
+                          ? rawSelected
+                          : (rawSelected ? [rawSelected] : []);
+
+                        return (
+                          <div
+                            key={pair.id || pIdx}
+                            className="p-3.5 sm:p-4 rounded-xl border border-neutral-200 bg-neutral-50/70 space-y-3 shadow-2xs"
+                          >
+                            <div className="flex items-start gap-2.5">
+                              <span className="w-7 h-7 rounded-lg bg-neutral-800 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                                {pIdx + 1}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <p className={`${fontClasses.option} font-semibold text-neutral-900 leading-snug`}>
+                                  <MathText text={pair.left} />
+                                </p>
+                                <p className="text-[11px] text-violet-700 font-medium mt-0.5">
+                                  Pilih 1 atau lebih jawaban yang cocok ({selectedList.length} dipilih):
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-0 sm:pl-9">
+                              {allRightOptions.map((optText, oIdx) => {
+                                const letter = String.fromCharCode(65 + oIdx);
+                                const isChecked = selectedList.includes(optText);
+                                return (
+                                  <button
+                                    key={oIdx}
+                                    type="button"
+                                    onClick={() => {
+                                      const nextList = isChecked
+                                        ? selectedList.filter((item) => item !== optText)
+                                        : [...selectedList, optText];
+                                      handleSelectMatchingPair(pairKey, nextList, pair.left, pIdx);
+                                    }}
+                                    className={`p-2.5 rounded-xl border-2 text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                                      isChecked
+                                        ? 'bg-violet-50 border-violet-500 text-violet-950 shadow-2xs'
+                                        : 'bg-white border-neutral-200 hover:border-violet-300 text-neutral-800'
+                                    }`}
+                                  >
+                                    <span
+                                      className={`w-5 h-5 rounded-md flex items-center justify-center text-[11px] font-black shrink-0 mt-0.5 border ${
+                                        isChecked
+                                          ? 'bg-violet-600 border-violet-600 text-white'
+                                          : 'bg-white border-neutral-300 text-transparent'
+                                      }`}
+                                    >
+                                      ✓
+                                    </span>
+                                    <span className="text-xs font-bold text-violet-700 shrink-0 mt-0.5">{letter}.</span>
+                                    <span className={`${fontClasses.option} flex-1 leading-snug`}>
+                                      <MathText text={optText} />
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const selectedRight = Array.isArray(rawSelected) ? (rawSelected[0] || '') : rawSelected;
 
                       return (
                         <div
@@ -1389,7 +1467,7 @@ export default function CBTExamRunnerPage({ params }) {
                               {pIdx + 1}
                             </span>
                             <p className="text-xs sm:text-sm font-semibold text-neutral-900 leading-snug">
-                              {pair.left}
+                              <MathText text={pair.left} />
                             </p>
                           </div>
 
