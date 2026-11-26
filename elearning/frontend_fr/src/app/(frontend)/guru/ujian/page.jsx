@@ -352,8 +352,39 @@ async function extractDocxStructure(arrayBuffer) {
   // Hapus <mc:Fallback> agar isi TextBox Word tidak terduplikasi dua kali (DrawingML + VML)
   const cleanedDocXml = docXml.replace(/<mc:Fallback\b[\s\S]*?<\/mc:Fallback>/g, '');
 
-  // Ekstraktor paragraf <w:p> yang mendukung TextBox (<w:txbxContent>) bersarang
-  // sehingga teks soal maupun opsi di dalam TextBox tetap terbaca utuh sesuai urutan dokumen.
+  // Ekstraktor paragraf <w:p> yang mendukung TextBox (<w:txbxContent>) bersarang,
+  // tabel kotak 1 kolom (<w:tbl> 1 sel/baris), dan paragraf berbingkai (<w:pBdr>)
+  // agar kotak wacana/bacaan otomatis dikenali sebagai STIMULUS soal.
+  const extractPlainTextQuick = (xmlFragment) =>
+    decodeXmlEntities(
+      (xmlFragment.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [])
+        .map((x) => x.replace(/<[^>]+>/g, ''))
+        .join(' ')
+    ).replace(/\s+/g, ' ').trim();
+
+  const looksLikeQuestionOrOptionsBox = (xmlFragment) => {
+    const innerPs = xmlFragment.match(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g) || [];
+    let optLines = 0;
+    for (const ip of innerPs) {
+      const txt = extractPlainTextQuick(ip);
+      if (/^[A-E]\s*[.)\]:\-]\s+/i.test(txt)) optLines += 1;
+    }
+    return optLines >= 2;
+  };
+
+  // Tandai tabel 1-kolom (sering dipakai guru sebagai kotak teks wacana di Word)
+  const markedDocXml = cleanedDocXml.replace(/<w:tbl\b[\s\S]*?<\/w:tbl>/g, (tblXml) => {
+    const rows = tblXml.match(/<w:tr\b[\s\S]*?<\/w:tr>/g) || [];
+    if (rows.length === 0) return tblXml;
+    const isSingleColumnTable = rows.every((row) => (row.match(/<w:tc\b/g) || []).length === 1);
+    if (!isSingleColumnTable) return tblXml;
+    if (looksLikeQuestionOrOptionsBox(tblXml)) return tblXml;
+    const plain = extractPlainTextQuick(tblXml);
+    // Hanya anggap kotak stimulus jika berisi teks bacaan yang cukup bermakna (>= 25 karakter)
+    if (plain.length < 25) return tblXml;
+    return tblXml.replace(/<w:p(\s[^>]*)?>/g, '<w:p data-spenspra-box="1"$1>');
+  });
+
   const extractWordParagraphs = (xml) => {
     const result = [];
     const tagRegex = /<w:p(?:\s[^>]*)?>|<\/w:p>/g;
@@ -374,15 +405,23 @@ async function extractDocxStructure(arrayBuffer) {
             // 1. Ambil bagian luar paragraf (tanpa isi textbox agar tidak dobel)
             const outerOnly = outerP.replace(/<w:txbxContent\b[\s\S]*?<\/w:txbxContent>/g, '');
             if (/<w:t\b|<m:oMath\b|<a:blip\b|<v:imagedata\b/.test(outerOnly)) {
-              result.push(outerOnly);
+              result.push({ xml: outerOnly, isFromBox: false });
             }
             // 2. Ekstrak seluruh paragraf di dalam setiap TextBox
             txbxMatches.forEach((box) => {
+              const isStimulusBox = !looksLikeQuestionOrOptionsBox(box);
               const innerPs = box.match(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g) || [];
-              innerPs.forEach((ip) => result.push(ip));
+              innerPs.forEach((ip) => result.push({ xml: ip, isFromBox: isStimulusBox }));
             });
           } else {
-            result.push(outerP);
+            const fromTableBox = outerP.startsWith('<w:p data-spenspra-box="1"');
+            const hasFullBorder =
+              /<w:pBdr\b[\s\S]*?<\/w:pBdr>/.test(outerP) &&
+              /<w:top\b/.test(outerP) &&
+              /<w:bottom\b/.test(outerP) &&
+              /<w:left\b/.test(outerP) &&
+              /<w:right\b/.test(outerP);
+            result.push({ xml: outerP, isFromBox: fromTableBox || hasFullBorder });
           }
           startIdx = -1;
         }
@@ -391,7 +430,7 @@ async function extractDocxStructure(arrayBuffer) {
     return result;
   };
 
-  const paragraphs = extractWordParagraphs(cleanedDocXml);
+  const paragraphs = extractWordParagraphs(markedDocXml);
   const lines = [];
   const coloredKeysByNumber = {};
   const coloredKeysInOrder = [];
@@ -399,7 +438,9 @@ async function extractDocxStructure(arrayBuffer) {
   const optionCountByNumber = {};
 
   for (let i = 0; i < paragraphs.length; i++) {
-    const p = paragraphs[i];
+    const pObj = paragraphs[i];
+    const p = pObj.xml;
+    const isFromBox = Boolean(pObj.isFromBox);
 
     // Penomoran otomatis Word
     const numPr = p.match(/<w:numPr>.*?<\/w:numPr>/s);
@@ -538,11 +579,11 @@ async function extractDocxStructure(arrayBuffer) {
         lines.push(`${optLetter}. ${remText ? remText + ' ' : ''}GAMBAR: ${imgUri}`);
       } else {
         lines.push(`GAMBAR: ${imgUri}`);
-        if (full) lines.push(full);
+        if (full) lines.push(isFromBox && !optKey ? `STIMULUS_BOX: ${full}` : full);
       }
     } else {
       if (full) {
-        lines.push(full);
+        lines.push(isFromBox && !optKey ? `STIMULUS_BOX: ${full}` : full);
       }
     }
   }
@@ -837,6 +878,23 @@ function parseQuestionImport(text, options = {}) {
   };
 
   function parseLine(line) {
+    // Baris yang diekstrak dari TextBox / Kotak Teks Word -> otomatis menjadi Wacana / Stimulus
+    const stimulusBoxMatch = line.match(/^STIMULUS_BOX:\s*(.+)$/);
+    if (stimulusBoxMatch) {
+      const boxText = stimulusBoxMatch[1].trim();
+      if (!boxText) return;
+      if (!current) {
+        pendingStimulus.push(boxText);
+      } else {
+        current.stimulusText = current.stimulusText
+          ? `${current.stimulusText}\n${boxText}`
+          : boxText;
+        current.inRubric = false;
+        currentOption = null;
+      }
+      return;
+    }
+
     // Header blok seperti "Soal 6" / "Soal Nomor 6" tanpa teks pertanyaan
     if (/^(?:soal|nomor|no\.?)\s*(?:nomor\s*)?\d+\s*$/i.test(line)) {
       pushCurrent();
@@ -872,6 +930,9 @@ function parseQuestionImport(text, options = {}) {
         const img = line.match(/^(?:gambar|image)\s*[:=]\s*(.+)$/i);
         if (img) pendingImage = img[1].trim();
         else pendingStimulus.push(line.replace(/^(?:stimulus|wacana|teks\s*kasus)\s*[:\-]\s*/i, ''));
+      } else if (/^(?:bacalah|perhatikan|simaklah|cermati)\b.*(?:teks|kutipan|wacana|dialog|puisi|cerita|paragraf|artikel|soal\s+nomor)/i.test(line)) {
+        collectingStimulus = true;
+        pendingStimulus.push(line);
       }
       return;
     }
@@ -1058,6 +1119,41 @@ function parseQuestionImport(text, options = {}) {
   });
 
   pushCurrent();
+
+  // Propagasi stimulus bersama untuk instruksi seperti "untuk menjawab soal nomor 3 dan 4" / "nomor 3 - 5" / "nomor 3 s.d. 5"
+  rawQuestions.forEach((srcQ) => {
+    if (!srcQ.stimulusText || !srcQ.stimulusText.trim()) return;
+    const combinedPrompt = `${srcQ.questionText || ''}\n${srcQ.stimulusText || ''}`;
+    const targetNums = new Set();
+
+    // Pola rentang: "nomor 3 - 5", "nomor 3 s.d. 5", "no. 3 sampai 5"
+    const rangeRegex = /(?:soal\s*)?(?:nomor|no\.?)\s*(\d+)\s*(?:-|–|—|s\.?d\.?|sampai(?:\s+dengan)?|hingga)\s*(\d+)/gi;
+    let rm;
+    while ((rm = rangeRegex.exec(combinedPrompt)) !== null) {
+      const startN = Number(rm[1]);
+      const endN = Number(rm[2]);
+      if (startN > 0 && endN >= startN && endN - startN <= 20) {
+        for (let n = startN; n <= endN; n++) targetNums.add(n);
+      }
+    }
+
+    // Pola daftar: "nomor 3 dan 4", "soal nomor 3, 4, dan 5"
+    const listRegex = /(?:soal\s*)?(?:nomor|no\.?)\s*(\d+(?:\s*,\s*\d+)*(?:\s*(?:dan|&)\s*\d+)+)/gi;
+    let lm;
+    while ((lm = listRegex.exec(combinedPrompt)) !== null) {
+      const nums = lm[1].match(/\d+/g) || [];
+      nums.forEach((nStr) => targetNums.add(Number(nStr)));
+    }
+
+    if (targetNums.size > 0) {
+      rawQuestions.forEach((dstQ) => {
+        if (dstQ === srcQ) return;
+        if (targetNums.has(Number(dstQ.questionNumber)) && !(dstQ.stimulusText && dstQ.stimulusText.trim())) {
+          dstQ.stimulusText = srcQ.stimulusText;
+        }
+      });
+    }
+  });
 
   const resolvedQuestions = [];
 
