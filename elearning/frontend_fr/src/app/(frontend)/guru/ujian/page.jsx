@@ -451,10 +451,19 @@ async function extractDocxStructure(arrayBuffer) {
     return reds;
   };
 
-  // Tandai tabel 1-kolom (kotak wacana) DAN ubah tabel Menjodohkan multi-kolom menjadi paragraf [JODOH]
+  // Tandai tabel 1-kolom (kotak wacana), abaikan tabel kop surat, DAN ubah tabel Menjodohkan multi-kolom menjadi paragraf [JODOH]
   const markedDocXml = cleanedDocXml.replace(/<w:tbl\b[\s\S]*?<\/w:tbl>/g, (tblXml) => {
     const rows = tblXml.match(/<w:tr\b[\s\S]*?<\/w:tr>/g) || [];
     if (rows.length === 0) return tblXml;
+
+    // 0. Abaikan tabel Kop Surat / Identitas Naskah Ujian agar logo & header sekolah tidak pernah terbaca jadi soal
+    const tblPlain = extractPlainTextQuick(tblXml);
+    const isKopSuratTable =
+      /(?:PEMERINTAH\s+KABUPATEN|PEMERINTAH\s+KOTA|DINAS\s+PENDIDIKAN|SMP\s+NEGERI\s+\d+|SOAL\s+ASESMEN\s+SUMATIF|PENILAIAN\s+AKHIR\s+SEMESTER|PENILAIAN\s+TENGAH\s+SEMESTER)/i.test(tblPlain) ||
+      (/(?:MATA\s+PELAJARAN|ALOKASI\s+WAKTU)/i.test(tblPlain) && /(?:GURU\s+PENG|TAHUN\s+AJARAN|SEMESTER)/i.test(tblPlain));
+    if (isKopSuratTable && !looksLikeQuestionOrOptionsBox(tblXml)) {
+      return '';
+    }
 
     // 1. Cek apakah ini Tabel Menjodohkan (header mengandung Kolom A & Kolom B / Premis & Jawaban)
     if (rows.length >= 3) {
@@ -1097,7 +1106,18 @@ function parseQuestionImport(text, options = {}) {
     return true;
   };
 
+  const isExamHeaderLine = (text) => {
+    const t = String(text || '').replace(/^STIMULUS_BOX:\s*/i, '').trim();
+    if (!t) return true;
+    return /^(?:PEMERINTAH\s+(?:KABUPATEN|KOTA)|DINAS\s+PENDIDIKAN|SMP\s+NEGERI|SMA\s+NEGERI|SD\s+NEGERI|YAYASAN|DS\.\s+\w+|JL\.\s+\w+|TELP\.|WEBSITE|POS-EL|EMAIL|KODE\s+POS|NILAI\b|SOAL\s+(?:ASESMEN|ULANGAN|UJIAN|PENILAIAN)|PENILAIAN\s+(?:HARIAN|TENGAH|AKHIR)|UJIAN\s+(?:SEKOLAH|SEMESTER|AKHIR)|TAHUN\s+(?:AJARAN|PELAJARAN)|MATA\s+PELAJARAN|ALOKASI\s+WAKTU|GURU\s+(?:PENGAJAR|PENGAMPU|MAPEL)|SEMESTER\s*[:\-]|KELAS\s*[:\-]|HARI\s*\/?\s*TANGGAL|WAKTU\s*[:\-]|PETUNJUK\s+UMUM|PILIHAN\s+GANDA\s*$|A\.\s*PILIHAN\s+GANDA|JAWABLAH\s+PERTANYAAN)/i.test(t);
+  };
+
   function parseLine(line) {
+    // Abaikan baris kop surat / identitas ujian sebelum soal pertama dimulai
+    if (!current && rawQuestions.length === 0 && isExamHeaderLine(line)) {
+      return;
+    }
+
     // Baris yang diekstrak dari TextBox / Kotak Teks Word -> otomatis menjadi Wacana / Stimulus
     const stimulusBoxMatch = line.match(/^STIMULUS_BOX:\s*(.+)$/);
     if (stimulusBoxMatch) {
@@ -2488,6 +2508,28 @@ export default function TeacherExamsManagementPage() {
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
       },
     });
+  };
+
+  const handleMoveQuestion = async (fromIndex, direction) => {
+    const toIndex = fromIndex + direction;
+    if (toIndex < 0 || toIndex >= examQuestions.length) return;
+    const reordered = [...examQuestions];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+    const normalized = reordered.map((q, idx) => ({ ...q, questionNumber: idx + 1 }));
+    setExamQuestions(normalized);
+    if (activeQuestionEditorExam?.id) {
+      setIsSavingQuestion(true);
+      try {
+        await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, normalized);
+        setSaveSuccessMsg(`Urutan soal berhasil dipindahkan ke nomor ${toIndex + 1}.`);
+        setTimeout(() => setSaveSuccessMsg(''), 2500);
+      } catch (err) {
+        alert('Gagal menyimpan perubahan urutan soal: ' + err.message);
+      } finally {
+        setIsSavingQuestion(false);
+      }
+    }
   };
 
   const handleApplyPointsToAll = async () => {
@@ -4103,8 +4145,28 @@ export default function TeacherExamsManagementPage() {
                               </span>
                             </div>
 
-                            {/* Action Buttons: Preview Siswa, Edit, Delete */}
+                            {/* Action Buttons: Urutan Naik/Turun, Preview Siswa, Edit, Delete */}
                             <div className="flex items-center gap-1.5 shrink-0">
+                              <div className="inline-flex items-center rounded-lg border border-neutral-200 bg-neutral-50 overflow-hidden">
+                                <button
+                                  type="button"
+                                  disabled={q.originalIndex === 0 || isSavingQuestion}
+                                  onClick={() => handleMoveQuestion(q.originalIndex, -1)}
+                                  className="px-1.5 py-1 text-[11px] font-bold text-neutral-600 hover:bg-neutral-200 hover:text-neutral-900 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+                                  title="Pindahkan soal ke atas (nomor sebelumnya)"
+                                >
+                                  ↑
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={q.originalIndex >= examQuestions.length - 1 || isSavingQuestion}
+                                  onClick={() => handleMoveQuestion(q.originalIndex, 1)}
+                                  className="px-1.5 py-1 text-[11px] font-bold text-neutral-600 hover:bg-neutral-200 hover:text-neutral-900 border-l border-neutral-200 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+                                  title="Pindahkan soal ke bawah (nomor berikutnya)"
+                                >
+                                  ↓
+                                </button>
+                              </div>
                               <button
                                 type="button"
                                 onClick={() =>
