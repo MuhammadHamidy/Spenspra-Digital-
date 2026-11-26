@@ -64,17 +64,17 @@ function MathSymbolToolbar({ onInsert, label = 'Simbol matematika', compact = fa
 // Memeriksa apakah kode warna heksadesimal atau nama warna tergolong merah atau hijau (tanda kunci jawaban)
 function isAnswerColor(hexOrName) {
   if (!hexOrName) return false;
-  const s = String(hexOrName).trim().toLowerCase();
-  if (['red', 'darkred', 'crimson', 'firebrick', 'green', 'darkgreen', 'ee0000', 'ff0000', 'ed1c24', 'c00000'].includes(s)) return true;
+  const s = String(hexOrName).trim().toLowerCase().replace(/^#/, '');
+  if (['red', 'darkred', 'crimson', 'firebrick', 'maroon', 'green', 'darkgreen', 'ee0000', 'ff0000', 'ed1c24', 'c00000', '800000', '990000', 'accent2'].includes(s)) return true;
   if (/^[0-9a-f]{6}$/.test(s)) {
     const r = parseInt(s.slice(0, 2), 16);
     const g = parseInt(s.slice(2, 4), 16);
     const b = parseInt(s.slice(4, 6), 16);
-    // Warna merah dominan (misal #EE0000, #FF0000, #C00000, #ED1C24)
-    if (r > 150 && g < 115 && b < 115) return true;
-    if (r > 130 && r > g * 1.6 && r > b * 1.6) return true;
+    // Warna merah dominan (termasuk merah tua/maroon #800000, #990000, #C00000, #EE0000, #FF0000, #ED1C24)
+    if (r >= 140 && g < 120 && b < 120) return true;
+    if (r >= 100 && r > g * 1.45 && r > b * 1.45) return true;
     // Warna hijau dominan
-    if (g > 130 && g > r * 1.5 && g > b * 1.5) return true;
+    if (g >= 115 && g > r * 1.45 && g > b * 1.45) return true;
   }
   return false;
 }
@@ -498,7 +498,8 @@ async function extractDocxStructure(arrayBuffer) {
     // agar opsi A/B/C/D yang dipisah Shift+Enter tidak menempel dan warna merahnya akurat per opsi!
     const pPrMatch = p.match(/<w:pPr\b[\s\S]*?<\/w:pPr>/);
     const pPrColor = pPrMatch ? (pPrMatch[0].match(/<w:color\s+[^>]*w:val="([^"]+)"/i) || [])[1] : null;
-    const pPrIsRed = isAnswerColor(pPrColor);
+    const pPrThemeColor = pPrMatch ? (pPrMatch[0].match(/<w:color\s+[^>]*w:themeColor="([^"]+)"/i) || [])[1] : null;
+    const pPrIsRed = isAnswerColor(pPrColor) || isAnswerColor(pPrThemeColor);
 
     const tokens = p.match(/<m:oMath\b[\s\S]*?<\/m:oMath>|<w:r\b[\s\S]*?<\/w:r>/g) || [];
     const subLines = [{ text: '', isRed: false, redChunks: [], boldChars: 0, totalChars: 0 }];
@@ -514,15 +515,21 @@ async function extractDocxStructure(arrayBuffer) {
         return;
       }
       const c = tok.match(/<w:color\s+[^>]*w:val="([^"]+)"/i);
+      const tc = tok.match(/<w:color\s+[^>]*w:themeColor="([^"]+)"/i);
+      const shd = tok.match(/<w:shd\s+[^>]*w:fill="([^"]+)"/i);
       const h = tok.match(/<w:highlight\s+[^>]*w:val="([^"]+)"/i);
       const va = tok.match(/<w:vertAlign\s+[^>]*w:val="([^"]+)"/i);
       const hasBoldTag = /<w:b(?:\s+w:val="(?:1|true|on)")?\s*\/?>/i.test(tok) && !/<w:b\s+w:val="(?:0|false|off)"/i.test(tok);
       const colorVal = c ? c[1] : null;
+      const themeColorVal = tc ? tc[1] : null;
+      const shdVal = shd ? shd[1] : null;
       const highlightVal = h ? h[1] : null;
       const runIsRed =
         isAnswerColor(colorVal) ||
-        ['red', 'magenta'].includes(String(highlightVal).toLowerCase()) ||
-        (!colorVal && pPrIsRed);
+        isAnswerColor(themeColorVal) ||
+        isAnswerColor(shdVal) ||
+        ['red', 'magenta', 'yellow', 'green', 'cyan'].includes(String(highlightVal).toLowerCase()) ||
+        (!colorVal && !themeColorVal && pPrIsRed);
       const vertAlign = va ? va[1].toLowerCase() : '';
 
       const parts = tok.match(/<w:t[^>]*>[\s\S]*?<\/w:t>|<w:br\b[^>]*\/?>|<w:cr\b[^>]*\/?>|<w:tab\b[^>]*\/?>/g) || [];
