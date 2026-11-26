@@ -309,44 +309,61 @@ async function extractDocxStructure(arrayBuffer) {
       const ilvl = (lm.match(/w:ilvl="(\d+)"/) || [])[1] || '0';
       const numFmt = (lm.match(/<w:numFmt\s+w:val="([^"]+)"/) || [])[1] || 'decimal';
       const lvlText = (lm.match(/<w:lvlText\s+w:val="([^"]+)"/) || [])[1] || '%1.';
-      absFormats[absId][ilvl] = { numFmt, lvlText };
+      const startVal = Number((lm.match(/<w:start\s+w:val="(\d+)"/) || [])[1] || 1);
+      absFormats[absId][ilvl] = { numFmt, lvlText, startVal };
     }
   }
 
+  // Kunci counter per `${numId}:${ilvl}` agar multi-level list Word (lvl 0 = 1.2.3, lvl 1 = a.b.c.d)
+  // tidak saling menimpa dan opsi A-D selalu mulai ulang dari A pada setiap soal baru!
   const numCounters = {};
   let currentQuestionNum = null;
 
   function resetOptionCounters() {
-    Object.keys(numCounters).forEach((k) => {
-      const absId = numToAbs[k];
-      const fmtInfo = (absFormats[absId] && absFormats[absId]['0']) || {};
+    Object.keys(numCounters).forEach((counterKey) => {
+      const [kNumId, kIlvl = '0'] = counterKey.split(':');
+      const absId = numToAbs[kNumId];
+      const fmtInfo = (absFormats[absId] && absFormats[absId][kIlvl]) || {};
       if (fmtInfo.numFmt === 'upperLetter' || fmtInfo.numFmt === 'lowerLetter') {
-        delete numCounters[k];
+        delete numCounters[counterKey];
       }
     });
   }
 
   function getListPrefix(numId, ilvl = '0') {
-    if (!numId) return null;
+    if (!numId || numId === '0') return null;
     const absId = numToAbs[numId];
-    const fmtInfo = (absFormats[absId] && absFormats[absId][ilvl]) || { numFmt: 'decimal', lvlText: '%1.' };
+    const fmtInfo = (absFormats[absId] && absFormats[absId][ilvl]) || { numFmt: 'decimal', lvlText: '%1.', startVal: 1 };
+    if (fmtInfo.numFmt === 'none') return null;
 
-    if (!numCounters[numId]) numCounters[numId] = 0;
-    numCounters[numId]++;
-    const count = numCounters[numId];
+    const counterKey = `${numId}:${ilvl}`;
+    if (numCounters[counterKey] === undefined) {
+      numCounters[counterKey] = (fmtInfo.startVal || 1) - 1;
+    }
+    numCounters[counterKey]++;
+    const count = numCounters[counterKey];
+
+    // Saat level induk (ilvl 0) maju ke nomor berikutnya, reset semua sub-level (ilvl > 0) pada numId yang sama
+    if (ilvl === '0') {
+      Object.keys(numCounters).forEach((ck) => {
+        if (ck.startsWith(`${numId}:`) && ck !== counterKey) {
+          delete numCounters[ck];
+        }
+      });
+    }
 
     if (fmtInfo.numFmt === 'upperLetter') {
-      const letter = String.fromCharCode(64 + Math.min(count, 26));
+      const letter = String.fromCharCode(64 + Math.min(Math.max(count, 1), 26));
       return { prefix: `${letter}. `, isQuestion: false, isOption: true, letter, count };
     } else if (fmtInfo.numFmt === 'lowerLetter') {
-      const letter = String.fromCharCode(96 + Math.min(count, 26));
+      const letter = String.fromCharCode(96 + Math.min(Math.max(count, 1), 26));
       return { prefix: `${letter}. `, isQuestion: false, isOption: true, letter: letter.toUpperCase(), count };
     } else if (fmtInfo.numFmt === 'decimal') {
-      return { prefix: `${count}. `, isQuestion: true, isOption: false, count };
+      return { prefix: `${count}. `, isQuestion: ilvl === '0', isOption: false, count };
     } else if (fmtInfo.numFmt === 'bullet') {
       return { prefix: `- `, isQuestion: false, isOption: false, count };
     }
-    return { prefix: `${count}. `, isQuestion: true, isOption: false, count };
+    return { prefix: `${count}. `, isQuestion: ilvl === '0', isOption: false, count };
   }
 
   // Hapus <mc:Fallback> agar isi TextBox Word tidak terduplikasi dua kali (DrawingML + VML)
@@ -448,7 +465,7 @@ async function extractDocxStructure(arrayBuffer) {
     const ilvl = numPr ? (numPr[0].match(/<w:ilvl\s+w:val="(\d+)"/) || [])[1] : '0';
 
     let listInfo = null;
-    if (numId) {
+    if (numId && numId !== '0') {
       listInfo = getListPrefix(numId, ilvl);
       if (listInfo?.isQuestion) {
         currentQuestionNum = listInfo.count;
@@ -1156,6 +1173,9 @@ function parseQuestionImport(text, options = {}) {
   });
 
   const resolvedQuestions = [];
+  const diagnostics = Array.isArray(options?.diagnostics) ? options.diagnostics : [];
+  const acceptedSourceNumbers = new Set();
+  let missingKeyCount = 0;
 
   rawQuestions.forEach((question, index) => {
     // 1. Cek kunci inline di akhir teks soal, misal "(jawaban A, C)", "(kunci: B)", "(jawaban Benar)"
@@ -1239,7 +1259,15 @@ function parseQuestionImport(text, options = {}) {
 
     let finalType = null;
     if (question.explicitType === 'MATCHING' || question.matchingPairs.length >= 2) {
-      if (question.matchingPairs.length < 2) return; // Abaikan jika pasangan kurang dari 2
+      if (question.matchingPairs.length < 2) {
+        diagnostics.push({
+          level: 'error',
+          questionNumber: question.questionNumber,
+          reason: `Tipe Menjodohkan hanya memiliki ${question.matchingPairs.length} pasangan (minimal 2 pasangan).`,
+          snippet: (question.questionText || '').slice(0, 90),
+        });
+        return; // Abaikan jika pasangan kurang dari 2
+      }
       finalType = 'MATCHING';
     } else if (question.explicitType === 'TRUE_FALSE' || question.trueFalseAnswer !== null || isTwoOptionTrueFalse) {
       finalType = 'TRUE_FALSE';
@@ -1261,6 +1289,17 @@ function parseQuestionImport(text, options = {}) {
         finalType = 'MCQ';
         question.correctOption = multiKeys[0] || 'A';
       }
+      if (question.options.length < 4) {
+        diagnostics.push({
+          level: 'warning',
+          questionNumber: question.questionNumber,
+          reason: `Hanya terbaca ${question.options.length} opsi (${question.options.map((o) => o.key).join(', ')}). Periksa format penulisan opsi lainnya.`,
+          snippet: (question.questionText || '').slice(0, 90),
+        });
+      }
+      if (!question.keyDetected) {
+        missingKeyCount += 1;
+      }
     } else if (
       question.explicitType === 'ESSAY' ||
       question.hasEssayHint ||
@@ -1270,10 +1309,20 @@ function parseQuestionImport(text, options = {}) {
     ) {
       finalType = 'ESSAY';
     } else {
-      // Bukan soal valid (mis. baris petunjuk bernomor di awal dokumen)
+      // Catat penyebab kenapa blok bernomor ini dilewati oleh parser
+      const optCount = question.options.length;
+      diagnostics.push({
+        level: 'error',
+        questionNumber: question.questionNumber,
+        reason: optCount === 0
+          ? 'Opsi jawaban A–D tidak terdeteksi (pastikan opsi diawali A., B., C., D. atau gunakan numbering Word yang rapi) dan tidak bertanda [ESAI].'
+          : `Hanya terbaca 1 opsi (${question.options[0]?.key || '?'}) — Pilihan Ganda membutuhkan minimal 2 opsi A–E.`,
+        snippet: (question.questionText || '').slice(0, 100),
+      });
       return;
     }
 
+    acceptedSourceNumbers.add(Number(question.questionNumber));
     const qNum = resolvedQuestions.length + 1;
     resolvedQuestions.push({
       id: `q-import-${Date.now()}-${qNum}`,
@@ -1295,18 +1344,47 @@ function parseQuestionImport(text, options = {}) {
       essayRubric: finalType === 'ESSAY' ? (question.essayRubric.trim() || undefined) : undefined,
       keyDetected: question.keyDetected,
       keySource: question.keySource || undefined,
+      sourceQuestionNumber: Number(question.questionNumber),
       points: question.points || 10,
       stimulusText: question.stimulusText || undefined,
       imageUrl: question.imageUrl || undefined,
     });
   });
 
+  // Cek nomor soal yang melompat / hilang dari urutan 1..maxNum
+  const allDetectedNums = rawQuestions
+    .map((q) => Number(q.questionNumber))
+    .filter((n) => Number.isFinite(n) && n > 0 && n <= 200);
+  if (allDetectedNums.length > 0) {
+    const maxNum = Math.max(...allDetectedNums);
+    const missingNums = [];
+    for (let n = 1; n <= maxNum; n++) {
+      if (!acceptedSourceNumbers.has(n)) missingNums.push(n);
+    }
+    if (missingNums.length > 0) {
+      diagnostics.unshift({
+        level: 'error',
+        questionNumber: null,
+        reason: `Nomor soal tidak terbaca / terlewat (${missingNums.length} nomor dari rentang 1–${maxNum}): No. ${missingNums.slice(0, 30).join(', ')}${missingNums.length > 30 ? ', ...' : ''}. Kemungkinan nomor tersebut tidak memiliki opsi A–D yang terbaca, berada di tabel multi-kolom, atau nomornya menempel pada paragraf sebelumnya.`,
+        snippet: '',
+      });
+    }
+  }
+  if (missingKeyCount > 0) {
+    diagnostics.push({
+      level: 'warning',
+      questionNumber: null,
+      reason: `${missingKeyCount} soal Pilihan Ganda belum terdeteksi kunci jawabannya (tidak bertinta merah, tidak bold, dan tidak ada baris "Kunci:"). Kunci sementara disetel ke A — periksa di Preview.`,
+      snippet: '',
+    });
+  }
+
   return resolvedQuestions;
 }
 
 // Hapus field bantu parser sebelum dikirim ke server
 const stripImportMeta = (question) => {
-  const { keyDetected, keySource, ...rest } = question;
+  const { keyDetected, keySource, sourceQuestionNumber, ...rest } = question;
   return rest;
 };
 
@@ -1395,6 +1473,9 @@ export default function TeacherExamsManagementPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [docxFileName, setDocxFileName] = useState('');
   const [docxImported, setDocxImported] = useState(null); // hasil parse file Word (belum disimpan)
+  const [importDiagnostics, setImportDiagnostics] = useState([]); // laporan peringatan/kesalahan impor Word
+  const [importRawPreview, setImportRawPreview] = useState(''); // teks mentah hasil ekstrak Word untuk debugging
+  const [showRawImportDebug, setShowRawImportDebug] = useState(false);
   const [studentPreview, setStudentPreview] = useState({ isOpen: false, questions: [], index: 0, subtitle: '' });
   const [questionSearch, setQuestionSearch] = useState('');
   const [questionTypeFilter, setQuestionTypeFilter] = useState('ALL');
@@ -2269,26 +2350,41 @@ export default function TeacherExamsManagementPage() {
     }
 
     setDocxFileName(file.name);
+    setImportDiagnostics([]);
+    setImportRawPreview('');
+    setShowRawImportDebug(false);
     setIsImporting(true);
     try {
       const arrayBuffer = await file.arrayBuffer();
       let imported = null;
+      let collectedDiagnostics = [];
+      let rawExtractedLines = [];
 
       // 1. Ekstraksi struktur langsung dari OpenXML Docx (Mendukung penomoran otomatis Word, opsi gambar, dan kunci merah)
       try {
         const extracted = await extractDocxStructure(arrayBuffer);
         if (extracted && extracted.lines && extracted.lines.length > 0) {
+          rawExtractedLines = extracted.lines;
+          const diag = [];
           const parsed = parseQuestionImport(extracted.lines.join('\n'), {
             coloredKeysByNumber: extracted.coloredKeysByNumber,
             coloredKeysInOrder: extracted.coloredKeysInOrder,
             boldKeysByNumber: extracted.boldKeysByNumber,
+            diagnostics: diag,
           });
+          collectedDiagnostics = diag;
           if (parsed && parsed.length > 0) {
             imported = parsed;
           }
         }
       } catch (xmlErr) {
         console.warn('Ekstraksi XML docx langsung gagal, beralih ke fallback mammoth:', xmlErr);
+        collectedDiagnostics.push({
+          level: 'warning',
+          questionNumber: null,
+          reason: `Pembacaan XML Word langsung menemui kendala (${xmlErr?.message || 'format tidak standar'}), beralih ke mode pembacaan alternatif.`,
+          snippet: '',
+        });
       }
 
       // 2. Fallback menggunakan Mammoth jika ekstraksi langsung tidak menghasilkan soal
@@ -2356,20 +2452,54 @@ export default function TeacherExamsManagementPage() {
           if (text) lines.push(text);
         });
 
-        const fallbackParsed = parseQuestionImport(lines.join('\n'), { coloredKeysByNumber, coloredKeysInOrder });
+        const fallbackDiag = [];
+        const fallbackParsed = parseQuestionImport(lines.join('\n'), {
+          coloredKeysByNumber,
+          coloredKeysInOrder,
+          diagnostics: fallbackDiag,
+        });
+        if (rawExtractedLines.length === 0) rawExtractedLines = lines;
         if (fallbackParsed && fallbackParsed.length > 0) {
           imported = fallbackParsed;
+          collectedDiagnostics = fallbackDiag;
+        } else if (fallbackDiag.length > 0 && collectedDiagnostics.length === 0) {
+          collectedDiagnostics = fallbackDiag;
         }
       }
 
+      setImportDiagnostics(collectedDiagnostics);
+      setImportRawPreview(
+        rawExtractedLines
+          .map((l) => (l.startsWith('GAMBAR: data:') ? 'GAMBAR: [Gambar Tersemat]' : l))
+          .slice(0, 300)
+          .join('\n')
+      );
+
       if (!imported || imported.length === 0) {
-        throw new Error('Struktur soal tidak dikenali. Pastikan file memuat nomor soal (cth: 1. Soal atau Soal 1) dan opsi A-D.');
+        if (collectedDiagnostics.length === 0) {
+          setImportDiagnostics([
+            {
+              level: 'error',
+              questionNumber: null,
+              reason: 'Struktur soal tidak dikenali. Pastikan file memuat nomor soal (cth: 1. Soal) dan opsi A–D.',
+              snippet: '',
+            },
+          ]);
+        }
+        setDocxImported(null);
+      } else {
+        setDocxImported(imported);
       }
-      setDocxImported(imported);
     } catch (error) {
-      alert(`Gagal membaca file Word: ${error.message}`);
+      setImportDiagnostics([
+        {
+          level: 'error',
+          questionNumber: null,
+          reason: `Gagal membaca file Word: ${error.message}`,
+          snippet: '',
+        },
+      ]);
       setDocxImported(null);
-      setDocxFileName('');
     } finally {
       setIsImporting(false);
       event.target.value = '';
@@ -4053,9 +4183,91 @@ export default function TeacherExamsManagementPage() {
                         Klik tombol di atas untuk memastikan butir soal dan kunci sudah sesuai sebelum disimpan ke database.
                       </span>
                     </div>
+
+                    {/* Panel Laporan Kesalahan / Peringatan Impor Word */}
+                    {importDiagnostics.length > 0 && (
+                      <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 space-y-2">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <p className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                            <span>⚠️</span>
+                            <span>
+                              Catatan &amp; Kesalahan Impor ({importDiagnostics.length} temuan — periksa jika jumlah soal kurang dari aslinya)
+                            </span>
+                          </p>
+                          {importRawPreview && (
+                            <button
+                              type="button"
+                              onClick={() => setShowRawImportDebug((v) => !v)}
+                              className="text-[11px] font-bold text-amber-800 hover:text-amber-950 underline cursor-pointer"
+                            >
+                              {showRawImportDebug ? 'Sembunyikan Teks Mentah' : 'Lihat Teks Mentah Word'}
+                            </button>
+                          )}
+                        </div>
+                        <ul className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                          {importDiagnostics.map((d, idx) => (
+                            <li
+                              key={idx}
+                              className={`text-[11px] leading-relaxed p-2 rounded-lg border ${
+                                d.level === 'error'
+                                  ? 'bg-rose-50 border-rose-200 text-rose-900'
+                                  : 'bg-white border-amber-200 text-amber-950'
+                              }`}
+                            >
+                              <span className="font-bold">
+                                {d.questionNumber ? `Soal No. ${d.questionNumber}: ` : d.level === 'error' ? 'Terlewat / Gagal: ' : 'Peringatan: '}
+                              </span>
+                              <span>{d.reason}</span>
+                              {d.snippet && (
+                                <span className="block mt-0.5 text-[10px] text-neutral-500 font-mono truncate">
+                                  Cuplikan: &ldquo;{d.snippet}&rdquo;
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                        {showRawImportDebug && importRawPreview && (
+                          <pre className="mt-2 max-h-44 overflow-auto rounded-lg bg-slate-900 text-slate-100 p-2.5 text-[10px] font-mono whitespace-pre-wrap">
+                            {importRawPreview}
+                          </pre>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <>
+                    {importDiagnostics.length > 0 && (
+                      <div className="rounded-xl border border-rose-300 bg-rose-50 p-3.5 space-y-2">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <p className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
+                            <span>❌</span>
+                            <span>Gagal Membaca Soal dari {docxFileName || 'File Word'}</span>
+                          </p>
+                          {importRawPreview && (
+                            <button
+                              type="button"
+                              onClick={() => setShowRawImportDebug((v) => !v)}
+                              className="text-[11px] font-bold text-rose-800 hover:text-rose-950 underline cursor-pointer"
+                            >
+                              {showRawImportDebug ? 'Sembunyikan Teks Mentah' : 'Lihat Teks Mentah Word'}
+                            </button>
+                          )}
+                        </div>
+                        <ul className="space-y-1.5 max-h-40 overflow-y-auto">
+                          {importDiagnostics.map((d, idx) => (
+                            <li key={idx} className="text-[11px] text-rose-900 bg-white/80 p-2 rounded-lg border border-rose-200">
+                              <span className="font-bold">{d.questionNumber ? `No. ${d.questionNumber}: ` : ''}</span>
+                              <span>{d.reason}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        {showRawImportDebug && importRawPreview && (
+                          <pre className="mt-2 max-h-44 overflow-auto rounded-lg bg-slate-900 text-slate-100 p-2.5 text-[10px] font-mono whitespace-pre-wrap">
+                            {importRawPreview}
+                          </pre>
+                        )}
+                      </div>
+                    )}
                     <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-[11px] text-blue-900 space-y-1.5">
                       <p className="font-bold flex items-center gap-1.5 text-blue-950">
                         <span>💡</span>
