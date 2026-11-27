@@ -1360,7 +1360,6 @@ export default function CBTExamRunnerPage({ params }) {
                       ].map((s) => String(s || '').trim()).filter(Boolean))
                     );
                     const isMultiMatching =
-                      Boolean(currentQ?.matchingMultiSelect) ||
                       pairs.some((p) => Array.isArray(p.rights) && p.rights.length > 1);
 
                     if (pairs.length === 0) {

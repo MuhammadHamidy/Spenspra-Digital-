@@ -50,8 +50,17 @@ export const getQuestionIssues = (q) => {
     if (q.keyDetected === false) issues.push('Kunci tidak ditemukan di file (default A)');
   }
   if (q.type === 'MATCHING') {
-    const pairs = Array.isArray(q.matchingPairs) ? q.matchingPairs.filter((p) => p.left && p.right) : [];
-    if (pairs.length < 2) issues.push('Pasangan menjodohkan kurang dari 2');
+    const pairs = Array.isArray(q.matchingPairs)
+      ? q.matchingPairs.filter((p) => p.left && (p.right || (Array.isArray(p.rights) && p.rights.length > 0)))
+      : [];
+    const rightPool = Array.from(
+      new Set([
+        ...(Array.isArray(q.matchingRightOptions) ? q.matchingRightOptions : []),
+        ...pairs.flatMap((p) => (Array.isArray(p.rights) && p.rights.length > 0 ? p.rights : [p.right])),
+      ].map((s) => String(s || '').trim()).filter(Boolean))
+    );
+    if (pairs.length < 1) issues.push('Premis Kolom A belum diisi');
+    else if (rightPool.length < 2) issues.push('Pilihan Kolom B minimal 2 opsi');
   }
   return issues;
 };
@@ -240,14 +249,14 @@ export function StudentQuestionView({ question: q, number, showKey = false }) {
                 Kolom A — Pernyataan / Kasus
               </span>
               <span className="text-[10px] font-semibold text-violet-700">
-                {Boolean(q.matchingMultiSelect) || (q.matchingPairs || []).some((p) => Array.isArray(p.rights) && p.rights.length > 1)
+                {(q.matchingPairs || []).some((p) => Array.isArray(p.rights) && p.rights.length > 1)
                   ? 'Bisa pilih 1 atau lebih huruf Kolom B'
                   : 'Pilih 1 pasangan huruf Kolom B'}
               </span>
             </div>
             {(q.matchingPairs || []).map((pair, idx) => {
               const expectedList = Array.isArray(pair.rights) && pair.rights.length > 0 ? pair.rights : (pair.right ? [pair.right] : []);
-              const isMulti = Boolean(q.matchingMultiSelect) || expectedList.length > 1;
+              const isMulti = expectedList.length > 1;
               const pickedList = Array.isArray(matching[idx]) ? matching[idx] : (matching[idx] ? [matching[idx]] : []);
               return (
                 <div key={pair.id || idx} className="p-3 rounded-xl border border-neutral-200 bg-white space-y-2.5 shadow-2xs">
