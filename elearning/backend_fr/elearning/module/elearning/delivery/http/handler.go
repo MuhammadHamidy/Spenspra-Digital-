@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -830,6 +831,32 @@ type CBTMatchingPairInput struct {
 	Rights []string    `json:"rights,omitempty"`
 }
 
+// FlexFloat64 tolerates both JSON numbers (10, 2.5) and numeric strings ("10", "2.5", "")
+// so frontend form inputs never break bulk question unmarshaling.
+type FlexFloat64 float64
+
+func (f *FlexFloat64) UnmarshalJSON(data []byte) error {
+	s := strings.TrimSpace(string(data))
+	if s == "" || s == "null" || s == `""` {
+		*f = 0
+		return nil
+	}
+	if strings.HasPrefix(s, `"`) && strings.HasSuffix(s, `"`) {
+		s = strings.Trim(s, `"`)
+		s = strings.TrimSpace(strings.ReplaceAll(s, ",", "."))
+		if s == "" {
+			*f = 0
+			return nil
+		}
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return err
+	}
+	*f = FlexFloat64(v)
+	return nil
+}
+
 type CBTQuestionInput struct {
 	ID                   string                   `json:"id"`
 	QuestionNumber       int                      `json:"questionNumber"`
@@ -855,8 +882,8 @@ type CBTQuestionInput struct {
 	MatchingRightOptions []string                 `json:"matchingRightOptions,omitempty"`
 	MatchingMultiSelect  bool                     `json:"matchingMultiSelect,omitempty"`
 	EssayRubric          string                   `json:"essayRubric"`
-	Points               float64                  `json:"points"`
-	ScoreWeight          float64                  `json:"score_weight"`
+	Points               FlexFloat64              `json:"points"`
+	ScoreWeight          FlexFloat64              `json:"score_weight"`
 }
 
 type CBTQuestionMeta struct {
@@ -989,9 +1016,9 @@ func (in *CBTQuestionInput) ToDomain(examID string, index int) domain.CBTQuestio
 		corr = "-"
 	}
 
-	pts := in.Points
+	pts := float64(in.Points)
 	if pts <= 0 {
-		pts = in.ScoreWeight
+		pts = float64(in.ScoreWeight)
 	}
 	if pts <= 0 {
 		pts = 10.0
@@ -1218,17 +1245,39 @@ func (h *ELearningHandler) SaveExamQuestions(c *fiber.Ctx) error {
 	}
 
 	// Payload can be { questions: [...] } or direct slice [...]
+	// CRITICAL: NEVER silently treat a JSON parse error as an empty slice (which would wipe all questions in DB!).
 	type BulkPayload struct {
 		Questions []CBTQuestionInput `json:"questions"`
 	}
 
+	rawBody := c.Body()
+	if len(strings.TrimSpace(string(rawBody))) == 0 {
+		return c.Status(http.StatusBadRequest).JSON(responses.Fail("INVALID_PAYLOAD", "Payload soal kosong"))
+	}
+
 	var rawBulk BulkPayload
 	var inputs []CBTQuestionInput
+	parsed := false
 
-	if err := c.BodyParser(&rawBulk); err == nil && len(rawBulk.Questions) > 0 {
+	if err := json.Unmarshal(rawBody, &rawBulk); err == nil && rawBulk.Questions != nil {
 		inputs = rawBulk.Questions
+		parsed = true
 	} else {
-		_ = c.BodyParser(&inputs)
+		var sliceInputs []CBTQuestionInput
+		if err2 := json.Unmarshal(rawBody, &sliceInputs); err2 == nil && sliceInputs != nil {
+			inputs = sliceInputs
+			parsed = true
+		} else {
+			errMsg := "Format data soal tidak valid"
+			if err != nil {
+				errMsg = err.Error()
+			}
+			return c.Status(http.StatusBadRequest).JSON(responses.Fail("INVALID_PAYLOAD", "Gagal membaca payload soal: "+errMsg))
+		}
+	}
+
+	if !parsed {
+		return c.Status(http.StatusBadRequest).JSON(responses.Fail("INVALID_PAYLOAD", "Payload questions tidak ditemukan"))
 	}
 
 	var domainQuestions []domain.CBTQuestion

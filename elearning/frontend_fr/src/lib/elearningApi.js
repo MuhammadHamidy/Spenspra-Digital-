@@ -1061,40 +1061,60 @@ export const elearningApi = {
   },
 
   saveExamQuestions: async (examId, questions) => {
-    const allQuestions = getLocal('questions', INITIAL_QUESTIONS);
-    allQuestions[examId] = questions;
-    setLocal('questions', allQuestions);
+    const normalizedQuestions = (Array.isArray(questions) ? questions : []).map((q, i) => {
+      const pts = Number(q.points ?? q.score_weight);
+      const safePoints = Number.isFinite(pts) && pts > 0 ? pts : 10;
+      const qNum = Number(q.questionNumber ?? q.question_number);
+      const safeNum = Number.isFinite(qNum) && qNum > 0 ? Math.trunc(qNum) : i + 1;
+      const corr = q.correctOption !== undefined ? String(q.correctOption) : String(q.correct_answer || '');
+      return {
+        ...q,
+        questionNumber: safeNum,
+        question_number: safeNum,
+        points: safePoints,
+        score_weight: safePoints,
+        correctOption: corr,
+        correct_answer: corr,
+      };
+    });
 
-    const exams = getLocal('exams', INITIAL_EXAMS);
-    const idx = exams.findIndex((e) => e.id === examId);
-    if (idx >= 0) {
-      exams[idx].totalQuestions = questions.length;
-      setLocal('exams', exams);
+    const res = await fetchJson(`/exams/${examId}/questions`, {
+      method: 'PUT',
+      body: JSON.stringify({ questions: normalizedQuestions }),
+    });
+
+    if (!res?.success) {
+      const errMsg =
+        res?.error?.message ||
+        (typeof res?.error === 'string' ? res.error : '') ||
+        res?.message ||
+        'Gagal menyimpan soal ke server. Pastikan sesi login masih aktif dan ukuran gambar tidak terlalu besar.';
+      throw new Error(errMsg);
     }
 
-    try {
-      const res = await fetchJson(`/exams/${examId}/questions`, {
-        method: 'PUT',
-        body: JSON.stringify({ questions }),
-      });
-      if (res?.success && Array.isArray(res?.data)) {
-        // Merge server IDs without discarding client rich question structure
-        const merged = questions.map((origQ, i) => {
+    const merged = Array.isArray(res?.data)
+      ? normalizedQuestions.map((origQ, i) => {
           const srvQ = res.data[i] || res.data.find((sq) => sq.id === origQ.id) || {};
           return {
             ...origQ,
             id: srvQ.id || origQ.id,
             questionNumber: origQ.questionNumber || i + 1,
           };
-        });
-        allQuestions[examId] = merged;
-        setLocal('questions', allQuestions);
-      }
-    } catch (err) {
-      console.warn('Gagal sync butir soal ke backend:', err);
+        })
+      : normalizedQuestions;
+
+    const allQuestions = getLocal('questions', INITIAL_QUESTIONS);
+    allQuestions[examId] = merged;
+    setLocal('questions', allQuestions);
+
+    const exams = getLocal('exams', INITIAL_EXAMS);
+    const idx = exams.findIndex((e) => e.id === examId);
+    if (idx >= 0) {
+      exams[idx].totalQuestions = merged.length;
+      setLocal('exams', exams);
     }
 
-    return questions;
+    return merged;
   },
 
   // =================== MATA PELAJARAN (COURSES / SUBJECTS) ===================

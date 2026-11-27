@@ -56,15 +56,15 @@ func NewFiber(cfg *Config) *fiber.App {
 	// Defaults
 	readTimeout := cfg.ReadTimeout
 	if readTimeout == 0 {
-		readTimeout = 10 * time.Second
+		readTimeout = 30 * time.Second
 	}
 	writeTimeout := cfg.WriteTimeout
 	if writeTimeout == 0 {
-		writeTimeout = 10 * time.Second
+		writeTimeout = 30 * time.Second
 	}
 	bodyLimit := cfg.BodyLimit
 	if bodyLimit == 0 {
-		bodyLimit = 10 * 1024 * 1024 // 10MB default buffer for bulk question imports
+		bodyLimit = 25 * 1024 * 1024 // 25MB default buffer for bulk question imports with images
 	}
 
 	app := fiber.New(fiber.Config{

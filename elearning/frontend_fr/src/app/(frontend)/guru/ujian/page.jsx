@@ -1862,11 +1862,19 @@ export default function TeacherExamsManagementPage() {
     }
   };
 
+  const userRoleStr = String(user?.roleName || user?.role || user?.role_name || '').toUpperCase();
+  const canManageSchoolExams = Boolean(
+    userRoleStr.includes('PROKTOR') ||
+    userRoleStr.includes('ADMIN') ||
+    userRoleStr.includes('KURIKULUM') ||
+    userRoleStr.includes('KEPALA')
+  );
+
   const handleOpenCreateModal = () => {
     const defaultSubj = subjects[0] || { name: '', code: '' };
     setEditingExamId(null);
     setTitle('');
-    setExamCategory('SEMESTER_UAS');
+    setExamCategory(canManageSchoolExams ? 'SEMESTER_UAS' : 'REGULAR');
     setTargetGradeLevel('7');
     setSupervisorPin(generateRandomPin(6));
     setSubject(defaultSubj.name || '');
@@ -1880,7 +1888,11 @@ export default function TeacherExamsManagementPage() {
     const endObj = new Date(now.getTime() + 90 * 60 * 1000);
     const endStr = `${pad(endObj.getHours())}:${pad(endObj.getMinutes())}`;
 
-    setToken(`ASAS${Math.random().toString(36).substring(2, 6).toUpperCase()}`);
+    setToken(
+      canManageSchoolExams
+        ? `ASAS${Math.random().toString(36).substring(2, 6).toUpperCase()}`
+        : `UH${Math.random().toString(36).substring(2, 6).toUpperCase()}`
+    );
     setExamDate(now.toISOString().split('T')[0]);
     setStartTime(startStr);
     setEndTime(endStr);
@@ -2146,15 +2158,70 @@ export default function TeacherExamsManagementPage() {
   };
 
   const handleDeleteExam = (examId, examTitle) => {
+    const targetExam = exams.find((item) => item.id === examId);
     setConfirmModal({
       isOpen: true,
       title: 'Hapus Jadwal Ujian?',
-      message: `Hapus jadwal ujian "${examTitle}" beserta seluruh butir soalnya? Tindakan ini tidak dapat dibatalkan.`,
+      message: `Hapus jadwal ujian "${examTitle}" beserta seluruh butir soalnya? Nilai siswa (TKA/UAS/UTS) akan otomatis diarsipkan terlebih dahulu ke e-Rapor sebelum sesi dihapus.`,
       confirmText: 'Ya, Hapus Ujian',
       cancelText: 'Batal',
       isDanger: true,
       onConfirm: async () => {
         try {
+          // Arsipkan nilai peserta TKA / UAS / UTS ke database e-Rapor sebelum sesi CBT dihapus
+          if (targetExam) {
+            const cat = resolveExamCat(targetExam);
+            const assessmentType =
+              cat === 'TKA' ? 'TKA' : cat === 'SEMESTER_UAS' ? 'UAS' : cat === 'SEMESTER_UTS' ? 'PTS' : '';
+            if (assessmentType) {
+              try {
+                const sessions = await elearningApi.getExamSessions(examId);
+                if (Array.isArray(sessions) && sessions.length > 0) {
+                  const raporBase =
+                    process.env.NEXT_PUBLIC_RAPOR_API_URL ||
+                    (typeof window !== 'undefined' && window.location.hostname.endsWith('spenspra.com')
+                      ? 'https://erapor.spenspra.com/api'
+                      : 'http://localhost:8082/api');
+                  const token = tokenStorage.getToken();
+                  const periodYear = `${new Date().getFullYear()}/${new Date().getFullYear() + 1}`;
+                  const periodSem = new Date().getMonth() >= 6 ? 'Ganjil' : 'Genap';
+                  const bulkPayload = sessions
+                    .filter((s) => s && s.score !== undefined && s.score !== null && !Number.isNaN(Number(s.score)))
+                    .map((s) => ({
+                      student_id: s.studentId || s.student_id || '',
+                      student_name: s.studentName || s.student_name || 'Siswa',
+                      nisn: s.nisn || s.student_nisn || s.studentNISN || '',
+                      class_name: s.className || s.class_name || targetExam.className || '',
+                      subject_code: targetExam.subjectCode || targetExam.course_id || targetExam.subject || '',
+                      subject_name: targetExam.subject || targetExam.course_name || '',
+                      assessment_type: assessmentType,
+                      academic_year: periodYear,
+                      semester: periodSem,
+                      score: Number(s.score),
+                      description:
+                        assessmentType === 'TKA'
+                          ? 'Hasil Tes Kemampuan Akademik (TKA)'
+                          : `Nilai ${assessmentType} (Arsip CBT)`,
+                    }))
+                    .filter((item) => item.student_id && item.class_name && item.subject_code);
+                  if (bulkPayload.length > 0) {
+                    await fetch(`${raporBase}/grades/bulk`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                        ...(user?.id ? { 'X-User-Id': user.id } : {}),
+                      },
+                      body: JSON.stringify(bulkPayload),
+                    });
+                  }
+                }
+              } catch (archiveErr) {
+                console.warn('Arsip otomatis nilai sebelum hapus ujian gagal:', archiveErr);
+              }
+            }
+          }
+
           await elearningApi.deleteExam(examId);
           await loadExams();
         } catch (err) {
@@ -2469,6 +2536,12 @@ export default function TeacherExamsManagementPage() {
 
       const targetPoints = Number(newQuestionType === 'ESSAY' ? essayPoints : mcqPoints) || 10;
 
+      const resolvedCorrectOpt = newQuestionType === 'MCQ'
+        ? correctOption
+        : (newQuestionType === 'COMPLEX_MCQ'
+            ? (correctOptions && correctOptions.length > 0 ? correctOptions.join(',') : 'A')
+            : (newQuestionType === 'TRUE_FALSE' ? (trueFalseAnswer ? 'TRUE' : 'FALSE') : ''));
+
       const newQ = {
         id: editingQuestionId || `q-${Date.now()}`,
         questionNumber: editingQuestionId
@@ -2479,26 +2552,35 @@ export default function TeacherExamsManagementPage() {
         stimulusText: stimulusText.trim() || undefined,
         imageUrl: imageUrl.trim() || undefined,
         options: optionsList,
-        correctOption: newQuestionType === 'MCQ'
-          ? correctOption
-          : (newQuestionType === 'COMPLEX_MCQ'
-              ? (correctOptions && correctOptions.length > 0 ? correctOptions.join(',') : 'A')
-              : (newQuestionType === 'TRUE_FALSE' ? (trueFalseAnswer ? 'TRUE' : 'FALSE') : '')),
+        correctOption: resolvedCorrectOpt,
+        correct_answer: resolvedCorrectOpt,
         correctOptions: newQuestionType === 'COMPLEX_MCQ' ? correctOptions : undefined,
         trueFalseAnswer: newQuestionType === 'TRUE_FALSE' ? trueFalseAnswer : undefined,
         matchingPairs: newQuestionType === 'MATCHING' ? validPairs : undefined,
         matchingRightOptions: newQuestionType === 'MATCHING' ? finalRightOptions : undefined,
         matchingMultiSelect: newQuestionType === 'MATCHING' ? matchingMultiSelect : undefined,
         points: targetPoints,
+        score_weight: targetPoints,
         essayRubric: newQuestionType === 'ESSAY' ? essayRubric.trim() || undefined : undefined,
       };
 
       let updated;
       if (editingQuestionId) {
         updated = examQuestions.map((q) => (q.id === editingQuestionId ? { ...q, ...newQ } : q));
-        setSaveSuccessMsg(`Soal #${newQ.questionNumber} berhasil diperbarui!`);
       } else {
         updated = [...examQuestions, newQ];
+      }
+
+      if (activeQuestionEditorExam?.id) {
+        const savedList = await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, updated);
+        setExamQuestions(Array.isArray(savedList) ? savedList : updated);
+      } else {
+        setExamQuestions(updated);
+      }
+
+      if (editingQuestionId) {
+        setSaveSuccessMsg(`Soal #${newQ.questionNumber} berhasil diperbarui dan tersimpan di server!`);
+      } else {
         const labels = {
           MCQ: 'Pilihan Ganda',
           COMPLEX_MCQ: 'PG Kompleks',
@@ -2507,14 +2589,8 @@ export default function TeacherExamsManagementPage() {
           ESSAY: 'Esai',
         };
         setSaveSuccessMsg(
-          `Soal #${newQ.questionNumber} (${labels[newQuestionType] || 'Soal'}) tersimpan!`
+          `Soal #${newQ.questionNumber} (${labels[newQuestionType] || 'Soal'}) tersimpan di server!`
         );
-      }
-
-      setExamQuestions(updated);
-
-      if (activeQuestionEditorExam?.id) {
-        await elearningApi.saveExamQuestions(activeQuestionEditorExam.id, updated);
       }
 
       setTimeout(() => setSaveSuccessMsg(''), 4000);
@@ -4812,7 +4888,9 @@ export default function TeacherExamsManagementPage() {
                     tokenPrefix: '',
                     isCoord: false,
                   },
-                ].map((cat) => {
+                ]
+                  .filter((cat) => canManageSchoolExams || !cat.isCoord)
+                  .map((cat) => {
                   const active = examCategory === cat.key;
                   return (
                     <button
@@ -5219,10 +5297,15 @@ export default function TeacherExamsManagementPage() {
     return ex.isCoordinatorExam || Boolean(ex.targetGradeLevel) ? 'SEMESTER_UAS' : 'REGULAR';
   };
 
-  const uasCount = exams.filter((e) => resolveExamCat(e) === 'SEMESTER_UAS').length;
-  const utsCount = exams.filter((e) => resolveExamCat(e) === 'SEMESTER_UTS').length;
-  const tkaCount = exams.filter((e) => resolveExamCat(e) === 'TKA').length;
-  const regularCount = exams.filter((e) => resolveExamCat(e) === 'REGULAR').length;
+  // Guru biasa (non-Proktor & non-Admin) hanya melihat dan mengelola Ujian Reguler / Ulangan Harian
+  const scopedExams = canManageSchoolExams
+    ? exams
+    : exams.filter((e) => resolveExamCat(e) === 'REGULAR');
+
+  const uasCount = scopedExams.filter((e) => resolveExamCat(e) === 'SEMESTER_UAS').length;
+  const utsCount = scopedExams.filter((e) => resolveExamCat(e) === 'SEMESTER_UTS').length;
+  const tkaCount = scopedExams.filter((e) => resolveExamCat(e) === 'TKA').length;
+  const regularCount = scopedExams.filter((e) => resolveExamCat(e) === 'REGULAR').length;
 
   const resolveExamGrade = (ex) => {
     if (!ex) return '';
@@ -5236,8 +5319,10 @@ export default function TeacherExamsManagementPage() {
     return '';
   };
 
-  const filteredExams = exams.filter((ex) => {
-    if (examFilterTab !== 'ALL' && resolveExamCat(ex) !== examFilterTab) return false;
+  const effectiveExamTab = canManageSchoolExams ? examFilterTab : 'REGULAR';
+
+  const filteredExams = scopedExams.filter((ex) => {
+    if (effectiveExamTab !== 'ALL' && resolveExamCat(ex) !== effectiveExamTab) return false;
     if (examGradeFilter !== 'ALL' && resolveExamGrade(ex) !== examGradeFilter) return false;
     return true;
   });
@@ -5291,7 +5376,9 @@ export default function TeacherExamsManagementPage() {
             Bank Soal & Jadwal e-Ujian (CBT)
           </h1>
           <p className="text-xs sm:text-sm text-neutral-500 mt-0.5">
-            Kelola ujian reguler, UAS / ASAS, UTS / ASTS, dan TKA serentak tingkat sekolah terintegrasi SSO & e-Rapor.
+            {canManageSchoolExams
+              ? 'Kelola ujian reguler, UAS / ASAS, UTS / ASTS, dan TKA serentak tingkat sekolah terintegrasi SSO & e-Rapor.'
+              : 'Kelola ulangan harian dan kuis CBT untuk rombel kelas yang Anda ampu.'}
           </p>
         </div>
 
@@ -5309,90 +5396,94 @@ export default function TeacherExamsManagementPage() {
       {/* Filter Tabs Segmented Control (Responsive Horizontal Scroll on Mobile) */}
       <div className="max-w-full overflow-x-auto pb-1">
         <div className="bg-slate-100 p-1.5 rounded-2xl inline-flex items-center gap-1.5 border border-slate-200/90 shadow-2xs min-w-max">
-          <button
-            type="button"
-            onClick={() => setExamFilterTab('ALL')}
-            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
-              examFilterTab === 'ALL'
-                ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-            }`}
-          >
-            <span>Semua Ujian</span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              examFilterTab === 'ALL' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
-            }`}>
-              {exams.length}
-            </span>
-          </button>
+          {canManageSchoolExams && (
+            <>
+              <button
+                type="button"
+                onClick={() => setExamFilterTab('ALL')}
+                className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                  examFilterTab === 'ALL'
+                    ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                }`}
+              >
+                <span>Semua Ujian</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  examFilterTab === 'ALL' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
+                }`}>
+                  {scopedExams.length}
+                </span>
+              </button>
 
-          <button
-            type="button"
-            onClick={() => setExamFilterTab('SEMESTER_UAS')}
-            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
-              examFilterTab === 'SEMESTER_UAS'
-                ? 'bg-primary-500 text-white shadow-xs'
-                : 'text-slate-600 hover:text-primary-500 hover:bg-white/60'
-            }`}
-          >
-            <AppIcon name="medal" color={examFilterTab === 'SEMESTER_UAS' ? 'white' : 'blue'} size={14} />
-            <span>UAS / ASAS</span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              examFilterTab === 'SEMESTER_UAS' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
-            }`}>
-              {uasCount}
-            </span>
-          </button>
+              <button
+                type="button"
+                onClick={() => setExamFilterTab('SEMESTER_UAS')}
+                className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                  examFilterTab === 'SEMESTER_UAS'
+                    ? 'bg-primary-500 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-primary-500 hover:bg-white/60'
+                }`}
+              >
+                <AppIcon name="medal" color={examFilterTab === 'SEMESTER_UAS' ? 'white' : 'blue'} size={14} />
+                <span>UAS / ASAS</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  examFilterTab === 'SEMESTER_UAS' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
+                }`}>
+                  {uasCount}
+                </span>
+              </button>
 
-          <button
-            type="button"
-            onClick={() => setExamFilterTab('SEMESTER_UTS')}
-            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
-              examFilterTab === 'SEMESTER_UTS'
-                ? 'bg-sky-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-sky-700 hover:bg-white/60'
-            }`}
-          >
-            <AppIcon name="medal" color={examFilterTab === 'SEMESTER_UTS' ? 'white' : 'blue'} size={14} />
-            <span>UTS / ASTS</span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              examFilterTab === 'SEMESTER_UTS' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
-            }`}>
-              {utsCount}
-            </span>
-          </button>
+              <button
+                type="button"
+                onClick={() => setExamFilterTab('SEMESTER_UTS')}
+                className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                  examFilterTab === 'SEMESTER_UTS'
+                    ? 'bg-sky-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-sky-700 hover:bg-white/60'
+                }`}
+              >
+                <AppIcon name="medal" color={examFilterTab === 'SEMESTER_UTS' ? 'white' : 'blue'} size={14} />
+                <span>UTS / ASTS</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  examFilterTab === 'SEMESTER_UTS' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
+                }`}>
+                  {utsCount}
+                </span>
+              </button>
 
-          <button
-            type="button"
-            onClick={() => setExamFilterTab('TKA')}
-            className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
-              examFilterTab === 'TKA'
-                ? 'bg-violet-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-violet-700 hover:bg-white/60'
-            }`}
-          >
-            <AppIcon name="medal" color={examFilterTab === 'TKA' ? 'white' : 'purple'} size={14} />
-            <span>TKA</span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              examFilterTab === 'TKA' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
-            }`}>
-              {tkaCount}
-            </span>
-          </button>
+              <button
+                type="button"
+                onClick={() => setExamFilterTab('TKA')}
+                className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                  examFilterTab === 'TKA'
+                    ? 'bg-violet-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-violet-700 hover:bg-white/60'
+                }`}
+              >
+                <AppIcon name="medal" color={examFilterTab === 'TKA' ? 'white' : 'purple'} size={14} />
+                <span>TKA</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  examFilterTab === 'TKA' ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
+                }`}>
+                  {tkaCount}
+                </span>
+              </button>
+            </>
+          )}
 
           <button
             type="button"
             onClick={() => setExamFilterTab('REGULAR')}
             className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0 ${
-              examFilterTab === 'REGULAR'
+              effectiveExamTab === 'REGULAR'
                 ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
             }`}
           >
-            <AppIcon name="course" color={examFilterTab === 'REGULAR' ? 'purple' : 'grey'} size={14} />
+            <AppIcon name="course" color={effectiveExamTab === 'REGULAR' ? 'purple' : 'grey'} size={14} />
             <span>Reguler / Harian</span>
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              examFilterTab === 'REGULAR' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
+              effectiveExamTab === 'REGULAR' ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/80 text-slate-600'
             }`}>
               {regularCount}
             </span>
@@ -5410,8 +5501,8 @@ export default function TeacherExamsManagementPage() {
           ].map((g) => {
             const active = examGradeFilter === g.key;
             const cnt = g.key === 'ALL'
-              ? exams.filter((ex) => examFilterTab === 'ALL' || resolveExamCat(ex) === examFilterTab).length
-              : exams.filter((ex) => (examFilterTab === 'ALL' || resolveExamCat(ex) === examFilterTab) && resolveExamGrade(ex) === g.key).length;
+              ? scopedExams.filter((ex) => effectiveExamTab === 'ALL' || resolveExamCat(ex) === effectiveExamTab).length
+              : scopedExams.filter((ex) => (effectiveExamTab === 'ALL' || resolveExamCat(ex) === effectiveExamTab) && resolveExamGrade(ex) === g.key).length;
             return (
               <button
                 key={g.key}

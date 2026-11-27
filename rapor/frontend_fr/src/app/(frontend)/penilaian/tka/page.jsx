@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { attendanceApi } from '@/lib/attendanceApi';
 import { gradeApi } from '@/lib/gradeApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
@@ -87,6 +87,7 @@ export default function HasilTKAPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [notice, setNotice] = useState(null);
+  const lastAutoSyncKeyRef = useRef('');
 
   const roleStr = String(currentUser?.role || currentUser?.roleName || currentUser?.role_name || '').toUpperCase();
   const isTeacherRole = Boolean(currentUser && (roleStr === 'GURU' || roleStr.includes('GURU') || roleStr.includes('TEACHER') || roleStr === 'PROKTOR'));
@@ -176,23 +177,68 @@ export default function HasilTKAPage() {
     setClassName((prev) => (scopedClasses.includes(prev) ? prev : (scopedClasses[0] || '')));
   }, [subject, teacherAssignments]);
 
-  // 3. Muat daftar siswa kelas & nilai TKA tersimpan
+  // 3. Muat daftar siswa kelas & gabungkan dengan nilai TKA yang sudah tersimpan permanen di e-Rapor
   const loadRosterAndScores = useCallback(async () => {
     if (!className || !subject) {
       setRows([]);
       return;
     }
     try {
-      const res = await gradeApi.getGrades({
-        className,
-        subjectCode: subject,
-        assessmentType: 'TKA',
-        academicYear,
-        semester,
-      });
+      const { accountApiAdapter } = await import('@/lib/features/auth/infrastructure/accountApiAdapter');
+      const [res, rosterList] = await Promise.all([
+        gradeApi.getGrades({
+          className,
+          subjectCode: subject,
+          assessmentType: 'TKA',
+          academicYear,
+          semester,
+        }),
+        accountApiAdapter.getStudents(className).catch(() => []),
+      ]);
 
-      if (res.success && Array.isArray(res.data) && res.data.length > 0) {
-        const sorted = [...res.data].sort((a, b) =>
+      const savedList = res.success && Array.isArray(res.data) ? res.data : [];
+      const cleanId = (v) => String(v || '').trim().replace(/^(?:siswa|student|nisn)[_\-\s]+/i, '').toLowerCase();
+      const normName = (n) => String(n || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+      if (Array.isArray(rosterList) && rosterList.length > 0) {
+        const sorted = [...rosterList].sort((a, b) =>
+          (a.full_name || a.fullName || a.name || '').localeCompare(
+            b.full_name || b.fullName || b.name || '',
+            'id',
+            { sensitivity: 'base' }
+          )
+        );
+        setRows(
+          sorted.map((s, idx) => {
+            const sId = cleanId(s.id);
+            const sNisn = cleanId(s.nisn || s.nim_nip);
+            const sName = normName(s.full_name || s.fullName || s.name);
+            const saved = savedList.find((g) => {
+              const gId = cleanId(g.student_id);
+              const gNisn = cleanId(g.nisn);
+              const gName = normName(g.student_name);
+              if (sNisn && sNisn !== '-' && (gNisn === sNisn || gId === sNisn)) return true;
+              if (sId && (gId === sId || gNisn === sId)) return true;
+              if (sName && gName && (gName === sName || gName.includes(sName) || sName.includes(gName))) return true;
+              return false;
+            });
+            const hasSavedScore = saved && saved.score !== undefined && saved.score !== null && Number(saved.score) >= 0;
+            return {
+              id: s.id,
+              absenNo: idx + 1,
+              nisn: formatCleanNisn(s.nisn || s.nim_nip || saved?.nisn),
+              name: s.full_name || s.fullName || s.name || saved?.student_name || 'Siswa',
+              className,
+              score: hasSavedScore ? String(saved.score) : '',
+              status: hasSavedScore ? 'TERSIMPAN' : 'BELUM',
+            };
+          })
+        );
+        return;
+      }
+
+      if (savedList.length > 0) {
+        const sorted = [...savedList].sort((a, b) =>
           (a.student_name || '').localeCompare(b.student_name || '', 'id', { sensitivity: 'base' })
         );
         setRows(
@@ -204,30 +250,6 @@ export default function HasilTKAPage() {
             className: g.class_name || className,
             score: g.score !== undefined && g.score !== null && Number(g.score) >= 0 ? String(g.score) : '',
             status: g.score !== undefined && g.score !== null && Number(g.score) >= 0 ? 'TERSIMPAN' : 'BELUM',
-          }))
-        );
-        return;
-      }
-
-      const { accountApiAdapter } = await import('@/lib/features/auth/infrastructure/accountApiAdapter');
-      const list = await accountApiAdapter.getStudents(className);
-      if (Array.isArray(list) && list.length > 0) {
-        const sorted = [...list].sort((a, b) =>
-          (a.full_name || a.fullName || a.name || '').localeCompare(
-            b.full_name || b.fullName || b.name || '',
-            'id',
-            { sensitivity: 'base' }
-          )
-        );
-        setRows(
-          sorted.map((s, idx) => ({
-            id: s.id,
-            absenNo: idx + 1,
-            nisn: formatCleanNisn(s.nisn || s.nim_nip),
-            name: s.full_name || s.fullName || s.name || 'Siswa',
-            className,
-            score: '',
-            status: 'BELUM',
           }))
         );
       } else {
@@ -313,6 +335,85 @@ export default function HasilTKAPage() {
 
     fetchTkaExams();
   }, [className, subject, subjects]);
+
+  // 4B. Otomatis tarik & simpan permanen nilai TKA dari CBT ke e-Rapor (agar tetap aman walau sesi CBT dihapus)
+  useEffect(() => {
+    if (!selectedExamId || !className || !subject || rows.length === 0) return;
+    const syncKey = `${className}|${subject}|${selectedExamId}|${academicYear}|${semester}`;
+    if (lastAutoSyncKeyRef.current === syncKey) return;
+    lastAutoSyncKeyRef.current = syncKey;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const sessions = await cbtAdapter.getExamSessions(selectedExamId);
+        if (cancelled || !Array.isArray(sessions) || sessions.length === 0) return;
+
+        const normName = (n) => String(n || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanId = (v) => String(v || '').trim().replace(/^(?:siswa|student|nisn)[_\-\s]+/i, '').toLowerCase();
+
+        const toPersist = [];
+        const currentSubObj = subjects.find((s) => s.code === subject);
+
+        setRows((prev) =>
+          prev.map((row) => {
+            const rId = cleanId(row.id);
+            const rNisn = cleanId(row.nisn);
+            const rName = normName(row.name);
+
+            const sess = sessions.find((s) => {
+              const sId = cleanId(s.studentId || s.student_id);
+              const sNisn = cleanId(s.nisn || s.student_nisn || s.studentNISN);
+              const sName = normName(s.studentName || s.student_name);
+              if (rNisn && rNisn !== '-' && (sNisn === rNisn || sId === rNisn)) return true;
+              if (rId && (sId === rId || sNisn === rId)) return true;
+              if (rName && sName && (sName === rName || sName.includes(rName) || rName.includes(sName))) return true;
+              return false;
+            });
+
+            if (sess && sess.score !== undefined && sess.score !== null) {
+              const nextScoreStr = String(sess.score);
+              if (row.score !== nextScoreStr || row.status !== 'TERSIMPAN') {
+                toPersist.push({
+                  student_id: row.id,
+                  student_name: row.name,
+                  nisn: row.nisn,
+                  class_name: className,
+                  subject_code: subject,
+                  subject_name: currentSubObj?.name || subject,
+                  assessment_type: 'TKA',
+                  academic_year: academicYear,
+                  semester,
+                  score: Number(sess.score),
+                  description: 'Hasil Tes Kemampuan Akademik (TKA)',
+                });
+              }
+              return {
+                ...row,
+                score: nextScoreStr,
+                status: 'TERSIMPAN',
+              };
+            }
+            return row;
+          })
+        );
+
+        if (toPersist.length > 0 && !cancelled) {
+          await gradeApi.saveBulkGrades(toPersist);
+          setNotice({
+            type: 'success',
+            text: `Nilai TKA untuk ${toPersist.length} siswa otomatis terisi & tersimpan permanen (tetap aman meskipun sesi ujian CBT dihapus).`,
+          });
+        }
+      } catch (err) {
+        console.warn('Auto-sync TKA gagal:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedExamId, className, subject, subjects, academicYear, semester, rows.length]);
 
   // 5. Tarik hasil nilai TKA langsung dari CBT
   const handlePullTkaScores = async () => {
