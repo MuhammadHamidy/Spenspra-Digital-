@@ -2333,7 +2333,13 @@ export default function TeacherExamsManagementPage() {
           ...(Array.isArray(q.matchingRightOptions) ? q.matchingRightOptions : []),
           ...normalizedPairs.flatMap((p) => (p.rights?.length ? p.rights : [p.right])),
         ].map((s) => String(s || '').trim()).filter(Boolean)));
-        setMatchingRightOptions(derivedPool.length >= 2 ? derivedPool : ['', '', '', '']);
+        setMatchingRightOptions(
+          derivedPool.length >= 2
+            ? derivedPool
+            : derivedPool.length === 1
+            ? [derivedPool[0], '']
+            : ['', '', '', '']
+        );
         const hasMulti = Boolean(q.matchingMultiSelect) || normalizedPairs.some((p) => (p.rights?.length || 0) > 1) || (Array.isArray(q.matchingRightOptions) && q.matchingRightOptions.length > normalizedPairs.length);
         setMatchingMultiSelect(hasMulti);
       } else {

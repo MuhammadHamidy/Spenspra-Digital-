@@ -979,12 +979,33 @@ export const elearningApi = {
         : ((Array.isArray(q.matchingPairs) && q.matchingPairs.length > 0)
             ? q.matchingPairs
             : (Array.isArray(localQ.matchingPairs) ? localQ.matchingPairs : []));
-      const matchingPairs = rawPairs.map((p, pIdx) => ({
-        ...p,
-        id: p.id !== undefined && p.id !== null && p.id !== '' ? p.id : pIdx + 1,
-        left: (p.left || '').trim(),
-        right: (p.right || '').trim(),
-      }));
+      const matchingPairs = rawPairs.map((p, pIdx) => {
+        const cleanRights = Array.isArray(p.rights)
+          ? p.rights.map((r) => String(r || '').trim()).filter(Boolean)
+          : undefined;
+        const cleanRight = (p.right || (cleanRights && cleanRights[0]) || '').trim();
+        return {
+          ...p,
+          id: p.id !== undefined && p.id !== null && p.id !== '' ? p.id : pIdx + 1,
+          left: (p.left || '').trim(),
+          right: cleanRight,
+          ...(cleanRights && cleanRights.length > 0 ? { rights: cleanRights } : {}),
+        };
+      });
+
+      const matchingRightOptions = (Array.isArray(meta?.matchingRightOptions) && meta.matchingRightOptions.length > 0)
+        ? meta.matchingRightOptions.map((s) => String(s || '').trim()).filter(Boolean)
+        : ((Array.isArray(q.matchingRightOptions) && q.matchingRightOptions.length > 0)
+            ? q.matchingRightOptions.map((s) => String(s || '').trim()).filter(Boolean)
+            : (Array.isArray(localQ.matchingRightOptions) && localQ.matchingRightOptions.length > 0
+                ? localQ.matchingRightOptions.map((s) => String(s || '').trim()).filter(Boolean)
+                : []));
+
+      const matchingMultiSelect = typeof meta?.matchingMultiSelect === 'boolean'
+        ? meta.matchingMultiSelect
+        : (typeof q.matchingMultiSelect === 'boolean'
+            ? q.matchingMultiSelect
+            : Boolean(localQ.matchingMultiSelect));
 
       const rawCorrectStr = String(q.correctOption || q.correct_answer || localQ.correctOption || '').trim();
 
@@ -1031,6 +1052,8 @@ export const elearningApi = {
         correctOptions,
         trueFalseAnswer,
         matchingPairs,
+        matchingRightOptions,
+        matchingMultiSelect,
         essayRubric,
         points: Number(q.points || q.score_weight || localQ.points || 10),
       };
