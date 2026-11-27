@@ -545,7 +545,7 @@ function MasterDataContent() {
     if (p.nisn && savedPasswords[p.nisn]) return savedPasswords[p.nisn];
     if (p.nip && savedPasswords[p.nip]) return savedPasswords[p.nip];
     if (username && savedPasswords[username]) return savedPasswords[username];
-    if (p.person_type === 'SISWA') return p.nisn || 'Spenspra2026';
+    if (p.person_type === 'SISWA') return 'password123';
     return 'Spenspra2026';
   }, [savedPasswords, accounts, findMatchingAccount, getStaffUsername]);
 

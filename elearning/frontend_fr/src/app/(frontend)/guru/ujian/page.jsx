@@ -812,6 +812,26 @@ async function extractDocxStructure(arrayBuffer) {
     }
   }
 
+  // Buang seluruh blok Kop Surat / Identitas Naskah di bagian paling atas dokumen (termasuk logo Kabupaten & teks identitas)
+  // agar tidak pernah masuk sebagai gambar/stimulus Soal No. 1 maupun menjadi soal palsu.
+  const isKopSuratLine = (rawLine) => {
+    const t = String(rawLine || '').replace(/^STIMULUS_BOX:\s*/i, '').trim();
+    if (!t || /^GAMBAR:/i.test(t)) return false;
+    return /(?:PEMERINTAH\s+(?:KABUPATEN|KOTA)|DINAS\s+PENDIDIKAN|SMP\s+NEGERI|SMA\s+NEGERI|SD\s+NEGERI|KODE\s+POS\s*\d|POS-EL|WEBSITE\s*:|TELP\.?\s*:|DS\.\s+\w+|SOAL\s+(?:ASESMEN|ULANGAN|UJIAN|PENILAIAN)|PENILAIAN\s+(?:HARIAN|TENGAH|AKHIR)|TAHUN\s+(?:AJARAN|PELAJARAN)|MATA\s+PELAJARAN|ALOKASI\s+WAKTU|GURU\s+(?:PENGAJAR|PENGAMPU|MAPEL)|^SEMESTER\b|^NILAI\b|^PILIHAN\s+GANDA\b|^A\.\s*PILIHAN\s+GANDA|^I\.\s*PILIHAN\s+GANDA|^JAWABLAH\s+PERTANYAAN|^BERILAH\s+TANDA\s+SILANG|^PETUNJUK\s+UMUM)/i.test(t);
+  };
+
+  let lastKopIdx = -1;
+  const maxHeaderScan = Math.min(lines.length, 45);
+  for (let idx = 0; idx < maxHeaderScan; idx++) {
+    const ln = String(lines[idx] || '').trim();
+    // Berhenti memindai kop surat begitu menemukan opsi pilihan ganda (A./B./C./D.)
+    if (/^[A-E]\s*[.)\]:\-]\s+\S/i.test(ln) && !/^A\.\s*PILIHAN\s+GANDA/i.test(ln)) break;
+    if (isKopSuratLine(ln)) {
+      lastKopIdx = idx;
+    }
+  }
+  const finalLines = lastKopIdx >= 0 ? lines.slice(lastKopIdx + 1) : lines;
+
   // Saring kunci bold: jika SEMUA opsi dalam satu soal dicetak tebal, berarti hanya gaya font biasa (bukan kunci)
   const filteredBoldKeysByNumber = {};
   Object.entries(boldKeysByNumber).forEach(([qNum, keys]) => {
@@ -821,7 +841,7 @@ async function extractDocxStructure(arrayBuffer) {
     }
   });
 
-  return { lines, coloredKeysByNumber, coloredKeysInOrder, boldKeysByNumber: filteredBoldKeysByNumber };
+  return { lines: finalLines, coloredKeysByNumber, coloredKeysInOrder, boldKeysByNumber: filteredBoldKeysByNumber };
 }
 
 // Mengekstrak opsi jawaban yang diberi tinta merah/stabilo langsung dari XML Word (.docx)
