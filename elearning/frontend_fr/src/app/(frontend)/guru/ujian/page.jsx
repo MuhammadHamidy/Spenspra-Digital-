@@ -2164,9 +2164,11 @@ export default function TeacherExamsManagementPage() {
       onConfirm: async () => {
         try {
           await elearningApi.updateExam(exam.id, {
+            ...exam,
             status: 'COMPLETED',
             subject: exam.subject || exam.course_name,
             className: exam.className || exam.class_code,
+            teacherName: exam.teacherName || exam.teacher_name,
           });
           await loadExams();
         } catch (err) {

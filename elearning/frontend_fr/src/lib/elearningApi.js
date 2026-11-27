@@ -786,7 +786,9 @@ export const elearningApi = {
     return res.success && res.data ? mapExamItem(res.data) : mapExamItem(newExam);
   },
 
-  updateExam: async (id, payload) => {
+  updateExam: async (id, rawPayload) => {
+    const existingLocal = getLocal('exams', INITIAL_EXAMS).find((e) => e.id === id) || {};
+    const payload = { ...existingLocal, ...rawPayload };
     const rawCat = String(payload.examCategory || payload.exam_category || '').toUpperCase();
     const isCoordCat = ['SEMESTER_UAS', 'SEMESTER_UTS', 'TKA'].includes(rawCat);
     const isUas = isCoordCat || Boolean(payload.targetGradeLevel) || Boolean(payload.isCoordinatorExam);
@@ -2119,8 +2121,26 @@ export const elearningApi = {
           });
           if (res?.success) {
             serverConfirmed = true;
-            if (res?.data?.score !== undefined && res?.data?.score !== null && session) {
-              session.score = res.data.score;
+            if (res?.data && session) {
+              if (res.data.score !== undefined && res.data.score !== null) {
+                session.score = res.data.score;
+              }
+              if (typeof res.data.correctCount === 'number') {
+                session.correctCount = res.data.correctCount;
+                correctCount = res.data.correctCount;
+              }
+              if (typeof res.data.wrongCount === 'number') {
+                session.wrongCount = res.data.wrongCount;
+              }
+              if (typeof res.data.totalAutoGraded === 'number' && res.data.totalAutoGraded > 0) {
+                session.totalMcq = res.data.totalAutoGraded;
+                session.totalAutoGraded = res.data.totalAutoGraded;
+                totalAutoGraded = res.data.totalAutoGraded;
+              }
+              if (typeof res.data.totalEssay === 'number') {
+                session.totalEssay = res.data.totalEssay;
+                totalEssay = res.data.totalEssay;
+              }
               session.status = 'SUBMITTED';
               setLocal(`exam_session_${examId}_${sId}`, session);
             }

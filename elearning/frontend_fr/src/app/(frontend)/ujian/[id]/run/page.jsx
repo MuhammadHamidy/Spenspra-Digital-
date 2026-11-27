@@ -298,9 +298,22 @@ export default function CBTExamRunnerPage({ params }) {
     }
   }, []);
 
+  const examMaxViolations = Math.max(1, Number(exam?.maxViolations || exam?.max_violations || 3));
+  const totalViolationsReached = Math.max(
+    Number(violationsCount || 0),
+    Number(session?.violationsCount || session?.violations_count || 0)
+  );
+  const isPermanentlyBlocked = totalViolationsReached >= examMaxViolations;
+
   // Handler Buka Kunci oleh Pengawas Ruangan
   const handleSupervisorUnlockSubmit = async (e) => {
     e.preventDefault();
+    if (isPermanentlyBlocked) {
+      setSupervisorPinError(
+        `Batas maksimal ${examMaxViolations}x pelanggaran telah tercapai. Ujian terkunci permanen dan tidak dapat dibuka dengan PIN.`
+      );
+      return;
+    }
     const entered = supervisorPinInput.trim().toUpperCase();
     if (!entered) {
       setSupervisorPinError('Harap masukkan PIN Pengawas!');
@@ -1581,7 +1594,7 @@ export default function CBTExamRunnerPage({ params }) {
       </Modal>
 
       {/* 4. FULLSCREEN SCREEN LOCK MODAL (LOCKED BY SYSTEM - KOMPATIBEL CHROME, MI BROWSER, SAFARI, FIREFOX) */}
-      {isLocked && (
+      {(isLocked || isPermanentlyBlocked) && (
         <div
           className="fixed inset-0 z-[9999] bg-neutral-950/95 overflow-y-auto overscroll-contain touch-manipulation"
           style={{ WebkitOverflowScrolling: 'touch' }}
@@ -1601,57 +1614,82 @@ export default function CBTExamRunnerPage({ params }) {
                   <span>ALARM & SIRENE AKTIF!</span>
                 </div>
                 <h3 className="text-lg sm:text-xl font-black text-neutral-900 tracking-tight">
-                  Lembar Ujian Terkunci!
+                  {isPermanentlyBlocked ? 'Akses Ujian Diblokir Permanen!' : 'Lembar Ujian Terkunci!'}
                 </h3>
                 <p className="text-xs text-neutral-600 leading-relaxed">
-                  {warningMessage || 'Terdeteksi menekan tombol Home, menarik panel notifikasi HP, berpindah tab, atau keluar dari peramban ujian.'}
+                  {isPermanentlyBlocked
+                    ? `Anda telah mencapai batas maksimal pelanggaran (${totalViolationsReached}/${examMaxViolations}x). Sesi ujian dihentikan secara otomatis dan tidak dapat dibuka kembali dengan PIN.`
+                    : (warningMessage || 'Terdeteksi menekan tombol Home, menarik panel notifikasi HP, berpindah tab, atau keluar dari peramban ujian.')}
                 </p>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-[11px] font-bold text-rose-700">
+                  <span>Pelanggaran Tercatat: {totalViolationsReached} / {examMaxViolations}x</span>
+                </div>
               </div>
 
-              {/* Kotak Pengawas Ruangan */}
-              <form onSubmit={handleSupervisorUnlockSubmit} className="pt-2 border-t border-neutral-100 space-y-3 text-left select-text">
-                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] space-y-1">
-                  <p className="font-bold flex items-center gap-1.5">
-                    <AppIcon name="profile" color="yellow" size={15} />
-                    <span>Petunjuk Pengawas Ruangan:</span>
-                  </p>
-                  <p className="text-amber-800 leading-relaxed">
-                    Sirene darurat sedang berbunyi. Masukkan <strong>PIN Pengawas</strong> resmi di bawah ini untuk menghentikan sirene dan membuka kembali lembar ujian siswa.
-                  </p>
+              {isPermanentlyBlocked ? (
+                <div className="pt-2 border-t border-neutral-100 space-y-3">
+                  <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs leading-relaxed text-left space-y-1">
+                    <p className="font-bold">Ujian Tidak Dapat Diakses Lagi</p>
+                    <p className="text-[11px] text-rose-800">
+                      Batas toleransi {examMaxViolations}x pelanggaran sudah habis. Fitur buka kunci dengan PIN Pengawas telah dinonaktifkan. Silakan lapor kepada Pengawas / Proktor ruangan.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    size="md"
+                    onClick={() => router.push('/ujian')}
+                    className="w-full font-bold min-h-[46px] cursor-pointer"
+                  >
+                    Kembali ke Portal Ujian
+                  </Button>
                 </div>
+              ) : (
+                /* Kotak Pengawas Ruangan (hanya muncul selama belum mencapai batas maksimal pelanggaran) */
+                <form onSubmit={handleSupervisorUnlockSubmit} className="pt-2 border-t border-neutral-100 space-y-3 text-left select-text">
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] space-y-1">
+                    <p className="font-bold flex items-center gap-1.5">
+                      <AppIcon name="profile" color="yellow" size={15} />
+                      <span>Petunjuk Pengawas Ruangan:</span>
+                    </p>
+                    <p className="text-amber-800 leading-relaxed">
+                      Sirene darurat sedang berbunyi. Masukkan <strong>PIN Pengawas</strong> resmi di bawah ini untuk menghentikan sirene dan membuka kembali lembar ujian siswa.
+                    </p>
+                  </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-neutral-800 block">
-                    PIN Buka Kunci Pengawas
-                  </label>
-                  <input
-                    type="password"
-                    inputMode="text"
-                    autoComplete="off"
-                    placeholder="Masukkan PIN Pengawas"
-                    value={supervisorPinInput}
-                    onChange={(e) => {
-                      setSupervisorPinInput(e.target.value.toUpperCase());
-                      setSupervisorPinError('');
-                    }}
-                    className="w-full px-3.5 py-3 rounded-xl border-2 border-neutral-300 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 font-mono text-center tracking-widest text-base font-bold uppercase text-neutral-900 bg-neutral-50 select-text touch-manipulation"
-                  />
-                  {supervisorPinError && (
-                    <p className="text-[11px] text-danger-600 font-semibold">{supervisorPinError}</p>
-                  )}
-                </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-neutral-800 block">
+                      PIN Buka Kunci Pengawas
+                    </label>
+                    <input
+                      type="password"
+                      inputMode="text"
+                      autoComplete="off"
+                      placeholder="Masukkan PIN Pengawas"
+                      value={supervisorPinInput}
+                      onChange={(e) => {
+                        setSupervisorPinInput(e.target.value.toUpperCase());
+                        setSupervisorPinError('');
+                      }}
+                      className="w-full px-3.5 py-3 rounded-xl border-2 border-neutral-300 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 font-mono text-center tracking-widest text-base font-bold uppercase text-neutral-900 bg-neutral-50 select-text touch-manipulation"
+                    />
+                    {supervisorPinError && (
+                      <p className="text-[11px] text-danger-600 font-semibold">{supervisorPinError}</p>
+                    )}
+                  </div>
 
-                <Button
-                  type="submit"
-                  variant="accent"
-                  size="md"
-                  loading={isUnlocking}
-                  className="w-full font-bold shadow-xs min-h-[46px] flex items-center justify-center gap-2 touch-manipulation cursor-pointer"
-                >
-                  <AppIcon name="unlock" color="black" size={16} />
-                  <span>Matikan Alarm & Buka Kunci Ujian</span>
-                </Button>
-              </form>
+                  <Button
+                    type="submit"
+                    variant="accent"
+                    size="md"
+                    loading={isUnlocking}
+                    className="w-full font-bold shadow-xs min-h-[46px] flex items-center justify-center gap-2 touch-manipulation cursor-pointer"
+                  >
+                    <AppIcon name="unlock" color="black" size={16} />
+                    <span>Matikan Alarm & Buka Kunci Ujian</span>
+                  </Button>
+                </form>
+              )}
             </div>
           </div>
         </div>

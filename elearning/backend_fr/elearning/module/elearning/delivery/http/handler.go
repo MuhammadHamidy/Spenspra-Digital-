@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1579,9 +1580,173 @@ func (h *ELearningHandler) FinishStudentExam(c *fiber.Ctx) error {
 	if sess != nil {
 		retScore = sess.Score
 	}
+
+	// Hitung jumlah benar/salah otoritatif langsung dari database agar 100% sinkron dengan skor akhir
+	correctCount := 0
+	totalAutoGraded := 0
+	totalEssay := 0
+	totalQuestions := 0
+	if sess != nil && sess.ExamID != "" {
+		dbQuestions, _ := h.useCase.GetExamQuestions(c.Context(), sess.ExamID, true)
+		dbAnswers, _ := h.useCase.GetStudentAnswers(c.Context(), id)
+		totalQuestions = len(dbQuestions)
+
+		for _, q := range dbQuestions {
+			var meta CBTQuestionMeta
+			if idx := strings.Index(q.QuestionText, "<!--SPENSPRA_META:"); idx != -1 {
+				endIdx := strings.Index(q.QuestionText[idx:], "-->")
+				if endIdx != -1 {
+					_ = json.Unmarshal([]byte(q.QuestionText[idx+len("<!--SPENSPRA_META:"):idx+endIdx]), &meta)
+				}
+			}
+			qType := strings.ToUpper(strings.TrimSpace(q.QuestionType))
+			if meta.Type != "" {
+				qType = strings.ToUpper(strings.TrimSpace(meta.Type))
+			}
+			if qType == "PILIHAN_GANDA" || qType == "" {
+				qType = "MCQ"
+			}
+			if qType == "ESSAY" {
+				totalEssay++
+				continue
+			}
+			totalAutoGraded++
+
+			ans, hasAns := dbAnswers[q.ID]
+			if !hasAns {
+				continue
+			}
+			sel := strings.TrimSpace(ans.SelectedOption)
+
+			switch qType {
+			case "MCQ":
+				corr := strings.ToUpper(strings.TrimSpace(q.CorrectAnswer))
+				if sel != "" && strings.ToUpper(sel) == corr {
+					correctCount++
+				}
+			case "COMPLEX_MCQ":
+				corrOpts := meta.CorrectOptions
+				if len(corrOpts) == 0 && q.CorrectAnswer != "" && q.CorrectAnswer != "-" {
+					corrOpts = strings.Split(q.CorrectAnswer, ",")
+				}
+				var cClean, sClean []string
+				for _, cVal := range corrOpts {
+					if t := strings.ToUpper(strings.TrimSpace(cVal)); t != "" {
+						cClean = append(cClean, t)
+					}
+				}
+				if sel != "" && !strings.HasPrefix(sel, "{") {
+					for _, sVal := range strings.Split(sel, ",") {
+						if t := strings.ToUpper(strings.TrimSpace(sVal)); t != "" {
+							sClean = append(sClean, t)
+						}
+					}
+				}
+				sort.Strings(cClean)
+				sort.Strings(sClean)
+				if len(sClean) > 0 && len(cClean) > 0 && strings.Join(sClean, ",") == strings.Join(cClean, ",") {
+					correctCount++
+				}
+			case "TRUE_FALSE":
+				sUpper := strings.ToUpper(sel)
+				isStudentTrue := sUpper == "TRUE" || sUpper == "BENAR" || sUpper == "T"
+				isStudentFalse := sUpper == "FALSE" || sUpper == "SALAH" || sUpper == "F"
+				if !isStudentTrue && !isStudentFalse {
+					continue
+				}
+				isCorrectTrue := true
+				if meta.TrueFalseAnswer != nil {
+					isCorrectTrue = *meta.TrueFalseAnswer
+				} else if q.CorrectAnswer != "" {
+					cUpper := strings.ToUpper(strings.TrimSpace(q.CorrectAnswer))
+					isCorrectTrue = cUpper == "TRUE" || cUpper == "BENAR" || cUpper == "T"
+				}
+				if (isStudentTrue && isCorrectTrue) || (isStudentFalse && !isCorrectTrue) {
+					correctCount++
+				}
+			case "MATCHING":
+				if sel == "" || !strings.HasPrefix(sel, "{") || len(meta.MatchingPairs) == 0 {
+					continue
+				}
+				var mAns map[string]interface{}
+				if err := json.Unmarshal([]byte(sel), &mAns); err != nil {
+					continue
+				}
+				toNormSet := func(raw interface{}) []string {
+					seen := map[string]bool{}
+					var out []string
+					addVal := func(s string) {
+						t := strings.ToLower(strings.TrimSpace(s))
+						if t != "" && !seen[t] {
+							seen[t] = true
+							out = append(out, t)
+						}
+					}
+					switch v := raw.(type) {
+					case string:
+						addVal(v)
+					case []interface{}:
+						for _, item := range v {
+							if s, ok := item.(string); ok {
+								addVal(s)
+							}
+						}
+					case []string:
+						for _, s := range v {
+							addVal(s)
+						}
+					}
+					sort.Strings(out)
+					return out
+				}
+				matched := 0
+				for pIdx, pair := range meta.MatchingPairs {
+					idKey := fmt.Sprintf("%v", pair.ID)
+					if idKey == "<nil>" {
+						idKey = ""
+					}
+					var rawStudentVal interface{}
+					for _, k := range []string{idKey, strings.TrimSpace(pair.Left), fmt.Sprintf("idx_%d", pIdx), fmt.Sprintf("%d", pIdx+1)} {
+						if k != "" {
+							if val, ok := mAns[k]; ok && val != nil {
+								rawStudentVal = val
+								break
+							}
+						}
+					}
+					sSet := toNormSet(rawStudentVal)
+					var eSet []string
+					if len(pair.Rights) > 0 {
+						eSet = toNormSet(pair.Rights)
+					} else {
+						eSet = toNormSet(pair.Right)
+					}
+					if len(sSet) > 0 && len(eSet) > 0 && strings.Join(sSet, "||") == strings.Join(eSet, "||") {
+						matched++
+					}
+				}
+				if matched == len(meta.MatchingPairs) {
+					correctCount++
+				}
+			}
+		}
+	}
+	wrongCount := totalAutoGraded - correctCount
+	if wrongCount < 0 {
+		wrongCount = 0
+	}
+
 	return c.Status(http.StatusOK).JSON(responses.Success(fiber.Map{
-		"finished": true,
-		"score":    retScore,
+		"finished":        true,
+		"score":           retScore,
+		"correctCount":    correctCount,
+		"correct_count":   correctCount,
+		"wrongCount":      wrongCount,
+		"wrong_count":     wrongCount,
+		"totalAutoGraded": totalAutoGraded,
+		"totalMcq":        totalAutoGraded,
+		"totalEssay":      totalEssay,
+		"totalQuestions":  totalQuestions,
 	}, "Ujian berhasil diselesaikan"))
 }
 
