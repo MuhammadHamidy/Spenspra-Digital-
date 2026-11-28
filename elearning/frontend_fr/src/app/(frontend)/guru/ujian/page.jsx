@@ -817,7 +817,7 @@ async function extractDocxStructure(arrayBuffer) {
   const isKopSuratLine = (rawLine) => {
     const t = String(rawLine || '').replace(/^STIMULUS_BOX:\s*/i, '').trim();
     if (!t || /^GAMBAR:/i.test(t)) return false;
-    return /(?:PEMERINTAH\s+(?:KABUPATEN|KOTA)|DINAS\s+PENDIDIKAN|SMP\s+NEGERI|SMA\s+NEGERI|SD\s+NEGERI|KODE\s+POS\s*\d|POS-EL|WEBSITE\s*:|TELP\.?\s*:|DS\.\s+\w+|SOAL\s+(?:ASESMEN|ULANGAN|UJIAN|PENILAIAN)|PENILAIAN\s+(?:HARIAN|TENGAH|AKHIR)|TAHUN\s+(?:AJARAN|PELAJARAN)|MATA\s+PELAJARAN|ALOKASI\s+WAKTU|GURU\s+(?:PENGAJAR|PENGAMPU|MAPEL)|^SEMESTER\b|^NILAI\b|^PILIHAN\s+GANDA\b|^A\.\s*PILIHAN\s+GANDA|^I\.\s*PILIHAN\s+GANDA|^JAWABLAH\s+PERTANYAAN|^BERILAH\s+TANDA\s+SILANG|^PETUNJUK\s+UMUM)/i.test(t);
+    return /(?:PEMERINTAH\s+(?:KABUPATEN|KOTA)|DINAS\s+PENDIDIKAN|SMP\s+NEGERI|SMA\s+NEGERI|SD\s+NEGERI|KODE\s+POS\s*\d|POS-EL|WEBSITE\s*:|TELP\.?\s*:|DS\.\s+\w+|SOAL\s+(?:ASESMEN|ULANGAN|UJIAN|PENILAIAN)|PENILAIAN\s+(?:HARIAN|TENGAH|AKHIR)|TAHUN\s+(?:AJARAN|PELAJARAN)|MATA\s+PELAJARAN|ALOKASI\s+WAKTU|GURU\s+(?:PENGAJAR|PENGAMPU|MAPEL)|^SEMESTER\b|^NILAI\b|^PILIHAN\s+GANDA\b|^A\.\s*PILIHAN\s+GANDA|^I\.\s*PILIHAN\s+GANDA|^JAWABLAH\s+PERTANYAAN|^PILIHLAH\s+(?:SOAL|JAWABAN|SALAH\s+SATU)|^BERILAH\s+TANDA\s+SILANG|^PETUNJUK\s+UMUM)/i.test(t);
   };
 
   let lastKopIdx = -1;
@@ -1490,13 +1490,13 @@ function parseQuestionImport(text, options = {}) {
   const missingKeyNumbers = [];
 
   rawQuestions.forEach((question, index) => {
-    // 1. Cek kunci inline di akhir teks soal, misal "(jawaban A, C)", "(kunci: B)", "(jawaban Benar)"
+    // 1. Cek kunci inline di akhir teks soal, misal "(jawaban A, C)", "(kunci: B)", "(kunci jawaban C)", "(jawaban Benar)"
     if (!question.keyDetected) {
-      const inlineKeyMatch = question.questionText.match(/\((?:kunci|jawaban)\s*[:=]?\s*(benar|salah|true|false|[A-E](?:\s*(?:[,;/&+]|\bdan\b)\s*[A-E])*)\)/i);
+      const inlineKeyMatch = question.questionText.match(/\((?:kunci\s+jawaban|kunci|jawaban)\s*[:=]?\s*(benar|salah|true|false|[A-E](?:\s*(?:[,;/&+]|\bdan\b)\s*[A-E])*)\)/i);
       if (inlineKeyMatch) {
         const rawInline = inlineKeyMatch[1].trim();
         const tfVal = parseTrueFalseAnswerText(rawInline, question.options.length === 0);
-        if (tfVal !== null && (question.explicitType === 'TRUE_FALSE' || question.options.length === 0 || /^(?:benar|salah|true|false)$/i.test(rawInline))) {
+        if (tfVal !== null && (question.explicitType === 'TRUE_FALSE' || /^(?:benar|salah|true|false)$/i.test(rawInline))) {
           question.trueFalseAnswer = tfVal;
           question.correctOption = tfVal ? 'TRUE' : 'FALSE';
         } else {
@@ -1504,11 +1504,16 @@ function parseQuestionImport(text, options = {}) {
           if (keys.length > 0) {
             question.correctOptions = keys;
             question.correctOption = keys.join(',');
+            // Jika seluruh pilihan A-D ada di dalam 1 gambar soal (seperti soal PAI bergambar opsi A-D),
+            // buatkan opsi klik A, B, C, D secara otomatis agar soal tetap terbaca sebagai Pilihan Ganda!
+            if (question.options.length === 0 && question.imageUrl) {
+              question.options = ['A', 'B', 'C', 'D'].map((k) => ({ key: k, text: `Pilihan ${k} (lihat gambar)` }));
+            }
           }
         }
         question.keyDetected = true;
         question.keySource = 'TEKS_SOAL';
-        question.questionText = question.questionText.replace(/\s*\((?:kunci|jawaban)\s*[:=]?\s*(?:benar|salah|true|false|[A-E](?:\s*(?:[,;/&+]|\bdan\b)\s*[A-E])*)\)/i, '').trim();
+        question.questionText = question.questionText.replace(/\s*\((?:kunci\s+jawaban|kunci|jawaban)\s*[:=]?\s*(?:benar|salah|true|false|[A-E](?:\s*(?:[,;/&+]|\bdan\b)\s*[A-E])*)\)/i, '').trim();
       }
     }
 
@@ -1621,6 +1626,17 @@ function parseQuestionImport(text, options = {}) {
     ) {
       finalType = 'ESSAY';
     } else {
+      // Abaikan diam-diam jika ini hanya butir Petunjuk Umum ujian di bagian atas naskah
+      // (cth: "1. Berdoalah sebelum mengerjakan soal.", "2. Soal terdiri atas 30 soal pilihan ganda...")
+      const qTxtLower = String(question.questionText || '').trim();
+      const isGeneralExamInstruction =
+        resolvedQuestions.length === 0 &&
+        question.options.length === 0 &&
+        /(?:berdoalah|bacalah\s+doa|soal\s+terdiri\s+atas|lembar\s+jawaban|periksalah\s+(?:kembali\s+)?(?:pekerjaan|jawaban|kelengkapan)|tulislah\s+(?:nama|identitas|nomor)|laporkan\s+kepada\s+pengawas|dahulukan\s+(?:menjawab|mengerjakan)|tidak\s+di(?:izinkan|perkenankan)\s+menggunakan|kerjakan\s+(?:semuanya|terlebih\s+dahulu|dengan\s+teliti)|waktu\s+pengerjaan|selamat\s+mengerjakan)/i.test(qTxtLower);
+      if (isGeneralExamInstruction) {
+        return;
+      }
+
       // Catat penyebab kenapa blok bernomor ini dilewati oleh parser
       const optCount = question.options.length;
       diagnostics.push({
