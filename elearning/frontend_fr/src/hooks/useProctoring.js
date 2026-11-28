@@ -35,6 +35,14 @@ export function useProctoring({
   const hasEnteredFullscreenRef = useRef(false);
   const lastViolationRef = useRef({ type: '', at: 0 });
   const unlockGraceUntilRef = useRef(0);
+  // Tracking aktivitas zoom (pinch-zoom HP maupun Ctrl+ / Ctrl- / Ctrl+Scroll desktop)
+  // agar zoom tidak dianggap sebagai pelanggaran WINDOW_BLUR / FULLSCREEN_EXIT / SPLIT_SCREEN
+  const lastZoomAtRef = useRef(0);
+  const lastDprRef = useRef(typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1);
+  const lastViewportScaleRef = useRef(
+    typeof window !== 'undefined' && window.visualViewport ? (window.visualViewport.scale || 1) : 1
+  );
+  const blurCheckTimerRef = useRef(null);
   const isEnabledRef = useRef(enabled);
   isEnabledRef.current = enabled;
   const isLockedRef = useRef(isLocked);
@@ -354,25 +362,121 @@ export function useProctoring({
     };
   }, [enabled, triggerViolation]);
 
+  // 4b. Tracking Aktivitas Zoom (Pinch-Zoom HP & Ctrl+/Ctrl-/Ctrl+Scroll Desktop)
+  // Mencegah false-positive pelanggaran saat siswa memperbesar soal/gambar
+  useEffect(() => {
+    if (!enabled || typeof window === 'undefined') return;
+
+    const markZoomActivity = () => {
+      lastZoomAtRef.current = Date.now();
+    };
+
+    const handleTouchZoom = (e) => {
+      if (e.touches && e.touches.length >= 2) {
+        markZoomActivity();
+      }
+    };
+
+    const handleWheelZoom = (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        markZoomActivity();
+      }
+    };
+
+    const handleKeyZoom = (e) => {
+      if ((e.ctrlKey || e.metaKey) && ['+', '=', '-', '_', '0'].includes(e.key)) {
+        markZoomActivity();
+      }
+    };
+
+    const handleVisualViewportResize = () => {
+      const vv = window.visualViewport;
+      if (!vv) return;
+      const currentScale = vv.scale || 1;
+      if (Math.abs(currentScale - lastViewportScaleRef.current) > 0.02 || currentScale > 1.05) {
+        markZoomActivity();
+      }
+      lastViewportScaleRef.current = currentScale;
+    };
+
+    const handleDprResize = () => {
+      const currentDpr = window.devicePixelRatio || 1;
+      if (Math.abs(currentDpr - lastDprRef.current) > 0.02) {
+        markZoomActivity();
+        lastDprRef.current = currentDpr;
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchZoom, { passive: true });
+    window.addEventListener('touchmove', handleTouchZoom, { passive: true });
+    window.addEventListener('wheel', handleWheelZoom, { passive: true });
+    window.addEventListener('keydown', handleKeyZoom, { passive: true });
+    window.addEventListener('resize', handleDprResize, { passive: true });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleVisualViewportResize, { passive: true });
+    }
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchZoom);
+      window.removeEventListener('touchmove', handleTouchZoom);
+      window.removeEventListener('wheel', handleWheelZoom);
+      window.removeEventListener('keydown', handleKeyZoom);
+      window.removeEventListener('resize', handleDprResize);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleVisualViewportResize);
+      }
+    };
+  }, [enabled]);
+
   // 5. Deteksi Window Blur (Tarik Notifikasi / Tekan Tombol Home / Geser Gesture HP)
   useEffect(() => {
     if (!enabled) return;
 
     const handleBlur = () => {
-      // Pada HP Android/iOS, menekan tombol Home atau menarik notifikasi langsung memicu event window blur
-      triggerViolation(
-        'WINDOW_BLUR',
-        'Layar ujian tertutup sementara karena muncul notifikasi lain, menarik menu atas HP, menekan tombol Home, atau berpindah aplikasi.'
-      );
+      if (blurCheckTimerRef.current) {
+        clearTimeout(blurCheckTimerRef.current);
+      }
+      // Tunggu 220ms agar tidak salah tangkap blur sesaat akibat zoom browser / pinch-zoom
+      blurCheckTimerRef.current = setTimeout(() => {
+        if (!isEnabledRef.current || isLockedRef.current) return;
+        const isRecentZoom = Date.now() - lastZoomAtRef.current < 1600;
+        const isPinchZoomed = Boolean(
+          typeof window !== 'undefined' &&
+          window.visualViewport &&
+          window.visualViewport.scale > 1.05
+        );
+        // Jika tab masih terlihat dan baru saja melakukan zoom, abaikan blur sesaat
+        if (!document.hidden && (isRecentZoom || isPinchZoomed)) {
+          return;
+        }
+        triggerViolation(
+          'WINDOW_BLUR',
+          'Layar ujian tertutup sementara karena muncul notifikasi lain, menarik menu atas HP, menekan tombol Home, atau berpindah aplikasi.'
+        );
+      }, 220);
+    };
+
+    const handleFocus = () => {
+      // Jika fokus langsung kembali dalam <220ms (misal popup zoom browser), batalkan pelanggaran blur
+      if (blurCheckTimerRef.current && Date.now() - lastZoomAtRef.current < 1600) {
+        clearTimeout(blurCheckTimerRef.current);
+        blurCheckTimerRef.current = null;
+      }
     };
 
     window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
     return () => {
+      if (blurCheckTimerRef.current) {
+        clearTimeout(blurCheckTimerRef.current);
+        blurCheckTimerRef.current = null;
+      }
       window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [enabled, triggerViolation]);
 
-  // 6. Deteksi Fullscreen Change
+  // 6. Deteksi Fullscreen Change (Aman terhadap Zoom)
   useEffect(() => {
     if (!enabled) return;
 
@@ -387,6 +491,16 @@ export function useProctoring({
       if (active) {
         hasEnteredFullscreenRef.current = true;
       } else if (hasEnteredFullscreenRef.current && isEnabledRef.current && !isLockedRef.current) {
+        // Jika keluar fullscreen sesaat murni karena gestur pinch-zoom / zoom browser sementara siswa tetap di halaman ujian
+        const isRecentZoom = Date.now() - lastZoomAtRef.current < 1600;
+        const isPinchZoomed = Boolean(
+          typeof window !== 'undefined' &&
+          window.visualViewport &&
+          window.visualViewport.scale > 1.05
+        );
+        if (!document.hidden && document.hasFocus() && (isRecentZoom || isPinchZoomed)) {
+          return;
+        }
         triggerViolation(
           'FULLSCREEN_EXIT',
           'Keluar dari mode layar penuh (fullscreen) aplikasi ujian.'
@@ -399,6 +513,111 @@ export function useProctoring({
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, [enabled, triggerViolation]);
+
+  // 6b. Deteksi Layar Belah (Split-Screen / Multi-Window / Floating Pop-Up View)
+  // Bekerja di Android, iPad, dan Desktop; aman terhadap Zoom & Keyboard HP
+  useEffect(() => {
+    if (!enabled || typeof window === 'undefined') return;
+
+    const isEditableFocused = () => {
+      const el = document.activeElement;
+      if (!el) return false;
+      const tag = (el.tagName || '').toUpperCase();
+      return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable === true;
+    };
+
+    const detectSplitScreen = () => {
+      if (!isEnabledRef.current || isLockedRef.current) return;
+      if (Date.now() < unlockGraceUntilRef.current) return;
+      if (document.hidden) return;
+
+      // Jangan salah deteksi saat pengguna sedang pinch-zoom atau baru saja mengubah zoom browser
+      const vvScale = window.visualViewport ? (window.visualViewport.scale || 1) : 1;
+      if (vvScale > 1.05 || Date.now() - lastZoomAtRef.current < 1600) {
+        return;
+      }
+
+      const scrW = window.screen?.width || 0;
+      const scrH = window.screen?.height || 0;
+      const availW = window.screen?.availWidth || scrW;
+      const availH = window.screen?.availHeight || scrH;
+      if (!scrW || !scrH) return;
+
+      const isTouchDevice =
+        (typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches) ||
+        (navigator.maxTouchPoints || 0) > 0;
+      const screenMax = Math.max(scrW, scrH);
+      const screenMin = Math.min(scrW, scrH);
+      const isMobileOrTablet = isTouchDevice && screenMin <= 1024;
+
+      if (isMobileOrTablet) {
+        // Di HP / Tablet (Android & iPad):
+        // innerWidth & innerHeight akurat mencerminkan ukuran jendela Split-Screen / Pop-Up View
+        const winW = window.innerWidth || 0;
+        const winH = window.innerHeight || 0;
+        if (!winW || !winH) return;
+
+        const winMax = Math.max(winW, winH);
+        const winMin = Math.min(winW, winH);
+
+        if (isEditableFocused()) {
+          // Keyboard HP sedang terbuka (mengurangi tinggi layar), cek lebar horizontal saja
+          const isPortrait = scrH >= scrW;
+          const expectedWidth = isPortrait ? screenMin : screenMax;
+          if (winW < expectedWidth * 0.78) {
+            triggerViolation(
+              'SPLIT_SCREEN',
+              'Terdeteksi menggunakan mode layar belah (Split-Screen) atau jendela mengambang (Pop-Up View). Tutup layar belah untuk melanjutkan ujian.'
+            );
+          }
+          return;
+        }
+
+        // Normal HP/Tablet (termasuk address bar & navigation bar):
+        // sisi terpanjang >= 72% screenMax dan sisi terpendek >= 75% screenMin
+        // Split-Screen 50/50 atau 65/35 atau Pop-Up View akan jatuh di bawah ambang ini
+        if (winMax < screenMax * 0.72 || winMin < screenMin * 0.75) {
+          triggerViolation(
+            'SPLIT_SCREEN',
+            'Terdeteksi menggunakan mode layar belah (Split-Screen) atau jendela mengambang (Pop-Up View). Tutup layar belah untuk melanjutkan ujian.'
+          );
+        }
+      } else {
+        // Di Desktop / Laptop (Windows Snap, macOS Split View, atau jendela diperkecil):
+        // Gunakan outerWidth / outerHeight karena rasio terhadap screen.availWidth/availHeight
+        // TIDAK berubah saat user melakukan zoom browser (Ctrl+ / Ctrl-).
+        const winW = window.outerWidth > 0 ? window.outerWidth : window.innerWidth;
+        const winH = window.outerHeight > 0 ? window.outerHeight : window.innerHeight;
+        if (!winW || !winH || !availW || !availH) return;
+
+        if (winW < availW * 0.78 || winH < availH * 0.72) {
+          triggerViolation(
+            'SPLIT_SCREEN',
+            'Terdeteksi menggunakan layar belah (Split-Screen) atau mengecilkan jendela browser. Maksimalkan jendela browser untuk melanjutkan ujian.'
+          );
+        }
+      }
+    };
+
+    let resizeDebounce = null;
+    const handleResizeForSplit = () => {
+      if (resizeDebounce) clearTimeout(resizeDebounce);
+      resizeDebounce = setTimeout(detectSplitScreen, 350);
+    };
+
+    // Cek awal saat masuk ujian (menangkap siswa yang SUDAH layar belah sebelum mulai)
+    const initialTimer = setTimeout(detectSplitScreen, 600);
+    // Cek berkala setiap 2.5 detik (menangkap layar belah yang masih aktif setelah unlock)
+    const intervalTimer = setInterval(detectSplitScreen, 2500);
+
+    window.addEventListener('resize', handleResizeForSplit);
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(intervalTimer);
+      if (resizeDebounce) clearTimeout(resizeDebounce);
+      window.removeEventListener('resize', handleResizeForSplit);
     };
   }, [enabled, triggerViolation]);
 

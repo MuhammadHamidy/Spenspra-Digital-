@@ -1828,6 +1828,7 @@ export const elearningApi = {
       if (vType === 'WINDOW_BLUR') vDesc = 'Layar ujian tertutup sementara karena muncul notifikasi lain, menarik bilah atas HP, atau berpindah aplikasi.';
       else if (vType === 'TAB_SWITCH') vDesc = 'Membuka tab baru di browser atau beralih ke jendela browser lain.';
       else if (vType === 'FULLSCREEN_EXIT') vDesc = 'Keluar dari mode layar penuh (fullscreen) ujian.';
+      else if (vType === 'SPLIT_SCREEN') vDesc = 'Terdeteksi menggunakan mode layar belah (Split-Screen) atau jendela mengambang.';
       else if (vType === 'PAGE_HIDE') vDesc = 'Aplikasi ujian disembunyikan atau diminimalkan ke latar belakang.';
       else if (vType === 'INSPECT_ATTEMPT') vDesc = 'Mencoba membuka inspect element atau menu pengembang peramban.';
       else if (vType === 'SUPERVISOR_UNLOCK') vDesc = 'Kunci ujian berhasil dibuka kembali oleh pengawas dengan token / PIN resmi.';
@@ -1836,7 +1837,7 @@ export const elearningApi = {
     }
     const timestamp = violation.timestamp || new Date().toISOString();
 
-    const isActualCheatingViolation = ['WINDOW_BLUR', 'TAB_SWITCH', 'FULLSCREEN_EXIT', 'INSPECT_ATTEMPT', 'PAGE_HIDE'].includes(vType);
+    const isActualCheatingViolation = ['WINDOW_BLUR', 'TAB_SWITCH', 'FULLSCREEN_EXIT', 'SPLIT_SCREEN', 'INSPECT_ATTEMPT', 'PAGE_HIDE'].includes(vType);
 
     // HANYA tambah hitungan pelanggaran jika benar-benar pelanggaran kecurangan siswa (Bukan Buka Kunci Pengawas / Auto-Lock sistem)
     if (isActualCheatingViolation) {
