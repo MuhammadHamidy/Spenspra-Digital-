@@ -298,6 +298,60 @@ export function isItemForStudent(item, user) {
   return itemClassNorm === studentClassNorm;
 }
 
+// Auto-resolve class_name siswa dari SSO Master Data jika sesi login siswa belum memiliki class_name
+export async function ensureStudentClassSynced(currentUser) {
+  const u = currentUser || tokenStorage.getUser();
+  if (!u || typeof window === 'undefined') return u;
+
+  const role = String(u.roleName || u.role || u.role_name || '').toUpperCase();
+  if (!role.includes('SISWA') && !role.includes('STUDENT')) return u;
+
+  const existingClass = String(
+    u.className || u.class_name || u.kelas || u.rombel || (Array.isArray(u.classCodes) && u.classCodes[0]) || ''
+  ).trim();
+  if (existingClass) return u;
+
+  try {
+    const host = window.location.hostname;
+    const ssoApiBase = host.includes('spenspra.com')
+      ? 'https://sso.spenspra.com/api'
+      : host.includes('spenspra.sch.id')
+      ? 'https://sso.spenspra.sch.id/api'
+      : (process.env.NEXT_PUBLIC_SSO_API_URL || 'http://sso.localhost/api');
+
+    const resp = await fetch(`${ssoApiBase}/master/people?person_type=SISWA`);
+    if (!resp.ok) return u;
+    const json = await resp.json();
+    const people = Array.isArray(json?.data) ? json.data : [];
+    const myNisn = String(u.nisn || u.nimNip || u.nim_nip || '').trim();
+    const myName = String(u.fullName || u.full_name || u.name || '').trim().toLowerCase();
+    const myId = String(u.person_id || u.personId || u.id || '').trim();
+
+    const matched = people.find((p) => {
+      if (!p) return false;
+      if (myId && (String(p.id || '').trim() === myId)) return true;
+      if (myNisn && String(p.nisn || '').trim() === myNisn) return true;
+      if (myName && String(p.full_name || '').trim().toLowerCase() === myName) return true;
+      return false;
+    });
+
+    if (matched && String(matched.class_name || '').trim()) {
+      const resolvedClass = String(matched.class_name).trim();
+      const updatedUser = {
+        ...u,
+        className: resolvedClass,
+        class_name: resolvedClass,
+        rombel: resolvedClass,
+      };
+      tokenStorage.setUser(updatedUser);
+      return updatedUser;
+    }
+  } catch (err) {
+    console.warn('[eLearning] Gagal sinkronisasi kelas siswa dari SSO:', err?.message || err);
+  }
+  return u;
+}
+
 export function isItemOwnedByTeacher(item, user) {
   if (!item || !user) return false;
   const myIds = [user.id, user.person_id, user.personId, user.nimNip, user.nip, user.username]

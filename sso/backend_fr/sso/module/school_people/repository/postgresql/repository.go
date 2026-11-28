@@ -65,6 +65,22 @@ func (r *Repository) Update(ctx context.Context, id string, req domain.UpdatePer
 	if err := r.db.WithContext(ctx).Model(&domain.Person{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		return nil, err
 	}
+
+	// Sinkronkan perubahan profil & kelas (class_name) ke tabel accounts agar langsung terbaca saat login e-Learning/Rapor
+	accUpdates := map[string]interface{}{
+		"full_name":  req.FullName,
+		"class_name": req.ClassName,
+		"email":      req.Email,
+		"phone":      req.Phone,
+		"updated_at": time.Now(),
+	}
+	if strings.TrimSpace(req.NISN) != "" {
+		accUpdates["nisn"] = strings.TrimSpace(req.NISN)
+	}
+	_ = r.db.WithContext(ctx).Table("accounts").
+		Where("person_id = ? OR id = ? OR (nisn <> '' AND nisn = ?)", id, id, strings.TrimSpace(req.NISN)).
+		Updates(accUpdates).Error
+
 	return r.FindByID(ctx, id)
 }
 

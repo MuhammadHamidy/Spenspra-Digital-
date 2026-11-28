@@ -460,7 +460,7 @@ func (u *useCase) UpdateProfile(ctx context.Context, id string, req domain.Updat
 	// Check if username changed and verify uniqueness
 	if req.Username != "" && req.Username != current.Username {
 		existing, _ := u.repo.FindByUsername(ctx, req.Username)
-		if existing != nil && existing.Id != id {
+		if existing != nil && existing.Id != current.Id {
 			return nil, errors.New("username sudah digunakan oleh pengguna lain")
 		}
 	}
@@ -481,7 +481,7 @@ func (u *useCase) UpdateProfile(ctx context.Context, id string, req domain.Updat
 		newPasswordHash = string(hashed)
 	}
 
-	updated, err := u.repo.UpdateProfile(ctx, id, req, newPasswordHash)
+	updated, err := u.repo.UpdateProfile(ctx, current.Id, req, newPasswordHash)
 	if err != nil {
 		return nil, err
 	}

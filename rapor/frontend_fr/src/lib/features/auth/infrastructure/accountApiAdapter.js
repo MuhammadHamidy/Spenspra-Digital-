@@ -1,4 +1,14 @@
 import { httpClient } from '@/lib/common/httpClient';
+import { tokenStorage } from '@/lib/common/tokenStorage';
+
+function getSsoApiBaseUrl() {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host.includes('spenspra.com')) return 'https://sso.spenspra.com/api';
+    if (host.includes('spenspra.sch.id')) return 'https://sso.spenspra.sch.id/api';
+  }
+  return process.env.NEXT_PUBLIC_SSO_API_URL || 'http://sso.localhost/api';
+}
 
 const MALE_AVATAR = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="%231A3D63"/><circle cx="50" cy="38" r="20" fill="%23B3CFE5"/><path d="M20,85 C20,62 33,55 50,55 C67,55 80,62 80,85 Z" fill="%23B3CFE5"/></svg>`;
 const FEMALE_AVATAR = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="%234A7FA7"/><circle cx="50" cy="38" r="18" fill="%23F6FAFD"/><path d="M15,85 C15,60 30,52 50,52 C70,52 85,60 85,85 Z" fill="%23F6FAFD"/></svg>`;
@@ -254,6 +264,11 @@ export const accountApiAdapter = {
   },
 
   updateProfile: async (id, profileData) => {
+    const targetId = String(id || profileData?.username || '').trim();
+    if (!targetId) {
+      throw new Error('ID akun pengguna tidak ditemukan. Silakan login ulang.');
+    }
+
     const payload = {
       username: profileData.username,
       old_password: profileData.old_password || profileData.oldPassword,
@@ -264,12 +279,33 @@ export const accountApiAdapter = {
       photo_url: profileData.photo_url || profileData.photoUrl,
     };
 
-    try {
-      const res = await httpClient.put(`/accounts/${id}/profile`, payload);
-      return res.data;
-    } catch (err) {
-      return { ...payload, id };
+    const ssoApiBase = getSsoApiBaseUrl();
+    const token = tokenStorage.getToken();
+    const resp = await fetch(`${ssoApiBase}/accounts/${encodeURIComponent(targetId)}/profile`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const text = await resp.text();
+    let json = {};
+    if (text.trim()) {
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = { message: text.trim() };
+      }
     }
+
+    if (!resp.ok) {
+      const errMsg = json?.error?.message || json?.message || `Gagal memperbarui akun di server SSO (HTTP ${resp.status})`;
+      throw new Error(errMsg);
+    }
+
+    return json?.data || json;
   },
 
   syncFromSSO: async () => {

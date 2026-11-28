@@ -8,7 +8,7 @@ import StatusBadge from '@/components/StatusBadge';
 import Input from '@/components/Input';
 import ConfirmModal from '@/components/ConfirmModal';
 import AppIcon from '@/components/AppIcon';
-import { elearningApi, isItemForStudent } from '@/lib/elearningApi';
+import { elearningApi, isItemForStudent, ensureStudentClassSynced } from '@/lib/elearningApi';
 import { tokenStorage } from '@/lib/common/tokenStorage';
 
 export default function StudentExamsHubPage() {
@@ -38,9 +38,13 @@ export default function StudentExamsHubPage() {
   }, []);
 
   useEffect(() => {
-    const currentUser = tokenStorage.getUser();
-    setUser(currentUser);
-    loadExams(currentUser);
+    const init = async () => {
+      const currentUser = tokenStorage.getUser();
+      const syncedUser = await ensureStudentClassSynced(currentUser);
+      setUser(syncedUser);
+      await loadExams(syncedUser);
+    };
+    init();
   }, []);
 
   const loadExams = async (currentUser) => {

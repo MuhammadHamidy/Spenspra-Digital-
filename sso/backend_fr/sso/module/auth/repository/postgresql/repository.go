@@ -67,7 +67,49 @@ func (r *Repository) FindByUsername(ctx context.Context, username string) (*doma
 		account.Password = account.InitialPassword
 	}
 
+	// Sinkronkan class_name terbaru dari tabel master school_people (mencegah jadwal ujian siswa kosong)
+	r.syncClassNameFromSchoolPeople(ctx, &account)
+
 	return &account, nil
+}
+
+func (r *Repository) syncClassNameFromSchoolPeople(ctx context.Context, account *domain.Account) {
+	if account == nil {
+		return
+	}
+	var sp struct {
+		ClassName string `gorm:"column:class_name"`
+		NISN      string `gorm:"column:nisn"`
+	}
+	q := r.db.WithContext(ctx).Table("school_people").Select("class_name, nisn")
+	matched := false
+	if strings.TrimSpace(account.PersonID) != "" {
+		if err := q.Where("id = ?", account.PersonID).First(&sp).Error; err == nil {
+			matched = true
+		}
+	}
+	if !matched && strings.TrimSpace(account.Nisn) != "" {
+		if err := r.db.WithContext(ctx).Table("school_people").Select("class_name, nisn").Where("nisn = ?", strings.TrimSpace(account.Nisn)).First(&sp).Error; err == nil {
+			matched = true
+		}
+	}
+	if !matched && strings.TrimSpace(account.NimNip) != "" {
+		if err := r.db.WithContext(ctx).Table("school_people").Select("class_name, nisn").Where("nisn = ? OR nip = ?", strings.TrimSpace(account.NimNip), strings.TrimSpace(account.NimNip)).First(&sp).Error; err == nil {
+			matched = true
+		}
+	}
+	if !matched && strings.TrimSpace(account.FullName) != "" && strings.EqualFold(strings.TrimSpace(account.RoleName), "SISWA") {
+		if err := r.db.WithContext(ctx).Table("school_people").Select("class_name, nisn").Where("person_type = 'SISWA' AND LOWER(TRIM(full_name)) = LOWER(TRIM(?))", account.FullName).First(&sp).Error; err == nil {
+			matched = true
+		}
+	}
+	if matched && strings.TrimSpace(sp.ClassName) != "" && strings.TrimSpace(sp.ClassName) != strings.TrimSpace(account.ClassName) {
+		account.ClassName = strings.TrimSpace(sp.ClassName)
+		_ = r.db.WithContext(ctx).Model(&domain.Account{}).Where("id = ?", account.Id).Update("class_name", account.ClassName).Error
+	}
+	if matched && strings.TrimSpace(sp.NISN) != "" && strings.TrimSpace(account.Nisn) == "" {
+		account.Nisn = strings.TrimSpace(sp.NISN)
+	}
 }
 
 func (r *Repository) FindAccountByID(ctx context.Context, id string) (*domain.Account, error) {
@@ -99,6 +141,9 @@ func (r *Repository) FindAccountByID(ctx context.Context, id string) (*domain.Ac
 	if account.InitialPassword != "" {
 		account.Password = account.InitialPassword
 	}
+
+	// Sinkronkan class_name terbaru dari tabel master school_people (mencegah jadwal ujian siswa kosong)
+	r.syncClassNameFromSchoolPeople(ctx, &account)
 
 	return &account, nil
 }
